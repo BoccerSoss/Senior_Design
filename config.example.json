@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "method": "interactive-manual",
+  "provider": "ORNL ChatGPT (account access user-reported)",
+  "model": null,
+  "runs_directory": "runs",
+  "prompt": "prompts/extract_from_image.txt",
+  "timezone": "America/New_York",
+  "note": "Documentation of defaults. CLI flags are authoritative; no API credentials belong in this file."
+}

@@ -1,0 +1,2 @@
+# Supported platform: CPython 3.12 Windows x64; one binary wheel, no transitive deps.
+Pillow==12.0.0 --hash=sha256:9fe611163f6303d1619bbcb653540a4d60f9e55e622d60a3108be0d5b441017a

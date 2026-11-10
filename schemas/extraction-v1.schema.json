@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aip:extraction:1.0.0",
+  "title": "AIP observed equipment and immediate undirected connections",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "drawing", "run", "components", "connections", "uncertainties", "warnings"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "drawing": {
+      "type": "object",
+      "required": ["drawing_id", "filename", "sha256", "width", "height", "coordinate_convention"],
+      "properties": {
+        "drawing_id": {"type": "string", "minLength": 1},
+        "filename": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "source_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "source": {"type": ["string", "null"]},
+        "page": {"type": ["integer", "null"], "minimum": 1},
+        "coordinate_convention": {"type": ["object", "string"]}
+      },
+      "additionalProperties": true
+    },
+    "run": {
+      "type": "object",
+      "required": ["run_id", "timestamp", "timezone", "method", "provider", "model", "access_route", "settings", "raw_response_location", "manual_stages", "duration_seconds", "code", "prompt_version", "prompt_sha256"],
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1},
+        "timestamp": {"type": "string"},
+        "timezone": {"type": "string"},
+        "method": {"type": "string"},
+        "provider": {"type": ["string", "null"]},
+        "model": {"type": ["string", "null"]},
+        "access_route": {"type": "string"},
+        "settings": {"type": "object"},
+        "raw_response": {"type": ["string", "null"]},
+        "raw_response_location": {"type": "string", "minLength": 1},
+        "prompt_version": {"type": "string", "minLength": 1},
+        "prompt_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "code": {
+          "type": "object", "required": ["revision", "dirty_state"],
+          "properties": {"revision": {"type": ["string", "null"]}, "dirty_state": {"type": ["string", "null"]}},
+          "additionalProperties": true
+        },
+        "manual_stages": {"type": "array", "items": {"type": "string"}},
+        "duration_seconds": {"type": ["number", "null"], "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "components": {"type": "array", "items": {"$ref": "#/$defs/component"}},
+    "connections": {"type": "array", "items": {"$ref": "#/$defs/connection"}},
+    "uncertainties": {"type": "array", "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "nullableText": {"type": ["string", "null"]},
+    "bbox": {
+      "description": "Original pixels, top-left origin, minimum inclusive / maximum exclusive, symbol only. Semantic validator enforces finite values and bounds.",
+      "oneOf": [
+        {"type": "null"},
+        {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "number", "minimum": 0}}
+      ]
+    },
+    "component": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "observed_tag", "normalized_tag", "type", "bbox", "evidence", "uncertainty", "review_status"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "observed_tag": {"$ref": "#/$defs/nullableText"},
+        "normalized_tag": {"$ref": "#/$defs/nullableText"},
+        "type": {"type": "string", "minLength": 1},
+        "bbox": {"$ref": "#/$defs/bbox"},
+        "evidence": {"$ref": "#/$defs/nullableText"},
+        "uncertainty": {"$ref": "#/$defs/nullableText"},
+        "review_status": {"type": "string", "minLength": 1}
+      }
+    },
+    "connection": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source", "target", "kind", "evidence", "uncertainty", "review_status"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1},
+        "target": {"type": "string", "minLength": 1},
+        "kind": {"const": "direct_undirected"},
+        "evidence": {"$ref": "#/$defs/nullableText"},
+        "uncertainty": {"$ref": "#/$defs/nullableText"},
+        "review_status": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "$comment": "Python semantic validation additionally enforces unique observation IDs and normalized tags, valid endpoints, no self-loops, unique undirected pairs, normalized tag consistency, and bounded half-open boxes. Run provenance is open for provider-specific evidence; the CLI records timestamp/timezone, revision/dirty state, method, actual model/access route, prompt/settings, raw response and manual stages."
+}

@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-10",
+  "scope": "provisional synthetic development experiment; not held-out evaluation",
+  "local_validation": {
+    "tests_passed": 40,
+    "public_command_checks_passed": 11,
+    "python": "3.12.10",
+    "pillow": "12.0.0",
+    "platform": "Windows x64"
+  },
+  "input_sha256": "373ecdf79dd7211e9b615b84f8e459f353543a57b5aaf201605be0a388fea74a",
+  "images": {
+    "clean": {
+      "geometric_candidates": 4,
+      "horizontal_contacts": 3
+    },
+    "blank": {
+      "geometric_candidates": 0,
+      "horizontal_contacts": 0
+    },
+    "disconnected": {
+      "geometric_candidates": 4,
+      "horizontal_contacts": 2
+    }
+  },
+  "clean_tag_metrics": {
+    "components": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 4,
+      "precision": null,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "component_types": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 4,
+      "precision": null,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "connections": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 3,
+      "precision": null,
+      "recall": 0.0,
+      "f1": 0.0
+    }
+  },
+  "unresolved": {
+    "component_count": 4,
+    "connection_count": 3
+  },
+  "control_checks_pass": true,
+  "live_vlm_response_obtained": false,
+  "human_reference_review": "pending independent human review",
+  "limits": "No OCR or semantic equipment classification; all candidate identities unresolved. Counts are geometry observations, not credited tag identities."
+}

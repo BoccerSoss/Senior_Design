@@ -1,0 +1,138 @@
+{
+  "schema_version": "1.0.0",
+  "drawing_id": "aip-synthetic-four-component-v1",
+  "image": {
+    "filename": "input/four_component.png",
+    "width": 1800,
+    "height": 800,
+    "sha256": "373ecdf79dd7211e9b615b84f8e459f353543a57b5aaf201605be0a388fea74a"
+  },
+  "coordinate_convention": {
+    "origin": "top-left",
+    "units": "original PNG pixels",
+    "axes": "x increases right; y increases down",
+    "bbox_format": [
+      "xmin",
+      "ymin",
+      "xmax",
+      "ymax"
+    ],
+    "bbox_bounds": "half-open: xmin/ymin inclusive, xmax/ymax exclusive",
+    "bbox_scope": "symbol only, including antialiased stroke, roof and integral pump port; excludes tag and external pipes",
+    "bbox_method": "non-white extent of separately rasterized symbol on white at original PNG dimensions"
+  },
+  "components": [
+    {
+      "id": "T-101",
+      "tag": "T-101",
+      "type": "tank",
+      "bbox": [
+        155,
+        265,
+        405,
+        495
+      ]
+    },
+    {
+      "id": "V-101",
+      "tag": "V-101",
+      "type": "valve",
+      "bbox": [
+        645,
+        365,
+        795,
+        455
+      ]
+    },
+    {
+      "id": "P-101",
+      "tag": "P-101",
+      "type": "pump",
+      "bbox": [
+        1020,
+        330,
+        1188,
+        490
+      ]
+    },
+    {
+      "id": "T-102",
+      "tag": "T-102",
+      "type": "tank",
+      "bbox": [
+        1395,
+        265,
+        1645,
+        495
+      ]
+    }
+  ],
+  "graph_convention": "immediate undirected equipment adjacency",
+  "directed": false,
+  "edges": [
+    {
+      "source": "T-101",
+      "target": "V-101"
+    },
+    {
+      "source": "V-101",
+      "target": "P-101"
+    },
+    {
+      "source": "P-101",
+      "target": "T-102"
+    }
+  ],
+  "matrix_order": [
+    "T-101",
+    "V-101",
+    "P-101",
+    "T-102"
+  ],
+  "adjacency_matrix": [
+    [
+      0,
+      1,
+      0,
+      0
+    ],
+    [
+      1,
+      0,
+      1,
+      0
+    ],
+    [
+      0,
+      1,
+      0,
+      1
+    ],
+    [
+      0,
+      0,
+      1,
+      0
+    ]
+  ],
+  "review_status": "pending independent human review",
+  "acceptance_status": "pending Greg acceptance or redraw",
+  "human_review": {
+    "verifier": null,
+    "date": null,
+    "disposition": null
+  },
+  "provenance": "computer-generated synthetic reference, not an extracted prediction or handmade drawing",
+  "symbol_provenance": "source/symbol_reference.json",
+  "variant": {
+    "filename": "variants/four_component_lowres_blur.png",
+    "width": 900,
+    "height": 400,
+    "scale_from_primary": [
+      0.5,
+      0.5
+    ],
+    "blur_sigma_pixels": 0.4,
+    "topology": "identical"
+  }
+}
