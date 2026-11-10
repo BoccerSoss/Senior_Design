@@ -26,7 +26,8 @@ def doctor():
               "api_credentials_configured": any(bool(os.getenv(n)) for n in
                   ("OPENAI_API_KEY", "AZURE_OPENAI_API_KEY")),
               "supported_formats": ["PNG", "JPEG"], "pdf": "unsupported",
-              "available_methods": ["baseline", "interactive-manual"],
+              "available_methods": ["classical", "baseline", "interactive-manual"],
+              "classical_prerequisite": "Windows 10/11, Windows PowerShell 5.1, installed Windows OCR language; checked on extraction",
               "live_api_integration": "not configured; account login is not used as API authentication",
               "timezone": "America/New_York", "timestamp": stamp()}
     print(json.dumps(result, indent=2))
@@ -35,7 +36,7 @@ def doctor():
 
 def process_run(packet, runs_dir="runs", method="baseline", response=None, model=None,
                 provider=None, stage="original"):
-    provider = provider or ("local" if method == "baseline" else "ORNL ChatGPT (user-reported account)")
+    provider = provider or ("local" if method in {"baseline","classical"} else "ORNL ChatGPT (user-reported account)")
     path, run = new_run(runs_dir, method, provider, model, packet, stage)
     start = time.perf_counter()
     try:
@@ -60,20 +61,37 @@ def process_run(packet, runs_dir="runs", method="baseline", response=None, model
                 "packet": str(Path(packet).resolve()), "upload_only": ["image.png", "prompt.txt"],
                 "instructions": "Use a fresh session with no reference answer or generation conversation. Record displayed model and settings. Save original response verbatim."})
             return path, 3
-        elif method == "baseline":
+        elif method in {"baseline","classical"}:
             from .baseline import baseline_info
-            run["settings"] = baseline_info()
-            env = {k: v for k, v in os.environ.items() if k.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP"}}
-            worker = subprocess.run([sys.executable, "-I", str(ROOT / "scripts/baseline_worker.py"), str(Path(packet).resolve())],
-                                    cwd=packet, env=env, capture_output=True, timeout=120)
+            from .classical import classical_info
+            run["settings"] = classical_info() if method == "classical" else baseline_info()
+            native_paths = {"PATH","SYSTEMROOT","SYSTEMDRIVE","WINDIR","TEMP","TMP","USERPROFILE",
+                            "LOCALAPPDATA","APPDATA","PROGRAMDATA","PROGRAMFILES","PROGRAMFILES(X86)",
+                            "COMMONPROGRAMFILES","COMMONPROGRAMFILES(X86)","HOMEDRIVE","HOMEPATH"}
+            env = {k:v for k,v in os.environ.items() if k.upper() in native_paths}
+            argv = [sys.executable, "-I", str(ROOT / "scripts/baseline_worker.py"), str(Path(packet).resolve()),method]
+            if method == "classical":
+                scratch = path / "ocr_scratch"
+                scratch.mkdir()
+                argv.append(str(scratch))
+            worker = subprocess.run(argv,cwd=packet, env=env, capture_output=True, timeout=180)
             (path / "raw_response.txt").write_bytes(worker.stdout)
             (path / "worker_stderr.txt").write_bytes(worker.stderr)
-            run["boundary"] = "fresh isolated Python process; audited file opens limited to packet/runtime libraries; trusted-code guard, not OS sandbox"
+            run["boundary"] = "fresh isolated Python process; Python opens limited to packet/runtime/code allowlist and private OCR scratch; native OCR helper receives only an image path. Trusted-code guard, not an OS/native-process sandbox."
             if worker.returncode:
                 raise ValueError(f"Image baseline worker failed (exit {worker.returncode}); see worker_stderr.txt.")
+            # Native Windows OCR is outside Python's audit hook. Enforce packet
+            # immutability again before accepting any worker observation.
+            read_packet(packet)
         else:
-            raise ValueError(f"Inference method unavailable: {method}. Use baseline or interactive-manual.")
+            raise ValueError(f"Inference method unavailable: {method}. Use classical, baseline or interactive-manual.")
         raw = parse_response(path / "raw_response.txt")
+        if method == "classical" and response is None:
+            evidence = raw.get("method_evidence",{})
+            write_json(path / "ocr_evidence.json",evidence)
+            native = evidence.get("ocr",{}).get("native")
+            if native:
+                run["settings"].update({k:native.get(k) for k in ("engine","language","windows_version","powershell_version","max_image_dimension")})
         run["status"] = "validated"
         run["duration_seconds"] = round(time.perf_counter()-start, 6)
         doc = normalize_response(raw, meta["drawing"], run)
@@ -117,7 +135,7 @@ def evaluate_files(prediction, reference, out):
         raise
 
 
-def demo(out):
+def demo(out, method="classical"):
     out = Path(out).resolve()
     if out.exists() and any(out.iterdir()):
         raise ValueError("Demo output must be new or empty; existing attempts are preserved.")
@@ -132,7 +150,7 @@ def demo(out):
     for name, source in (("clean", clean), ("blank", controls / "blank.png")):
         packet = out / "packets" / name
         prepare_input(source, packet)
-        run, code = process_run(packet, out / "runs")
+        run, code = process_run(packet, out / "runs",method=method)
         if code:
             raise ValueError(f"Demo {name} baseline failed; evidence preserved in {run}")
         report = evaluate_files(run / "prediction.json", ref, run / "evaluation.json") if name == "clean" else None
@@ -156,7 +174,7 @@ def demo(out):
     cut.save(controls / "disconnected.png")
     packet = out / "packets/disconnected"
     prepare_input(controls / "disconnected.png", packet)
-    run, code = process_run(packet, out / "runs")
+    run, code = process_run(packet, out / "runs",method=method)
     if code:
         raise ValueError(f"Disconnected control failed; inspect {run}")
     raw = parse_response(run / "raw_response.txt")
@@ -166,9 +184,10 @@ def demo(out):
                    reports["disconnected"]["contacts"] < reports["clean"]["contacts"])
     # Record the unavailable interactive route as its own attempt.
     manual, code = process_run(out / "packets/clean", out / "runs", method="interactive-manual")
-    summary = {"timestamp": stamp(), "runs": reports, "control_checks_pass": controls_ok,
+    controls_ok = controls_ok and code == 3
+    summary = {"timestamp": stamp(), "method":method, "runs": reports, "control_checks_pass": controls_ok,
                "manual_attempt": str(manual), "manual_exit_code": code,
-               "interpretation": "Geometry observations only: no OCR/types. No live VLM response was obtained. Metrics on clean are provisional tagged-equipment results, not geometry accuracy.",
+               "interpretation": "Automatic local OCR/outline development run; no live VLM response obtained. Metrics remain provisional on this known synthetic image." if method=="classical" else "Geometry observations only: no OCR/types; no live VLM response obtained.",
                "human_review_status": "pending independent human review"}
     write_json(out / "summary.json", summary)
     print(json.dumps(summary, indent=2))
@@ -183,7 +202,7 @@ def main(argv=None):
     p.add_argument("image", type=Path); p.add_argument("--packet", type=Path, required=True)
     p = sub.add_parser("extract")
     p.add_argument("--packet", type=Path, required=True); p.add_argument("--runs", type=Path, default=Path("runs"))
-    p.add_argument("--method", choices=["baseline", "interactive-manual"], default="baseline")
+    p.add_argument("--method", choices=["classical", "baseline", "interactive-manual"], default="classical")
     p = sub.add_parser("import-response")
     p.add_argument("response", type=Path); p.add_argument("--packet", type=Path, required=True)
     p.add_argument("--runs", type=Path, default=Path("runs")); p.add_argument("--model"); p.add_argument("--provider")
@@ -194,6 +213,7 @@ def main(argv=None):
     p = sub.add_parser("evaluate"); p.add_argument("prediction", type=Path)
     p.add_argument("--reference", type=Path, required=True); p.add_argument("--out", type=Path, required=True)
     p = sub.add_parser("demo"); p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--method",choices=["classical","baseline"],default="classical")
     args = parser.parse_args(argv)
     try:
         if args.command == "doctor": return doctor()
@@ -213,7 +233,7 @@ def main(argv=None):
             print(export_document(validate_document(load_json(args.prediction)), args.out, args.image)); return 0
         if args.command == "evaluate":
             print(json.dumps(evaluate_files(args.prediction, args.reference, args.out), indent=2)); return 0
-        if args.command == "demo": return demo(args.out)
+        if args.command == "demo": return demo(args.out,args.method)
     except (ValueError, OSError, KeyError, TypeError) as exc:
         print(f"Error: {exc}", file=sys.stderr); return 2
     return 2

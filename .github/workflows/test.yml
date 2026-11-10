@@ -26,4 +26,4 @@ jobs:
       - name: Exercise public CLI commands
         run: python scripts/smoke_commands.py
       - name: Run image experiment controls
-        run: python scripts/aip.py demo --out runs/ci-demo
+        run: python scripts/aip.py demo --method baseline --out runs/ci-demo

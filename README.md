@@ -1,8 +1,8 @@
 # AIP drawing extraction prototype
 
-This research CLI converts raster process drawings into equipment and immediate undirected connectivity observations, validates and exports those records, and evaluates them against a separate reference. It includes a local geometry baseline and an assisted ChatGPT response importer. The prototype does not determine operating or isolation actions.
+This research CLI automatically interprets a limited set of simplified raster process symbols and tags, exports immediate undirected connectivity, and evaluates the result against a separate reference. The default local method combines Windows OCR with pixel-based shape rules. A geometry-only baseline and an assisted ChatGPT response importer are also available. The prototype does not determine operating or isolation actions.
 
-The initial local image test produced **4 geometric candidates and 3 contacts**, with tags unresolved and types unknown. Tagged component and connection **F1 were both 0.0**. Blank and disconnected-image controls behaved differently from the clean image. These are provisional development results; independent human reference review is pending. See [results](docs/results.md).
+The verified local classical method recognized **4 tags/types and 3 direct edges** on the clean synthetic development image: component, component-type and edge **precision, recall and F1 were all 1.0**. Blank, disconnected, changed-tag and erased-label controls passed. **63 local automated tests passed**, with no skips. The earlier geometry-only baseline remains available, with its original tagged-graph F1 of 0.0. Independent human reference review is pending; this small development example does not establish general P&ID accuracy. See [results](docs/results.md) and the [portable classical summary](reports/classical_summary.json).
 
 ## Setup and demo
 
@@ -11,21 +11,28 @@ Supported environment: **Windows x64, CPython 3.12.x**. The sole runtime depende
 ```powershell
 git clone https://github.com/BoccerSoss/Senior_Design.git
 Set-Location Senior_Design
+# While the implementation pull request is unmerged:
+git switch codex/aip-prototype
 powershell -NoProfile -File scripts/setup.ps1
 .\.venv\Scripts\python.exe scripts/aip.py doctor
 .\.venv\Scripts\python.exe scripts/test.py
-.\.venv\Scripts\python.exe scripts/aip.py demo --out runs/demo-001
+.\.venv\Scripts\python.exe scripts/aip.py demo --method classical --out runs/demo-001
+.\.venv\Scripts\python.exe scripts/check_classical_controls.py --demo runs/demo-001 --out runs/demo-001-label-controls
 ```
 
-Use a new demo output directory each time. The demo generates clean, blank and disconnected attempts, preserves their raw outputs, exports review artifacts, evaluates the clean attempt, and records the pending manual route. Runs and packets are gitignored. Setup installs with `--require-hashes --only-binary=:all:`; the drawing generator has a separate environment and dependency lock within its package.
+The classical method requires **Windows 10/11, Windows PowerShell 5.1 and an installed Windows OCR language**. English (United States) OCR was verified locally. These are OS capabilities; no extra pip dependency or account login is needed. If unavailable, use `demo --method baseline` for geometry-only processing. OCR pixel tests skip when the recognizer is unavailable; CI uses an explicit baseline demo so it does not depend on an optional OCR language.
+
+Use a new output directory for each demo and label-control check. The demo preserves clean, blank and disconnected attempts, raw outputs, OCR evidence, exports and evaluation. It records the pending manual route separately. Runs and packets are gitignored. Setup uses `--require-hashes --only-binary=:all:`; the drawing generator has its own separate pinned environment.
 
 ## Use the workflow
 
 [Workflow instructions](docs/workflow.md) cover `prepare-input`, `extract`, `import-response`, `validate`, `export`, and `evaluate`, including exact commands and exit codes. Input support is PNG/JPEG. PDF, animation and images above 30 million pixels are explicitly unsupported.
 
-For assisted interpretation, use a **new ChatGPT session** with only the prepared `image.png` and generic `prompt.txt`. Keep reference answers, source vectors, generator code, manifests and prior generation history outside the session. Preserve the original response before corrections. Live account capabilities have not been verified, and no API integration is configured. Image upload and response transfer are manual stages.
+For assisted VLM interpretation, use a **new ChatGPT session** with only the prepared `image.png` and generic `prompt.txt`. Keep reference answers, source vectors, generator code, manifests and prior generation history outside the session. Preserve the original response before corrections. No live VLM response has been obtained, and no API integration is configured. Image upload and response transfer remain manual stages.
 
-The local baseline consumes pixels but has no OCR or semantic equipment classifier. It reports provisional geometric candidates and uninterrupted horizontal contacts. A fresh worker process, packet allowlist, hashes and a Python file-open guard reduce accidental reference access in trusted code; the guard is not an adversarial OS sandbox.
+The classical method reads tag pixels, associates text above symbol boxes, and classifies supported tank, valve and pump outlines. It preserves original OCR errors and suffix-crop readings; agreement between repeated views is correlated evidence, with confidence unknown. It never repairs a label from the reference answer. `--method baseline` leaves tags null and types unknown.
+
+A fresh worker, two-file packet allowlist, pre/post hashes and a Python file-open guard reduce accidental reference access in trusted code. Native OCR receives only raster paths and uses separate scratch storage. The guard is not an adversarial OS or native-process sandbox.
 
 ## Files and conventions
 

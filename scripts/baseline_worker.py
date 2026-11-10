@@ -8,5 +8,15 @@ from aip.baseline import extract_image
 from aip.boundary import install_read_boundary
 
 packet = Path(sys.argv[1]).resolve()
-install_read_boundary(packet)
-print(json.dumps(extract_image(packet / "image.png"), allow_nan=False))
+method = sys.argv[2] if len(sys.argv)>2 else "baseline"
+if method == "classical":
+    from aip.classical import extract_image as classical_extract
+    scratch = Path(sys.argv[3]).resolve()
+    install_read_boundary(packet,scratch)
+    result = classical_extract(packet / "image.png",scratch)
+elif method == "baseline":
+    install_read_boundary(packet)
+    result = extract_image(packet / "image.png")
+else:
+    raise ValueError("Worker method must be baseline or classical")
+print(json.dumps(result, allow_nan=False))

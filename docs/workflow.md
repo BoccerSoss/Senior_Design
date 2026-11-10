@@ -1,17 +1,23 @@
 # Run the extraction and evaluation workflow
 
-Run commands from the checkout root in PowerShell after completing README setup. CLI flags control behavior; `config.example.json` documents defaults and contains no credentials. Runtime support is Windows x64 with CPython 3.12.x and the SHA-locked Pillow 12.0.0 wheel.
+Run commands from the checkout root in PowerShell after completing README setup. CLI flags control behavior; `config.example.json` documents defaults and contains no credentials. Runtime support is Windows x64 with CPython 3.12.x and the SHA-locked Pillow 12.0.0 wheel. Automatic classical OCR additionally requires Windows 10/11, Windows PowerShell 5.1 and an installed Windows OCR language. English (United States) was verified locally; OCR adds no pip dependency.
 
 ## Prepare a packet and consume the image
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/aip.py prepare-input data/input/four_component.png --packet packets/clean-001
-.\.venv\Scripts\python.exe scripts/aip.py extract --packet packets/clean-001 --method baseline --runs runs
+.\.venv\Scripts\python.exe scripts/aip.py extract --packet packets/clean-001 --method classical --runs runs
 ```
 
-Preparation applies EXIF orientation, composites transparency onto white, converts to RGB PNG and removes metadata without resizing. The packet contains exactly `image.png` and `prompt.txt`. A sibling manifest records hashes, dimensions and source provenance; it is not an inference input. Packet allowlisting and hashes are checked before baseline execution.
+Preparation applies EXIF orientation, composites transparency onto white, converts to RGB PNG and removes metadata without resizing. The packet contains exactly `image.png` and `prompt.txt`. A sibling manifest records hashes, dimensions and source provenance; it is not an inference input. Packet allowlisting and hashes are checked before execution and again before accepting worker output.
 
-The local baseline reads raster pixels and traces supported horizontal contacts. It leaves all tags null and types unknown. It supports neither semantic symbol recognition nor arbitrary bends, branches and crossings. Its raw observations are useful for testing input consumption, validation, controls and exports.
+`classical` is the default for CLI extraction and demo. It detects linework candidates and contacts, reads visible tags with Windows.Media.Ocr, associates observed text above symbol boxes, and classifies supported tank, opposed-triangle valve and circular-pump outlines from pixels. It reads no source vectors, expected labels, component count or reference graph. A plain circle remains unknown unless supported pump entry/outlet strokes are visible.
+
+Generic separator-derived suffix crops at 1x and 3x can resolve native OCR ambiguities using the actual suffix pixels. Original full-image errors and every crop reading remain in `raw_response.txt` and `ocr_evidence.json`. Same-engine crop agreement is correlated evidence; it supplies no calibrated confidence or human verification. Ambiguous text/associations stay unresolved.
+
+For geometry-only processing, pass `--method baseline`; it leaves tags null and types unknown. Both methods support only documented simplified linework and horizontal contacts, with uncertainties for bends, branches and crossings. If the optional OCR engine/language is unavailable, classical extraction records an explicit failed attempt; it does not silently substitute the reference or a prediction fixture.
+
+The worker starts in a fresh Python process with a trusted-code file-open guard. Native OCR receives only raster paths and writes working data to separate scratch storage. Python audit hooks do not sandbox native processes or malicious code; packet checks and code review protect this prototype's intended extraction boundary.
 
 ## Assisted ChatGPT interpretation
 
@@ -19,7 +25,7 @@ The local baseline reads raster pixels and traces supported horizontal contacts.
 .\.venv\Scripts\python.exe scripts/aip.py extract --packet packets/clean-001 --method interactive-manual --runs runs
 ```
 
-This records a pending manual attempt and intentionally returns exit code **3**. Account capabilities and a supported programmatic inference route are unverified; no API integration is configured. A signed-in interactive account does not establish API access.
+This records a pending manual attempt and intentionally returns exit code **3**. The VLM workflow has not produced a live response; no API integration is configured. A signed-in interactive account does not establish API access. Local Windows OCR success is separate from live VLM access.
 
 1. Open a **new session** in an authorized image-capable ChatGPT account. Upload only `packets/clean-001/image.png` and paste `packets/clean-001/prompt.txt`.
 2. Keep the repository, truth files, source vector, generator, reference manifests and generation conversation out of that session. Record the actual displayed model and relevant settings.
@@ -60,9 +66,12 @@ Unresolved observations are listed outside tag matching; missed reference object
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/test.py
-.\.venv\Scripts\python.exe scripts/aip.py demo --out runs/demo-002
+.\.venv\Scripts\python.exe scripts/aip.py demo --method classical --out runs/demo-002
+.\.venv\Scripts\python.exe scripts/check_classical_controls.py --demo runs/demo-002 --out runs/demo-002-label-controls
 ```
 
-The demo uses the actual clean raster, an equal-size blank image and a copy with a pipe segment removed at a location derived from observed line evidence. It preserves each attempt and writes `summary.json`. It also records the unavailable manual route separately. Fixture predictions in `data/examples/` test software only; they do not count as drawing interpretation.
+The demo uses the actual clean raster, an equal-size blank image and a copy with a pipe segment removed at a location derived from observed line evidence. It preserves each attempt and writes `summary.json`. The label-control script changes one observed tag to an arbitrary tag and separately erases all observed labels, checking that OCR follows changed pixels and retains missing labels as null. It does not score changed images against clean-image truth. Every output directory must be new.
+
+The demo records the pending VLM route separately. Fixture predictions in `data/examples/` test software only; they do not count as drawing interpretation. Use `demo --method baseline` to reproduce the geometry-only comparison. Native OCR pixel tests skip when the optional recognizer is unavailable; CI's demo explicitly selects baseline processing.
 
 Exit codes: **0** success, **2** invalid input/validation/inference failure, **3** manual response required. Cost remains null when unobserved. Recorded CLI duration covers local processing or import, not human upload or remote inference time. Preserve failed attempts and avoid comparing only the best development run.
