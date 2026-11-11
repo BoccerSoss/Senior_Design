@@ -1,6 +1,6 @@
 # Run the extraction and evaluation workflow
 
-Run commands from the checkout root in PowerShell after completing README setup. CLI flags control behavior; `config.example.json` documents defaults and contains no credentials. Runtime support is Windows x64 with CPython 3.12.x and the SHA-locked Pillow 12.0.0 wheel. Automatic classical OCR additionally requires Windows 10/11, Windows PowerShell 5.1 and an installed Windows OCR language. English (United States) was verified locally; OCR adds no pip dependency.
+Run commands from the checkout root in PowerShell after completing README setup. CLI flags control behavior; `config.example.json` documents defaults and contains no credentials. The runtime uses Windows x64, CPython 3.12.x and SHA-256-pinned Pillow and PyWinRT wheels. Classical processing calls Windows.Media.Ocr directly through PyWinRT and requires Windows 10/11 with an installed Windows OCR language. English (United States) was verified locally. [Dependency lock](../requirements.lock)
 
 ## Prepare a packet and consume the image
 
@@ -17,7 +17,7 @@ Generic separator-derived suffix crops at 1x and 3x can resolve native OCR ambig
 
 For geometry-only processing, pass `--method baseline`; it leaves tags null and types unknown. Both methods support only documented simplified linework and horizontal contacts, with uncertainties for bends, branches and crossings. If the optional OCR engine/language is unavailable, classical extraction records an explicit failed attempt; it does not silently substitute the reference or a prediction fixture.
 
-The worker starts in a fresh Python process with a trusted-code file-open guard. Native OCR receives only raster paths and writes working data to separate scratch storage. Python audit hooks do not sandbox native processes or malicious code; packet checks and code review protect this prototype's intended extraction boundary.
+The worker starts in a fresh Python process with a trusted-code file-open guard. The OCR adapter receives the prepared image and uses separate scratch storage for crops. Python audit hooks do not sandbox native code or malicious code; packet checks and code review protect this prototype's intended extraction boundary.
 
 ## Assisted ChatGPT interpretation
 

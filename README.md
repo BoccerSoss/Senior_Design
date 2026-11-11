@@ -4,33 +4,35 @@ The P&ID Matrix Builder desktop demo and command-line tools interpret simplified
 
 ## Desktop demo
 
-1. Double-click `Open AIP Demo.cmd` in the project folder. The app opens with the synthetic drawing loaded.
-2. Select **Analyze drawing** to view the equipment, connections, and labeled matrix. Click a matrix cell to see what its value means. Use **Show detections** to toggle the overlay.
-3. Select **Save matrix…** to save the exact matrix CSV or **Open results folder** to inspect the run evidence. Use **Open drawing…** to analyze another PNG or JPEG.
+1. On GitHub, select the `codex/aip-prototype` branch and choose **Code → Download ZIP**. In File Explorer, choose **Extract All**, then open the project folder inside the extracted folder. You can also use a Git checkout.
+2. Double-click `Open AIP Demo.cmd`. The app opens with the synthetic drawing loaded.
+3. Select **Analyze drawing** to view the equipment, connections, and labeled matrix. Click a matrix cell to see what its value means. Use **Show detections** to toggle the overlay.
+4. Select **Save matrix…** to save the exact matrix CSV or **Open results folder** to inspect the run evidence. Use **Open drawing…** to analyze another PNG or JPEG.
 
-The app requires Windows 10 or 11, 64-bit Python 3.12 with Tcl/Tk, and an installed Windows OCR language. The launcher sets up the virtual environment and installs the locked Pillow version if needed. The synthetic comparison remains provisional pending independent human review of the reference.
+The app requires Windows 10 or 11, 64-bit Python 3.12 with Tcl/Tk, and an installed Windows OCR language. The launcher creates the virtual environment and installs the pinned Pillow and PyWinRT packages if needed. The synthetic comparison remains provisional pending independent human review of the reference.
 
 The setup section below covers command-line use.
 
-The local classical method recognized **4 tags/types and 3 direct edges** on the clean synthetic development image. Component, component-type and edge **precision, recall and F1 were all 1.0**. Blank, disconnected, changed-tag and erased-label controls passed. **67 local automated tests passed**. The earlier geometry-only baseline had a tagged-graph F1 of 0.0. See [results and scope](docs/results.md) and the [portable classical summary](reports/classical_summary.json).
+The local classical method recognized **4 tags/types and 3 direct edges** on the clean synthetic development image. Component, component-type and edge **precision, recall and F1 were all 1.0**. Blank, disconnected, changed-tag and erased-label controls passed. **68 local automated tests passed**. The earlier geometry-only baseline had a tagged-graph F1 of 0.0. See [results and scope](docs/results.md) and the [portable classical summary](reports/classical_summary.json).
 
 ## Setup and demo
 
-Supported environment: **Windows x64, CPython 3.12.x**. The sole runtime dependency is Pillow 12.0.0; [requirements.lock](requirements.lock) locks its CPython 3.12 Windows x64 wheel by SHA-256. Run these commands in PowerShell:
+Use **Windows x64 and CPython 3.12.x**. The dependency lock pins the Pillow and PyWinRT wheels by SHA-256. Run these commands in PowerShell. [Dependency lock](requirements.lock)
 
 ```powershell
 git clone https://github.com/BoccerSoss/Senior_Design.git
 Set-Location Senior_Design
 # While the implementation pull request is unmerged:
 git switch codex/aip-prototype
-powershell -NoProfile -File scripts/setup.ps1
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --require-hashes --only-binary=:all: -r requirements.lock
 .\.venv\Scripts\python.exe scripts/aip.py doctor
 .\.venv\Scripts\python.exe scripts/test.py
 .\.venv\Scripts\python.exe scripts/aip.py demo --method classical --out runs/demo-001
 .\.venv\Scripts\python.exe scripts/check_classical_controls.py --demo runs/demo-001 --out runs/demo-001-label-controls
 ```
 
-The classical method requires **Windows 10/11, Windows PowerShell 5.1 and an installed Windows OCR language**. English (United States) OCR was verified locally. These are OS capabilities; no extra pip dependency or account login is needed. If unavailable, use `demo --method baseline` for geometry-only processing. OCR pixel tests skip when the recognizer is unavailable; CI uses an explicit baseline demo so it does not depend on an optional OCR language.
+The classical method calls Windows OCR directly through PyWinRT. English (United States) OCR was verified locally. If the Windows OCR language is unavailable, use `demo --method baseline` for geometry-only processing. OCR pixel tests skip when the recognizer is unavailable. CI uses the baseline method for the separate CLI demo.
 
 Use a new output directory for each demo and label-control check. The demo preserves clean, blank and disconnected attempts, raw outputs, OCR evidence, exports and evaluation. It records the pending manual route separately. Runs and packets are gitignored. Setup uses `--require-hashes --only-binary=:all:`; the drawing generator has its own separate pinned environment.
 
@@ -42,7 +44,7 @@ For assisted VLM interpretation, use a **new ChatGPT session** with only the pre
 
 The classical method reads tag pixels, associates text above symbol boxes, and classifies supported tank, valve and pump outlines. It preserves original OCR errors and suffix-crop readings; agreement between repeated views is correlated evidence, with confidence unknown. It never repairs a label from the reference answer. `--method baseline` leaves tags null and types unknown.
 
-A fresh worker, two-file packet allowlist, pre/post hashes and a Python file-open guard reduce accidental reference access in trusted code. Native OCR receives only raster paths and uses separate scratch storage. The guard is not an adversarial OS or native-process sandbox.
+A fresh worker, two-file packet allowlist, pre/post hashes and a Python file-open guard reduce accidental reference access in trusted code. Windows OCR receives decoded image pixels. The worker keeps crop evidence in separate scratch storage. The guard applies to Python file opens in the trusted worker.
 
 ## Files and conventions
 

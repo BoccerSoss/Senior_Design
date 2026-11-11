@@ -6,18 +6,22 @@ dependency. API words do not include confidence, so it is recorded as null.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import math
-import os
 import re
-import subprocess
 import sys
 import time
 import tempfile
 from contextlib import nullcontext
+from importlib.metadata import version
 from pathlib import Path
+from threading import local
 
 from PIL import Image
+
+
+_apartment = local()
 
 
 class OCRUnavailable(ValueError):
@@ -42,88 +46,109 @@ def _original_box(box, angle, width, height):
 def recognize_image(image_path, timeout=90, working_directory=None):
     """Return actual OCR words/boxes without tag correction or symbol inference.
 
-    Supply a prepared RGB PNG from the image-only packet. PowerShell receives
-    only this image path. OCR boxes are transformed clockwise by TextAngle about
-    the image center, following Microsoft's documented original-image overlay.
+    Decode only the prepared raster and pass its pixels to Windows OCR.
+    Rotate engine boxes by TextAngle around the image center to return original
+    image coordinates, following Microsoft's documented overlay.
     """
     if sys.platform != "win32":
-        raise OCRUnavailable("Windows.Media.Ocr requires Windows 10/11 with Windows PowerShell 5.1 and an installed OCR language; use the baseline or manual importer on this platform.")
+        raise OCRUnavailable("Windows.Media.Ocr requires Windows 10/11 and an installed OCR language. Use the baseline or manual importer on this platform.")
     image = Path(image_path).resolve()
     if not image.is_file():
         raise OCRUnavailable(f"OCR input image does not exist: {image.name}")
     if image.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
         raise OCRUnavailable("Windows OCR adapter accepts a prepared PNG/JPEG raster only.")
-    helper = Path(__file__).resolve().parents[2] / "scripts/windows_ocr.ps1"
-    if not helper.is_file():
-        raise OCRUnavailable("Windows OCR helper is missing; restore scripts/windows_ocr.ps1 from this checkout.")
-    windows_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
-    powershell = windows_root / "System32/WindowsPowerShell/v1.0/powershell.exe"
-    if not powershell.is_file():
-        raise OCRUnavailable("Windows PowerShell 5.1 powershell.exe is unavailable; PowerShell Core alone cannot run this WinRT helper.")
-    working = Path(working_directory).resolve() if working_directory is not None else image.parent
-    if not working.is_dir():
+    if working_directory is not None and not Path(working_directory).is_dir():
         raise OCRUnavailable("Windows OCR working directory must be an existing private scratch directory.")
-    startup = subprocess.STARTUPINFO()
-    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    startup.wShowWindow = subprocess.SW_HIDE
+
     started = time.perf_counter()
     try:
-        process = subprocess.run(
-            [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-File", str(helper), "-ImagePath", str(image)],
-            cwd=working, capture_output=True, timeout=timeout,
-            creationflags=subprocess.CREATE_NO_WINDOW, startupinfo=startup,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise OCRUnavailable(f"Windows OCR timed out after {timeout} seconds; the response is unavailable and was not replaced with a fixture.") from exc
-    except OSError as exc:
-        raise OCRUnavailable(f"Windows OCR process could not start: {exc}") from exc
-    stdout = process.stdout.decode("utf-8-sig", errors="replace").strip()
-    stderr = process.stderr.decode("utf-8-sig", errors="replace").strip()
-    try:
-        result = json.loads(stdout)
-    except (ValueError, TypeError) as exc:
-        detail = stderr or stdout or "no output"
-        raise OCRUnavailable(f"Windows OCR returned no valid JSON (exit {process.returncode}): {detail[:1000]}") from exc
-    if process.returncode or not isinstance(result, dict) or result.get("available") is not True:
-        detail = result.get("error", stderr or f"helper exit {process.returncode}") if isinstance(result, dict) else "helper returned a non-object response"
-        raise OCRUnavailable(f"Windows OCR unavailable: {detail}")
-    dimensions = result.get("image")
-    if not isinstance(dimensions, dict) or any(isinstance(dimensions.get(k), bool) or not isinstance(dimensions.get(k), int) or dimensions[k] <= 0 for k in ("width", "height")):
-        raise OCRUnavailable("Windows OCR returned invalid image dimensions; no coordinates were accepted.")
-    width, height = dimensions["width"], dimensions["height"]
-    if not isinstance(result.get("words"), list) or not isinstance(result.get("lines"), list):
-        raise OCRUnavailable("Windows OCR returned malformed word/line arrays.")
-    angle = result.get("text_angle_degrees")
-    if angle is not None and (isinstance(angle, bool) or not isinstance(angle, (int, float)) or not math.isfinite(angle)):
-        raise OCRUnavailable("Windows OCR returned invalid TextAngle; no coordinate transform was applied.")
-    def convert_word(word):
-        if not isinstance(word, dict) or not isinstance(word.get("text"), str):
-            raise OCRUnavailable("Windows OCR returned a malformed word observation.")
-        box = word.get("bbox")
-        if box is not None:
-            if (not isinstance(box, list) or len(box) != 4 or
-                    any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in box) or
-                    not (0 <= box[0] < box[2] <= width and 0 <= box[1] < box[3] <= height)):
-                raise OCRUnavailable("Windows OCR returned an unsupported or out-of-bounds word box; coordinates were not repaired.")
-            word["engine_bbox"] = box
-            word["bbox"], word["polygon"] = _original_box(box, angle, width, height)
-            if word["bbox"] is None:
-                result["warnings"].append("An OCR box transformed outside the image; original-coordinate bbox withheld, raw engine box/polygon retained.")
-        if word.get("confidence") is not None:
-            raise OCRUnavailable("Windows.Media.Ocr unexpectedly reported word confidence; this adapter has no documented confidence mapping.")
-    for word in result["words"]:
-        convert_word(word)
-    for line in result["lines"]:
-        if not isinstance(line, dict) or not isinstance(line.get("words"), list) or not isinstance(line.get("text"), str):
-            raise OCRUnavailable("Windows OCR returned a malformed line observation.")
-        for word in line["words"]:
-            convert_word(word)
-        boxes = [w["bbox"] for w in line["words"] if w["bbox"] is not None]
-        line["engine_bbox"] = line["bbox"]
-        line["bbox"] = [min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)] if boxes else None
-    result["coordinate_convention"] = "top-left original image pixels; half-open axis-aligned enclosures after documented clockwise TextAngle rotation around image center; engine boxes/polygons retained"
+        with Image.open(image) as source:
+            result = asyncio.run(_recognize_bitmap(source, timeout))
+    except TimeoutError as exc:
+        raise OCRUnavailable(f"Windows OCR timed out after {timeout} seconds.") from exc
+    except ImportError as exc:
+        raise OCRUnavailable("Windows OCR is unavailable because its runtime could not load. Run Open AIP Demo.cmd to install the project dependencies.") from exc
+    except (OSError, Image.DecompressionBombError) as exc:
+        raise OCRUnavailable(f"Windows OCR unavailable: {exc}") from exc
     result["duration_seconds"] = round(time.perf_counter() - started, 6)
     return result
+
+
+async def _recognize_bitmap(source, timeout):
+    # Import only for Windows OCR so the other extraction paths can run without it.
+    from winrt.runtime import ApartmentType, init_apartment
+    from winrt.windows.globalization import Language
+    from winrt.windows.graphics.imaging import BitmapAlphaMode, BitmapPixelFormat, SoftwareBitmap
+    from winrt.windows.media.ocr import OcrEngine
+
+    # The projection caches WinRT factories. Keep this thread's apartment
+    # alive across the full image and all crop passes in the worker process.
+    if not getattr(_apartment, "initialized", False):
+        init_apartment(ApartmentType.MULTI_THREADED)
+        _apartment.initialized = True
+
+    width, height = source.size
+    maximum = OcrEngine.max_image_dimension
+    if max(width, height) > maximum:
+        raise OCRUnavailable(f"Image exceeds the Windows OCR limit of {maximum} pixels per side. Resize a copy of the image before running OCR.")
+
+    warnings = ["Windows.Media.Ocr does not expose word confidence. Confidence values are null."]
+    engine = OcrEngine.try_create_from_language(Language("en-US"))
+    if engine is None:
+        engine = OcrEngine.try_create_from_user_profile_languages()
+        warnings.append("English OCR was unavailable. The installed user-profile OCR language was used.")
+    if engine is None:
+        raise OCRUnavailable("Windows OCR is unavailable because there is no installed OCR recognizer language. Install a Windows OCR language or use the manual importer.")
+
+    pixels = source.convert("RGBA").tobytes("raw", "BGRA")
+    with SoftwareBitmap.create_copy_with_alpha_from_buffer(
+        pixels, BitmapPixelFormat.BGRA8, width, height, BitmapAlphaMode.IGNORE
+    ) as bitmap:
+        async with asyncio.timeout(timeout):
+            reading = await engine.recognize_async(bitmap)
+
+    angle = reading.text_angle
+    if angle is not None and not math.isfinite(angle):
+        raise OCRUnavailable("Windows OCR returned invalid TextAngle. The original coordinates could not be recovered.")
+    words, lines = [], []
+    for line in reading.lines:
+        line_words = []
+        for word in line.words:
+            rect = word.bounding_rect
+            engine_box = [rect.x, rect.y, rect.x + rect.width, rect.y + rect.height]
+            if not (0 <= engine_box[0] < engine_box[2] <= width and 0 <= engine_box[1] < engine_box[3] <= height):
+                raise OCRUnavailable("Windows OCR returned an unsupported or out-of-bounds word box.")
+            box, polygon = _original_box(engine_box, angle, width, height)
+            if box is None:
+                warnings.append("An OCR box rotated outside the image. Its raw engine box and polygon are retained.")
+            line_words.append({"text": word.text, "bbox": box, "confidence": None,
+                               "engine_bbox": engine_box, "polygon": polygon})
+        lines.append({"text": line.text, "words": line_words,
+                      "bbox": _enclosing_box(line_words, "bbox"),
+                      "engine_bbox": _enclosing_box(line_words, "engine_bbox")})
+        words.extend(line_words)
+    return {
+        "engine": "Windows.Media.Ocr",
+        "available": True,
+        "image": {"width": width, "height": height},
+        "language": engine.recognizer_language.language_tag,
+        "available_languages": [language.language_tag for language in OcrEngine.available_recognizer_languages],
+        "max_image_dimension": maximum,
+        "windows_version": ".".join(str(part) for part in sys.getwindowsversion().platform_version),
+        "winrt_runtime_version": version("winrt-runtime"),
+        "text_angle_degrees": angle,
+        "coordinate_convention": "Top-left original image pixels with half-open boxes after clockwise TextAngle rotation around the image center. Engine boxes and polygons are retained.",
+        "words": words,
+        "lines": lines,
+        "warnings": warnings,
+    }
+
+
+def _enclosing_box(words, key):
+    boxes = [word[key] for word in words if word[key] is not None]
+    if not boxes:
+        return None
+    return [min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)]
 
 
 def _separator_suffix_box(image, box):
@@ -171,8 +196,7 @@ def recognize_tag_crops(image_path, initial=None, timeout=90, max_candidates=16,
     else:
         context = tempfile.TemporaryDirectory(prefix="aip-ocr-")
     with context as temp:
-        # Native Windows/PowerShell startup may create profile/cache paths in
-        # cwd. Keep even the first full-image pass outside the input packet.
+        # Keep crop pixels and raw OCR evidence outside the input packet.
         result = initial if initial is not None else recognize_image(image_path, timeout,working_directory=temp)
         with Image.open(image_path) as source:
             image = source.convert("RGB")

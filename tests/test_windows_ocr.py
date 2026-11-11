@@ -5,6 +5,7 @@ import json
 import sys
 import tempfile
 import unittest
+from importlib import import_module
 from pathlib import Path
 from unittest.mock import patch
 
@@ -36,6 +37,30 @@ class WindowsOCRAvailabilityTests(unittest.TestCase):
             invalid.write_bytes(b"not an image")
             with self.assertRaisesRegex(OCRUnavailable, "unavailable"):
                 recognize_image(invalid)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows optional engine")
+    def test_oversized_image_does_not_break_the_next_request(self):
+        try:
+            import_module("winrt.windows.media.ocr")
+        except ImportError as exc:
+            self.skipTest(f"Optional Windows OCR runtime unavailable: {exc}")
+
+        with tempfile.TemporaryDirectory() as temp:
+            oversized = Path(temp) / "too-wide.png"
+            blank = Path(temp) / "valid.png"
+            # Exceed the engine's supported width with few pixels to decode.
+            Image.new("RGB", (32768, 8), "white").save(oversized)
+            Image.new("RGB", (300, 200), "white").save(blank)
+            with self.assertRaisesRegex(OCRUnavailable, "exceeds the Windows OCR limit"):
+                recognize_image(oversized)
+            try:
+                result = recognize_image(blank)
+            except OCRUnavailable as exc:
+                if "no installed OCR recognizer language" in str(exc):
+                    self.skipTest(str(exc))
+                raise
+            self.assertEqual(result["image"], {"width": 300, "height": 200})
+            self.assertEqual(result["words"], [])
 
 
 @unittest.skipUnless(sys.platform == "win32", "Windows optional engine")

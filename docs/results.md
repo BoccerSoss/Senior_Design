@@ -40,7 +40,7 @@ The tests using known predictions exercise evaluator plumbing. Their expected sc
 
 ## Remaining interpretation work
 
-The local automatic route works for the documented simplified families. It requires Windows 10/11, Windows PowerShell 5.1 and an installed OCR language; English (United States) was verified locally. No live ChatGPT response or API adapter is configured. Assisted VLM inference still requires a fresh authorized session, image upload, recorded model/settings and verbatim response transfer. An interactive account login is not API authentication.
+The local automatic route works for the documented simplified families. It calls Windows OCR through the pinned PyWinRT dependencies and requires Windows 10/11 with an installed OCR language. English (United States) was verified locally. No live ChatGPT response or API adapter is configured. Assisted VLM inference still requires a fresh authorized session, image upload, recorded model/settings and verbatim response transfer. An interactive account login is not API authentication.
 
 Both local methods support large linework regions and uninterrupted horizontal contacts. Bends, branches, crossings, connected text and unfamiliar symbols can produce missing or spurious candidates. OCR can misread labels or associate a word with the wrong symbol. Unknowns and uncertainties require review.
 

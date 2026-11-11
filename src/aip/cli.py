@@ -27,7 +27,7 @@ def doctor():
                   ("OPENAI_API_KEY", "AZURE_OPENAI_API_KEY")),
               "supported_formats": ["PNG", "JPEG"], "pdf": "unsupported",
               "available_methods": ["classical", "baseline", "interactive-manual"],
-              "classical_prerequisite": "Windows 10/11, Windows PowerShell 5.1, installed Windows OCR language; checked on extraction",
+              "classical_prerequisite": "Windows 10/11, pinned PyWinRT packages, and an installed Windows OCR language",
               "live_api_integration": "not configured; account login is not used as API authentication",
               "timezone": "America/New_York", "timestamp": stamp()}
     print(json.dumps(result, indent=2))
@@ -81,9 +81,9 @@ def process_run(packet, runs_dir="runs", method="baseline", response=None, model
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             (path / "raw_response.txt").write_bytes(worker.stdout)
             (path / "worker_stderr.txt").write_bytes(worker.stderr)
-            run["boundary"] = "fresh isolated Python process; Python opens limited to packet/runtime/code allowlist and private OCR scratch; native OCR helper receives only an image path. Trusted-code guard, not an OS/native-process sandbox."
+            run["boundary"] = "Fresh isolated Python worker with a trusted-code file-open guard for the packet, runtime, code and private OCR scratch. Windows OCR receives decoded image pixels."
             if worker.returncode:
-                raise ValueError(f"Image baseline worker failed (exit {worker.returncode}); see worker_stderr.txt.")
+                raise ValueError(f"Image {method} worker failed (exit {worker.returncode}). See worker_stderr.txt.")
             # Native Windows OCR is outside Python's audit hook. Enforce packet
             # immutability again before accepting any worker observation.
             read_packet(packet)
@@ -95,7 +95,7 @@ def process_run(packet, runs_dir="runs", method="baseline", response=None, model
             write_json(path / "ocr_evidence.json",evidence)
             native = evidence.get("ocr",{}).get("native")
             if native:
-                run["settings"].update({k:native.get(k) for k in ("engine","language","windows_version","powershell_version","max_image_dimension")})
+                run["settings"].update({k:native.get(k) for k in ("engine","language","windows_version","winrt_runtime_version","max_image_dimension")})
         run["status"] = "validated"
         run["duration_seconds"] = round(time.perf_counter()-start, 6)
         doc = normalize_response(raw, meta["drawing"], run)
