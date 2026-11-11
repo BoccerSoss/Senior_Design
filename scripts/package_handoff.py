@@ -8,7 +8,7 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 dist = root / "dist"
 dist.mkdir(exist_ok=True)
-selected = ["README.md", ".gitignore", ".gitattributes", "requirements.lock", "config.example.json",
+selected = ["README.md", "Open AIP Demo.cmd", ".gitignore", ".gitattributes", "requirements.lock", "config.example.json",
             ".github", "src", "scripts", "tests", "schemas", "prompts", "data", "docs", "reports",
             "output/aip_four_component"]
 files = []

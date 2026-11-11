@@ -1,8 +1,18 @@
 # AIP drawing extraction prototype
 
-This research CLI automatically interprets a limited set of simplified raster process symbols and tags, exports immediate undirected connectivity, and evaluates the result against a separate reference. The default local method combines Windows OCR with pixel-based shape rules. A geometry-only baseline and an assisted ChatGPT response importer are also available. The prototype does not determine operating or isolation actions.
+The P&ID Matrix Builder desktop demo and command-line tools interpret simplified raster process symbols and tags and export a direct connection matrix. The default local method combines Windows OCR with pixel-based shape rules. A geometry-only baseline and an assisted ChatGPT response importer are also available.
 
-The verified local classical method recognized **4 tags/types and 3 direct edges** on the clean synthetic development image: component, component-type and edge **precision, recall and F1 were all 1.0**. Blank, disconnected, changed-tag and erased-label controls passed. **63 local automated tests passed**, with no skips. The earlier geometry-only baseline remains available, with its original tagged-graph F1 of 0.0. Independent human reference review is pending; this small development example does not establish general P&ID accuracy. See [results](docs/results.md) and the [portable classical summary](reports/classical_summary.json).
+## Desktop demo
+
+1. Double-click `Open AIP Demo.cmd` in the project folder. The app opens with the synthetic drawing loaded.
+2. Select **Analyze drawing** to view the equipment, connections, and labeled matrix. Click a matrix cell to see what its value means. Use **Show detections** to toggle the overlay.
+3. Select **Save matrix…** to save the exact matrix CSV or **Open results folder** to inspect the run evidence. Use **Open drawing…** to analyze another PNG or JPEG.
+
+The app requires Windows 10 or 11, 64-bit Python 3.12 with Tcl/Tk, and an installed Windows OCR language. The launcher sets up the virtual environment and installs the locked Pillow version if needed. The synthetic comparison remains provisional pending independent human review of the reference.
+
+The setup section below covers command-line use.
+
+The local classical method recognized **4 tags/types and 3 direct edges** on the clean synthetic development image. Component, component-type and edge **precision, recall and F1 were all 1.0**. Blank, disconnected, changed-tag and erased-label controls passed. **67 local automated tests passed**. The earlier geometry-only baseline had a tagged-graph F1 of 0.0. See [results and scope](docs/results.md) and the [portable classical summary](reports/classical_summary.json).
 
 ## Setup and demo
 

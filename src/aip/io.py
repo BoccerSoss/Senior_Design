@@ -118,7 +118,8 @@ def read_packet(packet):
 def git_state():
     def git(*args):
         try:
-            p = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, timeout=5)
+            p = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, timeout=5,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             return p.stdout.strip() if p.returncode == 0 else None
         except (OSError, subprocess.TimeoutExpired):
             return None

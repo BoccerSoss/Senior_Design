@@ -69,12 +69,16 @@ def process_run(packet, runs_dir="runs", method="baseline", response=None, model
                             "LOCALAPPDATA","APPDATA","PROGRAMDATA","PROGRAMFILES","PROGRAMFILES(X86)",
                             "COMMONPROGRAMFILES","COMMONPROGRAMFILES(X86)","HOMEDRIVE","HOMEPATH"}
             env = {k:v for k,v in os.environ.items() if k.upper() in native_paths}
-            argv = [sys.executable, "-I", str(ROOT / "scripts/baseline_worker.py"), str(Path(packet).resolve()),method]
+            worker_python = Path(sys.executable)
+            if worker_python.name.lower() == "pythonw.exe":
+                worker_python = worker_python.with_name("python.exe")
+            argv = [str(worker_python), "-I", str(ROOT / "scripts/baseline_worker.py"), str(Path(packet).resolve()),method]
             if method == "classical":
                 scratch = path / "ocr_scratch"
                 scratch.mkdir()
                 argv.append(str(scratch))
-            worker = subprocess.run(argv,cwd=packet, env=env, capture_output=True, timeout=180)
+            worker = subprocess.run(argv,cwd=packet, env=env, capture_output=True, timeout=180,
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             (path / "raw_response.txt").write_bytes(worker.stdout)
             (path / "worker_stderr.txt").write_bytes(worker.stderr)
             run["boundary"] = "fresh isolated Python process; Python opens limited to packet/runtime/code allowlist and private OCR scratch; native OCR helper receives only an image path. Trusted-code guard, not an OS/native-process sandbox."
