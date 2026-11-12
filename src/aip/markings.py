@@ -10,6 +10,7 @@ SYMBOL_COLOR = "#b00020"
 TAG_COLOR = "#7143a0"
 PIPE_COLOR = "#087e8b"
 ARROW_COLOR = "#12624f"
+ROUTE_COLOR = "#2461b5"
 LABEL_SIZE = 18
 
 
@@ -34,7 +35,7 @@ def _label_mark(component_id, text, box, draw, font, width, height):
 
 def _draw_mark(draw, mark, font):
     kind = mark["kind"]
-    if kind in {"pipe_trace", "flow_arrow"}:
+    if kind in {"pipe_trace", "flow_arrow", "flow_route", "observed_arrow"}:
         draw.line([tuple(point) for point in mark["points"]], fill=mark["color"], width=mark["stroke_width"])
         return
     x0, y0, x1, y1 = mark["bbox"]
@@ -46,7 +47,18 @@ def _draw_mark(draw, mark, font):
         draw.rectangle(inclusive, outline=mark["color"], width=mark["stroke_width"])
 
 
-def build_markings(drawing, equipment, edges, labels, image=None):
+def _same_arrow(first, second):
+    tip_a, tip_b = first["arrow_tip"], second["arrow_tip"]
+    if max(abs(a - b) for a, b in zip(tip_a, tip_b)) > 10:
+        return False
+    axes = []
+    for arrow in (first, second):
+        wing_a, wing_b = arrow["arrow_wings"]
+        axes.append([2 * tip - a - b for tip, a, b in zip(arrow["arrow_tip"], wing_a, wing_b)])
+    return sum(a * b for a, b in zip(*axes)) > 0
+
+
+def build_markings(drawing, equipment, edges, labels, image=None, *, arrows=(), flow_routes=()):
     """Record observations, plus the exact draw commands if an overlay is rendered."""
     width, height = drawing["width"], drawing["height"]
     record = {
@@ -60,9 +72,15 @@ def build_markings(drawing, equipment, edges, labels, image=None):
         "overlay_file": "overlay.png" if image is not None else None,
         "components": [],
         "connections": [],
+        "arrows": list(arrows),
+        "flow_routes": [{**route, "component_labels": [labels[ident] for ident in route["component_ids"]]}
+                        for route in flow_routes],
         "marks": [],
     }
     marks = record["marks"]
+    arrow_marks = []
+    routed_arrows = {route["arrow_id"] for route in flow_routes}
+    linked_arrows = set()
     for edge in edges:
         source, target = edge["source"], edge["target"]
         path = edge.get("path")
@@ -83,8 +101,34 @@ def build_markings(drawing, equipment, edges, labels, image=None):
             if flow:
                 wing_a, wing_b = direction["arrow_wings"]
                 arrow = [wing_a, direction["arrow_tip"], wing_b]
-                marks.append({"kind": "flow_arrow", "connection": [source, target],
-                              "points": _raster_points(arrow, width, height), "color": ARROW_COLOR, "stroke_width": 3})
+                mark = {"kind": "flow_arrow", "connection": [source, target],
+                        "points": _raster_points(arrow, width, height), "color": ARROW_COLOR, "stroke_width": 3}
+                match = next((a for a in arrows if a["id"] not in linked_arrows and _same_arrow(a, direction)), None)
+                if match:
+                    linked_arrows.add(match["id"])
+                    wing_a, wing_b = match["arrow_wings"]
+                    mark.update(arrow_id=match["id"], direction=match["direction"],
+                                points=_raster_points([wing_a, match["arrow_tip"], wing_b], width, height))
+                    if match["id"] in routed_arrows:
+                        mark["route_id"] = match["id"]
+                arrow_marks.append(mark)
+    if image is not None:
+        for route in record["flow_routes"]:
+            marks.append({"kind": "flow_route", "route_id": route["arrow_id"], "arrow_id": route["arrow_id"],
+                          "points": _raster_points(route["path"], width, height),
+                          "component_ids": route["component_ids"], "component_labels": route["component_labels"],
+                          "color": ROUTE_COLOR, "stroke_width": 5})
+        for arrow in arrows:
+            arrow_id = arrow["id"]
+            if arrow_id in linked_arrows:
+                continue
+            wings = arrow["arrow_wings"]
+            mark = {"kind": "observed_arrow", "arrow_id": arrow_id, "direction": arrow["direction"],
+                    "points": _raster_points([wings[0], arrow["arrow_tip"], wings[1]], width, height),
+                    "color": ARROW_COLOR, "stroke_width": 6}
+            if arrow_id in routed_arrows:
+                mark["route_id"] = arrow_id
+            arrow_marks.append(mark)
     draw = ImageDraw.Draw(image) if image is not None else None
     font = ImageFont.load_default(size=LABEL_SIZE) if draw is not None else None
     for item in equipment:
@@ -103,6 +147,7 @@ def build_markings(drawing, equipment, edges, labels, image=None):
                           "color": SYMBOL_COLOR, "stroke_width": 3})
             marks.append(_label_mark(component_id, f"{labels[component_id]} ({item['type']})",
                                      box, draw, font, width, height))
+    marks.extend(arrow_marks)
     for mark in marks:
         _draw_mark(draw, mark, font)
     return record

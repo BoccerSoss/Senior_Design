@@ -52,7 +52,11 @@ $runDir = 'runs/REPLACE_WITH_PRINTED_RUN_ID'
 
 Exports include equipment JSON/CSV, direct-edge JSON/CSV, labeled adjacency CSV, `markings.json`, and a readable connection list. The overlay image must match the recorded input provenance. Unknown identities remain explicit in matrix labels.
 
-`markings.json` lists each component's symbol and associated tag boxes, each connection's observed pipe path, and any supported flow arrow. Use `direction.from` and `direction.to` for the component IDs at each end of an observed arrow. Unknown direction has null endpoints and arrow coordinates. Points use `[x,y]` in prepared image pixels from the top-left. Boxes use `[xmin,ymin,xmax,ymax]` with exclusive maximums. The ordered `marks` array records the exact positions and styles used for symbol outlines, tag outlines, labels, pipe traces, and arrows on `overlay.png`. Exports without an overlay still include the observations.
+`markings.json` lists component symbol and tag boxes, direct connections, visible arrowheads, and traced routes. On a direct connection, `direction.from` and `direction.to` give the component IDs when the direction is known. Unknown direction has null endpoints and arrow coordinates.
+
+Each entry in `arrows` gives the arrow ID, direction on the page, tip and wing coordinates. An entry in `flow_routes` links to that arrow by ID, lists the component candidates in flow order, and gives a path through their connected ink ending at the arrow tip. Routes are available for supported horizontal runs. The tracer stops at unresolved branches, crossings, and breaks.
+
+Points use `[x,y]` in prepared image pixels from the top-left. Boxes use `[xmin,ymin,xmax,ymax]` with exclusive maximums. The ordered `marks` array records the positions and styles drawn on `overlay.png`. Exports without an overlay still include the observations.
 
 Tag normalization uses Unicode NFKC, uppercase, trimming, normalized dashes and removal of spaces beside `-`, `/` and `:`. Reversed or duplicate observations normalize to one unordered pair with a warning. Normalization preserves the physical arrow direction if it reverses endpoint order. The adjacency matrix and evaluation use the unordered connection. Instrument signals are outside the extraction contract.
 

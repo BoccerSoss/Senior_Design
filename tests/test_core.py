@@ -179,6 +179,34 @@ class EvaluationTests(unittest.TestCase):
 
 
 class ExportTests(unittest.TestCase):
+    def test_flow_route_exports_coordinates_and_keeps_direct_adjacency(self):
+        response = raw()
+        response["arrows"] = [{"id": "arrow-001", "direction": "right", "arrow_tip": [110, 50],
+                               "arrow_wings": [[100, 45], [100, 55]]}]
+        response["flow_routes"] = [{"arrow_id": "arrow-001", "path": [[15, 50], [110, 50]],
+                                    "component_ids": ["o0", "o1", "o2"]}]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            image_path = root / "source.png"
+            Image.new("RGB", (200, 100), "white").save(image_path)
+            drawing = {**DRAWING, "sha256": hashlib.sha256(image_path.read_bytes()).hexdigest()}
+            document = normalize_response(response, drawing, RUN)
+            outputs = export_document(document, root / "exports", image_path)
+            markings = json.loads(Path(outputs["markings.json"]).read_text(encoding="utf-8"))
+            self.assertEqual(markings["arrows"], response["arrows"])
+            self.assertEqual(markings["flow_routes"][0]["component_labels"], ["A-7", "B-8", "C-9"])
+            marks = {mark["kind"]: mark for mark in markings["marks"]}
+            self.assertEqual(marks["flow_route"]["points"], [[15, 50], [110, 50]])
+            self.assertEqual(marks["observed_arrow"]["points"], [[100, 45], [110, 50], [100, 55]])
+            self.assertEqual(marks["observed_arrow"]["route_id"], "arrow-001")
+            with Path(outputs["adjacency.csv"]).open(newline="") as stream:
+                self.assertEqual(list(csv.reader(stream))[1], ["A-7", "0", "1", "0"])
+            with Image.open(outputs["overlay.png"]) as overlay:
+                self.assertEqual(overlay.getpixel((70, 50)), (36, 97, 181))
+        response["flow_routes"][0]["path"][-1] = [109, 50]
+        with self.assertRaisesRegex(ValidationError, "ending at the observed arrow tip"):
+            normalize_response(response, DRAWING, RUN)
+
     def test_markings_match_overlay_and_preserve_flow_when_endpoints_are_sorted(self):
         response = raw(edges=((1, 0), (1, 2)))
         response["components"][0].update(bbox=[10, 20, 40, 60], tag_bbox=[10, 10, 34, 17])

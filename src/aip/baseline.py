@@ -12,7 +12,8 @@ from pathlib import Path
 
 from PIL import Image, ImageOps, __version__ as pillow_version
 
-from .connection_geometry import flow_direction, horizontal_stroke, is_pipe_arrow_box
+from .connection_geometry import flow_direction, horizontal_stroke, is_pipe_arrow_box, observe_flow_arrows
+from .flow_routes import trace_arrow_routes
 
 
 def baseline_info():
@@ -24,12 +25,12 @@ def baseline_info():
         "access_route": "local deterministic raster processing",
         "pillow_version": pillow_version,
         "ocr_available": False,
-        "scope": "unlabeled symbol candidates, uninterrupted horizontal pipe contacts, and visible flow arrows on supported pipes",
+        "scope": "unlabeled symbol candidates, horizontal contacts, visible arrowheads and candidate flow routes",
         "limitations": [
             "No OCR: observed tags remain null.",
             "No semantic symbol classifier: type remains unknown.",
             "Only horizontal direct contacts are traced; bends and branches need review.",
-            "Flow direction requires a visible paired-wing arrow on the pipe span.",
+            "Routes trace a supported shaft through connected symbol ink and stop at an unresolved branch or break.",
             "Large connected text or unusual linework can be misidentified.",
         ],
     }
@@ -129,6 +130,22 @@ def _horizontal_contact(mask, width, left, right):
     return horizontal_stroke(mask, width, ax1 - 1, bx0, top, bottom)
 
 
+def _drawing_arrows(mask, width, connections):
+    arrows = observe_flow_arrows(mask, width)
+    for edge in connections:
+        flow = edge["direction"]
+        if flow["status"] == "unknown":
+            continue
+        tip = flow["arrow_tip"]
+        heading = "right" if flow["status"] == "source_to_target" else "left"
+        if any(arrow["direction"] == heading and
+               max(abs(x - y) for x, y in zip(arrow["arrow_tip"], tip)) <= 10 for arrow in arrows):
+            continue
+        arrows.append({"arrow_tip": tip, "arrow_wings": flow["arrow_wings"], "direction": heading})
+    arrows.sort(key=lambda arrow: (arrow["arrow_tip"][1], arrow["arrow_tip"][0], arrow["direction"]))
+    return [{"id": f"arrow-{index:03d}", **arrow} for index, arrow in enumerate(arrows, 1)]
+
+
 def extract_image(image_path):
     """Consume raster pixels and return observations, including explicit uncertainty.
 
@@ -172,9 +189,11 @@ def extract_image(image_path):
                     "evidence": f"Uninterrupted dark horizontal raster stroke between candidate borders at {contact.path}.",
                     "uncertainty": "Geometric contact only; candidate identity and process-line interpretation require review.",
                 })
+    arrows = _drawing_arrows(mask, width, connections)
+    routes = trace_arrow_routes(mask, width, arrows, components)
     uncertainties = [
         "Local geometry baseline has no OCR or semantic symbol classifier; tags remain null and types unknown.",
-        "Only large linework regions and uninterrupted horizontal contacts are supported; bends, branches and crossings are unresolved.",
+        "Direct contacts use uninterrupted horizontal strokes. Flow routes stop at unresolved branches, crossings, and breaks.",
         "Candidate counts and connections are provisional image observations, not independently checked equipment records.",
     ]
     if not components:
@@ -183,5 +202,7 @@ def extract_image(image_path):
         "image": {"width": width, "height": height},
         "components": components,
         "connections": connections,
+        "arrows": arrows,
+        "flow_routes": routes,
         "uncertainties": uncertainties,
     }

@@ -17,7 +17,7 @@ def classical_info():
     return {"method": "windows-ocr-and-outline-rules-v1", "provider": "local Windows/Pillow",
             "model": None, "access_route": "local raster pixels, Windows.Media.Ocr and deterministic shape rules",
             "tag_method": "native OCR plus separator-derived suffix pixel crops at 1x/3x; raw readings retained",
-            "direction_method": "paired visible arrow wings along supported horizontal pipe strokes",
+            "direction_method": "visible arrowheads and connected raster paths through symbol candidates",
             "supported_symbols": ["simplified tank", "opposed-triangle valve", "circle pump with entry/tangent strokes"],
             "limitations": ["Limited educational vocabulary, horizontal pipe contacts only.",
                            "OCR and geometric association can fail; no reference-driven correction.",
@@ -93,7 +93,7 @@ def extract_image(image_path, scratch_dir):
         notes.append("Automatic development observation; independent human reference review pending.")
         component["uncertainty"] = " ".join(notes)
     raw["uncertainties"] = [
-        "The local method supports simplified symbols and horizontal pipe contacts. Direction requires a visible arrow on the supported pipe.",
+        "The local method detects visible arrowheads and traces supported horizontal runs through symbol candidates.",
         "All OCR passes, original words and source crop boxes are preserved; crop agreement is correlated evidence.",
         "Branch/crossing interpretation, unfamiliar symbols and tag association need review; no operating state is inferred.",
     ]

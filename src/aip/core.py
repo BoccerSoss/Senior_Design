@@ -18,6 +18,7 @@ COORDINATE_CONVENTION = {
 }
 REVERSED_FLOW = {"source_to_target": "target_to_source", "target_to_source": "source_to_target",
                  "unknown": "unknown"}
+ARROW_DIRECTIONS = {"up", "down", "left", "right", "up-left", "up-right", "down-left", "down-right"}
 
 
 class ValidationError(ValueError):
@@ -83,13 +84,21 @@ def _pixel_point(value, width, height):
             and 0 <= value[0] < width and 0 <= value[1] < height)
 
 
+def _pixel_path(path, width, height):
+    return (isinstance(path, list) and len(path) >= 2
+            and all(_pixel_point(point, width, height) for point in path)
+            and all(a != b for a, b in zip(path, path[1:])))
+
+
+def _arrow_points(tip, wings, width, height):
+    return (_pixel_point(tip, width, height) and isinstance(wings, list) and len(wings) == 2
+            and all(_pixel_point(point, width, height) for point in wings)
+            and tip not in wings and wings[0] != wings[1])
+
+
 def _connection_geometry(item, location, width, height, errors):
     path = item.get("path")
-    if path is not None and (
-        not isinstance(path, list) or len(path) < 2
-        or not all(_pixel_point(point, width, height) for point in path)
-        or any(a == b for a, b in zip(path, path[1:]))
-    ):
+    if path is not None and not _pixel_path(path, width, height):
         errors.append(f"{location}.path must contain two or more distinct consecutive [x,y] points within the image")
     if "direction" not in item:
         return
@@ -102,11 +111,53 @@ def _connection_geometry(item, location, width, height, errors):
     elif status == "unknown":
         if tip is not None or wings is not None:
             errors.append(f"{location}.direction arrow coordinates must be null when direction is unknown")
-    elif (path is None or not _pixel_point(tip, width, height)
-          or not isinstance(wings, list) or len(wings) != 2
-          or not all(_pixel_point(point, width, height) for point in wings)
-          or tip in wings or wings[0] == wings[1]):
+    elif path is None or not _arrow_points(tip, wings, width, height):
         errors.append(f"{location}.direction requires a traced path and three distinct in-bounds arrow points")
+
+
+def _observed_flow(raw, seen_components, width, height, errors):
+    result = {}
+    tips = {}
+    if "arrows" in raw:
+        arrows = _array(raw["arrows"], "arrows", errors)
+        for index, value in enumerate(arrows):
+            location = f"arrows[{index}]"
+            arrow = _object(value, location, errors)
+            if set(arrow) != {"id", "arrow_tip", "arrow_wings", "direction"}:
+                errors.append(f"{location} must contain id, arrow_tip, arrow_wings, and direction")
+            arrow_id = arrow.get("id")
+            if not isinstance(arrow_id, str) or not arrow_id.strip() or arrow_id in tips:
+                errors.append(f"{location}.id must be unique nonempty text")
+            else:
+                tips[arrow_id] = arrow.get("arrow_tip")
+            if not _arrow_points(arrow.get("arrow_tip"), arrow.get("arrow_wings"), width, height):
+                errors.append(f"{location} must contain three distinct in-bounds arrow points")
+            direction = arrow.get("direction")
+            if not isinstance(direction, str) or direction not in ARROW_DIRECTIONS:
+                errors.append(f"{location}.direction must describe a supported arrow heading")
+        result["arrows"] = copy.deepcopy(arrows)
+    if "flow_routes" in raw:
+        routes = _array(raw["flow_routes"], "flow_routes", errors)
+        seen_routes = set()
+        for index, value in enumerate(routes):
+            location = f"flow_routes[{index}]"
+            route = _object(value, location, errors)
+            if set(route) != {"arrow_id", "path", "component_ids"}:
+                errors.append(f"{location} must contain arrow_id, path, and component_ids")
+            arrow_id, path = route.get("arrow_id"), route.get("path")
+            if not isinstance(arrow_id, str) or arrow_id not in tips or arrow_id in seen_routes:
+                errors.append(f"{location}.arrow_id must name an observed arrow with no other route")
+            else:
+                seen_routes.add(arrow_id)
+                if not _pixel_path(path, width, height) or path[-1] != tips[arrow_id]:
+                    errors.append(f"{location}.path must trace in-bounds points ending at the observed arrow tip")
+            component_ids = route.get("component_ids")
+            if (not isinstance(component_ids, list) or not component_ids
+                or not all(isinstance(ident, str) and ident in seen_components for ident in component_ids)
+                or len(component_ids) != len(set(component_ids))):
+                errors.append(f"{location}.component_ids must list unique observed components in route order")
+        result["flow_routes"] = copy.deepcopy(routes)
+    return result
 
 
 def _metadata(drawing, run, errors):
@@ -249,6 +300,7 @@ def normalize_response(raw: dict, drawing: dict, run: dict) -> dict:
                 edge["direction"] = direction
             connections.append(edge)
     uncertainties = _array(raw.get("uncertainties", []), "uncertainties", errors)
+    observed_flow = _observed_flow(raw, seen_ids, width, height, errors)
     if any(not isinstance(v, str) for v in uncertainties):
         errors.append("uncertainties must contain only strings")
     if errors:
@@ -257,7 +309,7 @@ def normalize_response(raw: dict, drawing: dict, run: dict) -> dict:
     metadata.setdefault("coordinate_convention", COORDINATE_CONVENTION)
     return {"schema_version": SCHEMA_VERSION, "drawing": metadata, "run": copy.deepcopy(run),
             "components": components, "connections": connections,
-            "uncertainties": copy.deepcopy(uncertainties), "warnings": warnings}
+            "uncertainties": copy.deepcopy(uncertainties), "warnings": warnings, **observed_flow}
 
 
 def validate_document(document: dict) -> dict:
@@ -280,11 +332,13 @@ def validate_document(document: dict) -> dict:
             errors.append("drawing.coordinate_convention.origin must be top-left")
         elif isinstance(convention, str) and "top-left" not in convention.lower():
             errors.append("drawing.coordinate_convention must use the top-left origin")
-    allowed_top = {"schema_version", "drawing", "run", "components", "connections", "uncertainties", "warnings"}
+    allowed_top = {"schema_version", "drawing", "run", "components", "connections",
+                   "uncertainties", "warnings", "arrows", "flow_routes"}
     if set(document) - allowed_top:
         errors.append("canonical document has unsupported fields: " + ", ".join(sorted(set(document) - allowed_top)))
     raw = {"image": {}, "components": document.get("components"),
-           "connections": document.get("connections"), "uncertainties": document.get("uncertainties")}
+           "connections": document.get("connections"), "uncertainties": document.get("uncertainties"),
+           **{name: document[name] for name in ("arrows", "flow_routes") if name in document}}
     try:
         checked = normalize_response(raw, document.get("drawing"), document.get("run"))
     except ValidationError as exc:

@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+import re
+
+from PIL import Image
 
 
 MAX_WING_DEPTH = 40
@@ -179,3 +182,189 @@ def is_pipe_arrow_box(mask, width, box):
     tolerance = max(5, stroke.bottom - stroke.top + 1)
     return all(abs(observed - arrow) <= tolerance for observed, arrow in
                zip(box, (min(xs), min(ys), max(xs) + 1, max(ys) + 1)))
+
+
+_LONG_INK_RUN = re.compile(rb"\x01{36,}")
+_MAX_HEAD_HALF_WIDTH = 30
+
+
+def _cross_section(mask, width, height, x, y):
+    """Count ink on both sides of an already-dark point on the shaft."""
+    above = below = 0
+    while above < min(_MAX_HEAD_HALF_WIDTH, y) and mask[(y - above - 1) * width + x]:
+        above += 1
+    while below < min(_MAX_HEAD_HALF_WIDTH, height - y - 1) and mask[(y + below + 1) * width + x]:
+        below += 1
+    return above, below
+
+
+def _filled_heads(profile):
+    """Locate filled heads in a cross-section profile, in shaft-to-tip order."""
+    widths = [above + below + 1 for above, below in profile]
+    for rear in range(8, len(widths) - 9):
+        width = widths[rear]
+        if width < 9 or width - widths[rear - 3] < 5:
+            continue
+        stem = max(widths[rear - 8:rear - 2])
+        if stem > 10 or width < 2 * stem:
+            continue
+        base = max(range(rear, rear + 5), key=widths.__getitem__)
+        widest = widths[base]
+        above, below = profile[base]
+        if widest > 53 or min(above, below) < 3 or abs(above - below) > max(3, widest * 0.30):
+            continue
+        narrow = max(stem + 2, widest * 0.42)
+        for end in range(base + 1, min(len(widths), base + 100)):
+            if widths[end] > widest + 3:
+                break
+            if widths[end] > narrow:
+                continue
+            length = end - base
+            if not max(8, 0.42 * widest) <= length <= 5 * widest:
+                break
+            # Each side should narrow along the same axis. A flange, a crossing,
+            # or a wide black rectangle can widen suddenly but has no taper.
+            tolerance = max(2.5, widest * 0.16)
+            start = profile[base]
+            finish = profile[end]
+            if any(a - b < 2 for a, b in zip(start, finish)):
+                break
+            matching = sum(
+                all(abs(value - (a + (b - a) * step / length)) <= tolerance
+                    for value, a, b in zip(section, start, finish))
+                for step, section in enumerate(profile[base:end + 1])
+            )
+            if matching < 0.85 * (length + 1):
+                break
+            tip = min(len(widths) - 1, round(base + length * (widest - 1) / (widest - widths[end])))
+            # A terminal arrow may meet a junction. The next perpendicular ink
+            # bounds the taper instead of extending the estimated tip past it.
+            for position in range(end + 1, tip + 1):
+                if widths[position] > widest + 3:
+                    tip = position
+                    break
+            if len(widths) - 1 - tip <= 6 and widths[-1] <= narrow:
+                tip = len(widths) - 1
+            if tip - base < 0.85 * widest:
+                break
+            yield tip, base, above, below
+            break
+
+
+def _axial_arrows(mask, width, height):
+    """Yield points in the scan's coordinate space for both axial directions."""
+    for y in range(1, height - 1):
+        offset = y * width
+        for run in _LONG_INK_RUN.finditer(mask, offset, offset + width):
+            start, end = run.start() - offset, run.end() - offset
+            # A head must have ink away from the thin stem on both sides.
+            # The byte slice check avoids scanning the long lines of a frame.
+            if 1 not in mask[max(0, y - 4) * width + start:max(0, y - 4) * width + end]:
+                continue
+            if 1 not in mask[min(height - 1, y + 4) * width + start:min(height - 1, y + 4) * width + end]:
+                continue
+            profile = [_cross_section(mask, width, height, x, y) for x in range(start, end)]
+            for sign, sections in ((1, profile), (-1, profile[::-1])):
+                for tip, base, above, below in _filled_heads(sections):
+                    origin = start if sign > 0 else end - 1
+                    wing_x = origin + sign * base
+                    center_error = abs(above - below)
+                    yield sign, (origin + sign * tip, y), ((wing_x, y - above), (wing_x, y + below)), center_error
+
+
+def _outward_pairs(mask, width, heads):
+    """Reject opposed arrowheads that share one axis and point away from each other."""
+    rejected = set()
+    for first, (sign, tip, wings) in enumerate(heads):
+        if sign != -1:
+            continue
+        for second, (other, end, other_wings) in enumerate(heads):
+            if other != 1 or tip[0] >= end[0] or abs(tip[1] - end[1]) > 3:
+                continue
+            start_x, end_x = wings[0][0], other_wings[0][0]
+            if start_x >= end_x:
+                continue
+            top = max(0, min(tip[1], end[1]) - 1)
+            bottom = min(len(mask) // width, max(tip[1], end[1]) + 2)
+            if horizontal_stroke(mask, width, start_x, end_x, top, bottom) is not None:
+                rejected.update((first, second))
+    return rejected
+
+
+def _scan_heads(mask, width, height):
+    observations = sorted(_axial_arrows(mask, width, height), key=lambda mark: mark[-1])
+    selected = []
+    for sign, tip, wings, _ in observations:
+        if any(other == sign and abs(x - tip[0]) <= 9 and abs(y - tip[1]) <= 4
+               for other, (x, y), _ in selected):
+            continue
+        selected.append((sign, tip, wings))
+
+    rejected = _outward_pairs(mask, width, selected)
+    for index, (sign, tip, wings) in enumerate(selected):
+        if index in rejected:
+            continue
+        if any(other == -sign and abs(x - tip[0]) <= 12 and abs(y - tip[1]) <= 12
+               for other, (x, y), _ in selected):
+            continue
+        yield sign, tip, wings
+
+
+def _arrow_observation(direction, tip, wings):
+    return {"direction": direction, "arrow_tip": list(tip), "arrow_wings": [list(wing) for wing in wings]}
+
+
+def _diagonal_heads(image, slope, negative, positive):
+    width, height = image.size
+    # Keep the shear padding proportional on very wide scans. Overlap covers
+    # the shaft and head near each boundary; each tip belongs to one tile.
+    span, overlap = max(1024, 3 * height), 256
+    for start in range(0, width, span):
+        end = min(start + span, width)
+        left, right = max(0, start - overlap), min(width, end + overlap)
+        tile = image if left == 0 and right == width else image.crop((left, 0, right, height))
+        for sign, tip, wings in _sheared_heads(tile, slope):
+            if start <= tip[0] + left < end:
+                yield _arrow_observation(negative if sign < 0 else positive,
+                                         (tip[0] + left, tip[1]),
+                                         tuple((x + left, y) for x, y in wings))
+
+
+def _sheared_heads(image, slope):
+    # Shear a shallow diagonal shaft into the horizontal scan space. Use nearest
+    # neighbor so the transform does not introduce intermediate ink values.
+    width, height = image.size
+    padding = (width + 2) // 3
+    offset = padding if slope > 0 else 0
+    scan = image.transform((width, height + padding), Image.Transform.AFFINE,
+                           (1, 0, 0, slope, 1, -offset), Image.Resampling.NEAREST)
+
+    def image_point(point):
+        x, y = point
+        return x, y + round(slope * x) - offset
+
+    for sign, tip, wings in _scan_heads(scan.tobytes(), *scan.size):
+        tip = image_point(tip)
+        wings = tuple(image_point(wing) for wing in wings)
+        if all(0 <= x < width and 0 <= y < height for x, y in (tip, *wings)):
+            yield sign, tip, wings
+
+
+def observe_flow_arrows(mask, width):
+    """Find visible tapered arrowheads on axial and shallow diagonal shafts.
+
+    Terminal heads can end freely or meet a junction. Direction is in image
+    space, so this observation does not establish equipment endpoints.
+    """
+    height = len(mask) // width
+    image = Image.frombytes("L", (width, height), mask)
+    transpose = image.transpose(Image.Transpose.TRANSPOSE)
+    observations = []
+    for sign, tip, wings in _scan_heads(mask, width, height):
+        observations.append(_arrow_observation("left" if sign < 0 else "right", tip, wings))
+    for sign, tip, wings in _scan_heads(transpose.tobytes(), height, width):
+        observations.append(_arrow_observation("up" if sign < 0 else "down", tip[::-1],
+                                               tuple(wing[::-1] for wing in wings)))
+    observations.extend(_diagonal_heads(image, 1 / 3, "up-left", "down-right"))
+    observations.extend(_diagonal_heads(image, -1 / 3, "down-left", "up-right"))
+    return sorted(observations, key=lambda mark: (mark["arrow_tip"][1], mark["arrow_tip"][0]))

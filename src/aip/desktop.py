@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 import os
 from pathlib import Path
 import shutil
@@ -24,6 +25,36 @@ ACCENT = "#116a57"
 LINE = "#d8e2e7"
 STRIPE = "#f3f7f8"
 ERROR = "#a12838"
+COORDINATE_HINT = "Click the drawing for coordinates."
+
+
+@dataclass(frozen=True)
+class PreviewGeometry:
+    left: int
+    top: int
+    width: int
+    height: int
+    image_width: int
+    image_height: int
+
+    def image_point(self, x, y):
+        x, y = x - self.left, y - self.top
+        if 0 <= x < self.width and 0 <= y < self.height:
+            return int(x * self.image_width / self.width), int(y * self.image_height / self.height)
+        return None
+
+    def canvas_point(self, point):
+        x, y = point
+        return (self.left + (x + 0.5) * self.width / self.image_width,
+                self.top + (y + 0.5) * self.height / self.image_height)
+
+
+def _segment_distance_squared(point, start, end):
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    px, py = point[0] - start[0], point[1] - start[1]
+    length_squared = dx * dx + dy * dy
+    along = min(1, max(0, (px * dx + py * dy) / length_squared)) if length_squared else 0
+    return (px - dx * along) ** 2 + (py - dy * along) ** 2
 
 
 class DesktopApp:
@@ -38,6 +69,10 @@ class DesktopApp:
         self.source_image = None
         self.overlay_image = None
         self.preview_photo = None
+        self.preview_geometry = None
+        self.coordinate_point = None
+        self.coordinate_text = tk.StringVar(root)
+        self.drawing_hint = tk.StringVar(root, COORDINATE_HINT)
         self.show_detections = tk.BooleanVar(root, False)
         self.filename = tk.StringVar(root)
         self.image_detail = tk.StringVar(root)
@@ -137,6 +172,19 @@ class DesktopApp:
                                 highlightbackground=LINE, width=360, height=220)
         self.canvas.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
         self.canvas.bind("<Configure>", self.redraw)
+        self.canvas.bind("<Button-1>", self.inspect_drawing)
+        ttk.Label(drawing, textvariable=self.drawing_hint,
+                  style="PanelMuted.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.coordinate_popup = ttk.Frame(self.canvas, padding=(10, 8), style="Panel.TFrame",
+                                          relief="solid", borderwidth=1)
+        self.coordinate_popup.columnconfigure(0, weight=1)
+        ttk.Label(self.coordinate_popup, text="Drawing coordinates", style="PanelHeading.TLabel").grid(
+            row=0, column=0, sticky="w", padx=(0, 10))
+        ttk.Button(self.coordinate_popup, text="Close", command=self.hide_coordinates).grid(row=0, column=1)
+        self.coordinate_label = ttk.Label(self.coordinate_popup, textvariable=self.coordinate_text,
+                                          justify="left", style="Panel.TLabel")
+        self.coordinate_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        root.bind("<Escape>", self.hide_coordinates)
 
         results = ttk.Frame(workspace, style="Panel.TFrame", padding=13)
         results.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
@@ -244,6 +292,8 @@ class DesktopApp:
         self.folder_button.configure(state="normal" if self.run_folder and not busy else "disabled")
 
     def clear_results(self):
+        self.hide_coordinates()
+        self.drawing_hint.set(COORDINATE_HINT)
         self.result = None
         self.run_folder = None
         self.overlay_image = None
@@ -289,12 +339,126 @@ class DesktopApp:
         width, height = self.canvas.winfo_width(), self.canvas.winfo_height()
         source = self.overlay_image if self.show_detections.get() and self.overlay_image is not None else self.source_image
         if source is None or width < 4 or height < 4:
+            self.preview_geometry = None
             return
         scaled = source.copy()
         scaled.thumbnail((max(1, width - 20), max(1, height - 20)), Image.Resampling.LANCZOS)
         self.preview_photo = ImageTk.PhotoImage(scaled, master=self.root)
         self.canvas.delete("preview")
-        self.canvas.create_image(width // 2, height // 2, image=self.preview_photo, tags="preview")
+        left, top = (width - scaled.width) // 2, (height - scaled.height) // 2
+        self.preview_geometry = PreviewGeometry(left, top, scaled.width, scaled.height, source.width, source.height)
+        self.canvas.create_image(left, top, anchor="nw", image=self.preview_photo, tags="preview")
+        self.place_coordinates()
+
+    def show_coordinates(self, point, details=(), show_pixel=True):
+        self.coordinate_point = point
+        lines = list(details)
+        if point is not None and show_pixel:
+            lines.insert(0, f"Pixel x = {point[0]}, y = {point[1]}")
+        self.coordinate_text.set("\n".join(lines))
+        self.place_coordinates()
+
+    def place_coordinates(self):
+        self.canvas.delete("coordinate-point")
+        if not self.coordinate_text.get() or self.preview_geometry is None:
+            self.coordinate_popup.place_forget()
+            return
+        width = self.canvas.winfo_width()
+        left = False
+        if self.coordinate_point is not None:
+            x, y = self.preview_geometry.canvas_point(self.coordinate_point)
+            self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5, outline=PANEL, width=4, tags="coordinate-point")
+            self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5, outline=ACCENT, width=2, tags="coordinate-point")
+            left = x > width / 2
+        self.coordinate_label.configure(wraplength=max(100, min(310, width - 44)))
+        self.coordinate_popup.place(relx=0 if left else 1, x=10 if left else -10, y=10,
+                                    anchor="nw" if left else "ne")
+
+    def hide_coordinates(self, _event=None):
+        self.coordinate_point = None
+        self.coordinate_text.set("")
+        self.coordinate_popup.place_forget()
+        self.canvas.delete("coordinate-point")
+
+    def mark_at(self, canvas_point, image_point):
+        if not self.result or not self.show_detections.get():
+            return None
+        x, y = image_point
+        markings = self.result.markings or {}
+        best, best_key = None, None
+        for mark in reversed(markings.get("marks", [])):
+            box = mark.get("bbox")
+            inside = box is not None and box[0] <= x < box[2] and box[1] <= y < box[3]
+            points = [self.preview_geometry.canvas_point(point) for point in mark.get("points", ())]
+            distance = 0 if inside else min((_segment_distance_squared(canvas_point, start, end)
+                                             for start, end in zip(points, points[1:])), default=float("inf"))
+            if distance > 6 ** 2:
+                continue
+            priority = {"observed_arrow": 2, "flow_arrow": 2, "flow_route": 1}.get(mark["kind"], 0)
+            key = (-priority, distance)
+            if best_key is None or key < best_key:
+                best, best_key = mark, key
+        return best
+
+    def inspect_drawing(self, event):
+        if self.preview_geometry is None:
+            return
+        canvas_point = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+        point = self.preview_geometry.image_point(*canvas_point)
+        if point is None:
+            self.hide_coordinates()
+            return
+        mark = self.mark_at(canvas_point, point) or {}
+        kind = mark.get("kind")
+        if kind in {"observed_arrow", "flow_route"} or (kind == "flow_arrow" and mark.get("route_id")):
+            self.show_coordinates(point, self.route_coordinates(mark))
+            return
+        component_id = mark.get("component_id")
+        if component_id:
+            record = next((item for item in self.component_marks.values() if item["id"] == component_id), None)
+            if record is not None:
+                self.show_equipment(record["label"], record["type"], point)
+                return
+        connection = mark.get("connection")
+        if connection:
+            record = next((item for item in self.connection_marks.values()
+                           if [item["source"], item["target"]] == connection), None)
+            if record is not None:
+                self.show_connection(record["source_label"], record["target_label"], point)
+                return
+        self.show_coordinates(point)
+
+    def route_coordinates(self, mark):
+        marks = (self.result.markings or {}).get("marks", [])
+        route_id = mark.get("route_id")
+        route = mark if mark["kind"] == "flow_route" else None
+        arrow = mark if mark["kind"] in {"observed_arrow", "flow_arrow"} else None
+        if route_id:
+            if route is None:
+                route = next((m for m in marks if m["kind"] == "flow_route" and m.get("route_id") == route_id), None)
+            if arrow is None:
+                arrow = next((m for m in marks if m["kind"] in {"observed_arrow", "flow_arrow"}
+                              and m.get("route_id") == route_id), None)
+        lines = []
+        if arrow is not None:
+            wing_a, tip, wing_b = arrow["points"]
+            direction = arrow.get("direction", "unknown").replace("_", " ")
+            lines.extend((f"Flow arrow · {direction}", f"Arrow tip {tip} px", f"Arrow wings {wing_a}, {wing_b} px"))
+        if route is not None:
+            points = route["points"]
+            lines.append(f"Flow route {points[0]} to {points[-1]} px")
+            labels = route.get("component_labels")
+            if labels is None:
+                labels_by_id = {record["id"]: record["label"] for record in self.component_marks.values()}
+                labels = [labels_by_id.get(component_id, component_id) for component_id in route.get("component_ids", [])]
+            if labels:
+                through = " → ".join(labels[:4])
+                if len(labels) > 4:
+                    through += f" + {len(labels) - 4} more"
+                lines.append(f"Route equipment {through}")
+        elif arrow is not None:
+            lines.append("Equipment route unresolved")
+        return lines
 
     def analyze(self):
         if self.source_path is None or self.future is not None:
@@ -334,6 +498,11 @@ class DesktopApp:
         self.overlay_image = image_info(result.overlay) if result.overlay else None
         self.result = result
         markings = result.markings or {}
+        arrows = sum(mark["kind"] in {"observed_arrow", "flow_arrow"} for mark in markings.get("marks", []))
+        routes = len(markings.get("flow_routes", []))
+        arrow_text = f"{arrows} visible arrow{'s' if arrows != 1 else ''}"
+        route_text = f"{routes} traced route{'s' if routes != 1 else ''}"
+        self.drawing_hint.set(f"{COORDINATE_HINT}\n{arrow_text}  ·  {route_text}")
         self.component_marks = {record["label"]: record for record in markings.get("components", [])}
         self.connection_marks = {
             frozenset((record["source_label"], record["target_label"])): record
@@ -378,11 +547,13 @@ class DesktopApp:
         i, j = int(row), int(column[1:]) - 2
         labels = self.result.matrix_labels
         if i == j:
+            self.hide_coordinates()
             self.matrix_detail.set(f"{labels[i]} is the same equipment in this row and column.")
         else:
             if self.result.matrix[i][j]:
                 self.show_connection(labels[i], labels[j])
             else:
+                self.hide_coordinates()
                 self.matrix_detail.set(f"{labels[i]} ↔ {labels[j]}  ·  No direct connection (0)")
 
     def flow_label(self, a, b):
@@ -392,16 +563,31 @@ class DesktopApp:
         destination = record["target_label"] if record["direction"]["to"] == record["target"] else record["source_label"]
         return "A → B" if destination == b else "B → A"
 
-    def show_connection(self, a, b):
+    def show_connection(self, a, b, point=None):
         flow = self.flow_label(a, b)
         flow_text = {"Unknown": "Flow unknown", "A → B": f"Flow {a} → {b}", "B → A": f"Flow {b} → {a}"}[flow]
-        record = self.connection_marks.get(frozenset((a, b)))
+        record = self.connection_marks.get(frozenset((a, b)), {})
+        path = record.get("path")
+        direction = record.get("direction", {})
+        tip = direction.get("arrow_tip")
         detail = f"{a} ↔ {b}  ·  Direct connection (1)  ·  {flow_text}"
-        if record and record["direction"]["arrow_tip"] is not None:
-            detail += f"  ·  Arrow tip {record['direction']['arrow_tip']} px"
-        elif record and record["path"]:
-            detail += f"  ·  Pipe {record['path'][0]} to {record['path'][-1]} px"
+        popup = [f"{a} ↔ {b}", flow_text]
+        if path:
+            popup.append(f"Pipe {path[0]} to {path[-1]} px")
+        if tip is not None:
+            tip_text = f"Arrow tip {tip} px"
+            popup.append(tip_text)
+            popup.append(f"Arrow wings {direction['arrow_wings']} px")
+            detail += f"  ·  {tip_text}"
+        elif path:
+            detail += f"  ·  {popup[2]}"
         self.matrix_detail.set(detail)
+        if point is not None:
+            self.show_coordinates(point, popup)
+        elif tip is not None or path:
+            self.show_coordinates(tip if tip is not None else path[0], popup, show_pixel=False)
+        else:
+            self.hide_coordinates()
 
     def inspect_connection(self, _event=None):
         selected = self.connections.selection()
@@ -413,13 +599,24 @@ class DesktopApp:
         if not self.result or not selected:
             return
         label, equipment_type = self.result.equipment[int(selected[0])]
+        self.show_equipment(label, equipment_type)
+
+    def show_equipment(self, label, equipment_type, point=None):
         record = self.component_marks.get(label, {})
-        detail = f"{label}  ·  {equipment_type}"
-        if record.get("bbox") is not None:
-            detail += f"  ·  Symbol {record['bbox']} px"
-        if record.get("tag_bbox") is not None:
-            detail += f"  ·  Tag {record['tag_bbox']} px"
-        self.matrix_detail.set(detail)
+        box, tag_box = record.get("bbox"), record.get("tag_bbox")
+        lines = [f"{label}  ·  {equipment_type}"]
+        if box is not None:
+            lines.append(f"Symbol {box} px")
+        if tag_box is not None:
+            lines.append(f"Tag {tag_box} px")
+        self.matrix_detail.set("  ·  ".join(lines))
+        if point is not None:
+            self.show_coordinates(point, lines)
+        elif box is not None or tag_box is not None:
+            x0, y0, x1, y1 = box if box is not None else tag_box
+            self.show_coordinates(((x0 + x1 - 1) / 2, (y0 + y1 - 1) / 2), lines, show_pixel=False)
+        else:
+            self.hide_coordinates()
 
     def save_matrix(self):
         if self.result:

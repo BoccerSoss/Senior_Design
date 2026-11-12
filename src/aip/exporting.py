@@ -20,7 +20,8 @@ def export_document(document: dict, outdir, image_path=None) -> dict:
     root = Path(outdir)
     overlay_image = None
     has_marks = (any(c["bbox"] is not None or c.get("tag_bbox") is not None for c in document["components"])
-                 or any(edge.get("path") is not None for edge in document["connections"]))
+                 or any(edge.get("path") is not None for edge in document["connections"])
+                 or bool(document.get("arrows")))
     if image_path is not None and has_marks:
         image_digest = hashlib.sha256(Path(image_path).read_bytes()).hexdigest()
         permitted_digests = {document["drawing"]["sha256"].lower()}
@@ -46,7 +47,8 @@ def export_document(document: dict, outdir, image_path=None) -> dict:
         raise ValidationError("matrix labels collide with an unresolved placeholder; rename observation IDs before export")
     edges = [{**e, "source_tag": by_id[e["source"]]["normalized_tag"],
               "target_tag": by_id[e["target"]]["normalized_tag"]} for e in document["connections"]]
-    markings = build_markings(document["drawing"], equipment, edges, labels, overlay_image)
+    markings = build_markings(document["drawing"], equipment, edges, labels, overlay_image,
+                              arrows=document.get("arrows", ()), flow_routes=document.get("flow_routes", ()))
     _write_json(root / "equipment.json", equipment)
     _write_json(root / "edges.json", edges)
     _write_json(root / "markings.json", markings)
@@ -78,6 +80,13 @@ def export_document(document: dict, outdir, image_path=None) -> dict:
                       f" | uncertainty: {edge['uncertainty'] or 'none reported'}")
     if not edges:
         review.append("No direct connections reported.")
+    if markings["arrows"]:
+        review.extend(["", "Visible arrows and candidate flow routes"])
+        by_arrow = {route["arrow_id"]: route for route in markings["flow_routes"]}
+        for arrow in markings["arrows"]:
+            route = by_arrow.get(arrow["id"])
+            via = " -> ".join(route["component_labels"]) if route else "no route through equipment recorded"
+            review.append(f"{arrow['id']} at {arrow['arrow_tip']} px points {arrow['direction']} | {via}")
     missing_boxes = [c["id"] for c in components if c["bbox"] is None]
     review.extend(["", "Missing box observations (not drawn): " + (", ".join(missing_boxes) or "none"),
                    "markings.json records observed coordinates and the exact positions drawn on the overlay.",
