@@ -10,15 +10,21 @@ import asyncio
 import json
 import math
 import re
+import string
 import sys
 import time
 import tempfile
+from collections import Counter
 from contextlib import nullcontext
+from functools import lru_cache
 from importlib.metadata import version
 from pathlib import Path
 from threading import local
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
+
+from .core import normalize_tag
+from .glyph_ocr import rank_tag_glyphs
 
 
 _apartment = local()
@@ -175,6 +181,233 @@ def _separator_suffix_box(image, box):
     # Whitespace starts just after the detected separator; include vertical and
     # right margin without synthesizing any glyphs or forcing a digit alphabet.
     return [left+separator_end+1, max(0,top-12), min(image.width,right+12), min(image.height,bottom+12)]
+
+
+_NUMBERED_TAG = re.compile(r"[A-Za-z][A-Za-z0-9]{0,5}[-/](?=[A-Za-z0-9]*\d)[A-Za-z0-9]{1,10}(?:/[A-Za-z0-9]{1,4})?")
+_EQUIPMENT_NAME = re.compile(
+    r"(?:(?:[A-Z0-9']{2,10}) )?(?:Pump|Valve|Tank|Vessel|Compressor|Turbine|Exchanger|Strainer) [A-Z0-9]{1,4}(?:/[A-Z0-9]{1,4})?",
+    re.IGNORECASE,
+)
+_EQUIPMENT_DESCRIPTION = re.compile(
+    r"(?:[A-Za-z]+ ){1,4}(?:Tank|Vessel|Compressor|Turbine|Exchanger|Strainer)", re.IGNORECASE,
+)
+_DASHES = str.maketrans({char: "-" for char in "‐‑‒–—−﹘﹣－"})
+
+
+def _scanned_tag(text):
+    compact = re.sub(r"\s+", "", text.translate(_DASHES))
+    if _NUMBERED_TAG.fullmatch(compact):
+        return compact
+    spaced = " ".join(text.split())
+    if _EQUIPMENT_NAME.fullmatch(spaced) or _EQUIPMENT_DESCRIPTION.fullmatch(spaced):
+        return spaced
+    return None
+
+
+def _ink_columns(image):
+    """Return contiguous vertical ink bands and their actual bounds."""
+    ink = image.point(lambda value: 255 if value < 160 else 0)
+    occupied = ink.resize((ink.width, 1), Image.Resampling.BOX)
+    runs = re.finditer(rb"[^\x00]+", occupied.tobytes())
+    bands = []
+    for run in runs:
+        left, right = run.span()
+        glyph = ink.crop((left, 0, right, ink.height))
+        bounds = glyph.getbbox()
+        if bounds is not None:
+            bands.append((left, right, glyph.crop(bounds)))
+    return bands
+
+
+def _glyph_signature(glyph):
+    return glyph.width / glyph.height, glyph.resize((16, 24), Image.Resampling.LANCZOS).tobytes()
+
+
+@lru_cache(maxsize=1)
+def _letter_shapes():
+    """Build single-character comparison shapes independent of the input."""
+    font = ImageFont.load_default(size=36)
+    templates = []
+    for char in string.ascii_uppercase:
+        image = Image.new("L", (64, 64))
+        ImageDraw.Draw(image).text((4, 4), char, font=font, fill=255)
+        templates.append((char, *_glyph_signature(image.crop(image.getbbox()))))
+    return templates
+
+
+def _read_letter(glyph):
+    aspect, pixels = _glyph_signature(glyph)
+    candidates = sorted(
+        (sum(abs(a - b) for a, b in zip(pixels, template)) / (255 * len(pixels)) + 0.22 * abs(aspect - ratio), char)
+        for char, ratio, template in _letter_shapes()
+    )
+    first, second = candidates[:2]
+    return first[1] if first[0] <= 0.36 and second[0] - first[0] >= 0.045 else None
+
+
+def _prefix_and_suffix(crop):
+    # A short centered horizontal dash can split a tag into independently
+    # readable parts. Require a clear separator and individually separated
+    # prefix letters before using a per-glyph comparison.
+    ink_bounds = crop.point(lambda value: 255 if value < 160 else 0).getbbox()
+    if ink_bounds is None:
+        return None, None
+    crop = crop.crop(ink_bounds)
+    bands = _ink_columns(crop)
+    for index, (left, right, glyph) in enumerate(bands[1:6], 1):
+        if index + 1 == len(bands) or glyph.width < 1.8 * glyph.height or glyph.height > 0.36 * crop.height:
+            continue
+        prefix = [_read_letter(item[2]) for item in bands[:index] if item[2].height >= 0.55 * crop.height]
+        if len(prefix) == index and all(prefix):
+            return "".join(prefix), crop.crop((right, 0, crop.width, crop.height))
+    return None, None
+
+
+def _text_pass(crop, scale, padding, name, temp, timeout):
+    view = ImageOps.expand(crop, padding, fill=255)
+    view = view.resize((round(view.width * scale[0]), round(view.height * scale[1])), Image.Resampling.LANCZOS)
+    path = Path(temp) / (name + ".png")
+    view.save(path)
+    reading = recognize_image(path, timeout, working_directory=temp)
+    return {"text": " ".join(word["text"] for word in reading["words"]), "scale": scale, "padding": padding}
+
+
+def _choose_box_text(passes, prefix):
+    if prefix:
+        # Compare independent suffix crops with full-box text. Repeated ink
+        # evidence can supply a digit even when the recognizer merges glyphs
+        # on the other side of the dash. Preserve the original readings.
+        evidence = []
+        for entry in passes:
+            compact = re.sub(r"[^A-Za-z0-9/\-]", "", entry["text"].translate(_DASHES)).upper()
+            suffix = re.split(r"[-/]", compact)[-1]
+            if re.fullmatch(r"\d{2,7}[A-Z]?", suffix):
+                evidence.append(suffix)
+        if evidence:
+            counts = Counter(evidence)
+            leading, votes = counts.most_common(1)[0]
+            if votes >= 2 and list(counts.values()).count(votes) == 1:
+                return f"{prefix}-{leading}", "glyph comparison for prefix and repeated OCR for numeric suffix"
+    values = [_scanned_tag(entry["text"]) for entry in passes if not entry.get("suffix")]
+    labels = [value for value in values if value]
+    if labels:
+        counts = Counter(normalize_tag(label) for label in labels)
+        leading, votes = counts.most_common(1)[0]
+        if votes >= 2 and list(counts.values()).count(votes) == 1:
+            return next(label for label in labels if normalize_tag(label) == leading), "repeated OCR of the complete label crop"
+    return None, None
+
+
+def _observed_suffixes(passes):
+    texts = [re.sub(r"\s+", "", entry["text"].translate(_DASHES)).upper() for entry in passes]
+    suffixes = [text.split("-", 1)[1] for text in texts if "-" in text]
+    return {suffix for suffix, count in Counter(suffixes).items()
+            if count >= 2 and re.fullmatch(r"\d{2,7}[A-Z]?(?:/[A-Z])?", suffix)}
+
+
+def _page_prefix(results):
+    """Find a prefix repeated in several independently read labels."""
+    prefixes = []
+    for record in results:
+        observed = record["observed_tag"]
+        if not observed or not _NUMBERED_TAG.fullmatch(observed):
+            continue
+        prefix = observed.upper().partition("-")[0]
+        if prefix.isalpha() and len(prefix) >= 2:
+            prefixes.append(prefix)
+    if not prefixes:
+        return None
+    prefix, count = Counter(prefixes).most_common(1)[0]
+    return prefix if count >= 3 and count >= 0.75 * len(prefixes) else None
+
+
+def _check_repeated_prefix(results, crops):
+    prefix = _page_prefix(results)
+    if not prefix:
+        return
+    for record, crop in zip(results, crops):
+        alternatives = record["glyph_alternatives"]
+        if not alternatives or crop is None:
+            continue
+        suffixes = _observed_suffixes(record["crop_passes"])
+        checked = rank_tag_glyphs(crop, suffixes, prefix=prefix)
+        record["repeated_prefix_alternatives"] = checked
+        if not checked or checked[0]["mismatch"] - alternatives[0]["mismatch"] > 0.035:
+            continue
+        best = checked[0]
+        gap = checked[1]["mismatch"] - best["mismatch"] if len(checked) > 1 else float("inf")
+        if best["mismatch"] <= 0.29 and gap >= 0.002:
+            record.update(observed_tag=best["text"],
+                          ocr_selection="segmented glyph comparison with prefix read elsewhere on the same drawing",
+                          uncertainty=None)
+        if record["observed_tag"] is not None and gap >= 0.002:
+            continue
+        variants = {"thin": crop.filter(ImageFilter.MaxFilter(3)),
+                    "wide": crop.resize((round(crop.width * 1.15), crop.height), Image.Resampling.LANCZOS)}
+        readings = {name: rank_tag_glyphs(view, suffixes, prefix=prefix) for name, view in variants.items()}
+        record["glyph_variant_alternatives"] = readings
+        close = {reading["text"] for reading in checked if reading["mismatch"] <= best["mismatch"] + 0.003}
+        supported = set()
+        for reading in readings.values():
+            if not reading or reading[0]["text"] not in close or reading[0]["mismatch"] > 0.28:
+                continue
+            if len(reading) == 1 or reading[1]["mismatch"] - reading[0]["mismatch"] >= 0.003:
+                supported.add(reading[0]["text"])
+        if not supported and readings["thin"] and readings["thin"][0]["text"] == best["text"]:
+            thin = readings["thin"]
+            if thin[0]["mismatch"] <= 0.28 and (len(thin) == 1 or thin[1]["mismatch"] - thin[0]["mismatch"] >= 0.002):
+                supported.add(best["text"])
+        if len(supported) == 1:
+            record.update(observed_tag=supported.pop(), ocr_selection="glyph reading corroborated by an alternate pixel preparation",
+                          uncertainty=None)
+
+
+def recognize_label_boxes(image_path, labels, *, scratch_dir=None, timeout=90):
+    """Read text from supplied image-space regions without receiving expected values."""
+    context = tempfile.TemporaryDirectory(prefix="aip-labels-") if scratch_dir is None else nullcontext(str(scratch_dir))
+    with context as temp, Image.open(image_path) as source:
+        image = source.convert("L")
+        Path(temp).mkdir(parents=True, exist_ok=True)
+        results = []
+        crops = []
+        for index, label in enumerate(labels):
+            box = label.get("tag_bbox")
+            passes = []
+            prefix = None
+            crop = None
+            if box is not None:
+                left, top, right, bottom = box
+                if not (0 <= left < right <= image.width and 0 <= top < bottom <= image.height):
+                    raise OCRUnavailable("Label crop is outside the image.")
+                crop = image.crop(tuple(map(round, box)))
+                expanded = image.crop((max(0, math.floor(left) - 2), max(0, math.floor(top) - 2),
+                                       min(image.width, math.ceil(right) + 2), min(image.height, math.ceil(bottom) + 2)))
+                variants = ((crop, (1, 1), 8), (crop, (2, 2), 8), (expanded, (1, 1.5), 8),
+                            (expanded, (2, 2), 8), (expanded, (3, 3), 8))
+                for trial, (view, scale, pad) in enumerate(variants):
+                    passes.append(_text_pass(view, scale, pad, f"box-{index}-{trial}", temp, timeout))
+                prefix, suffix = _prefix_and_suffix(crop)
+                if prefix:
+                    for trial, scale in enumerate((1, 2, 3)):
+                        result = _text_pass(suffix, (scale, scale), 12, f"box-{index}-suffix-{trial}", temp, timeout)
+                        passes.append({**result, "suffix": True})
+            observed, selection = _choose_box_text(passes, prefix)
+            rankings = []
+            if crop is not None and (not observed or (_NUMBERED_TAG.fullmatch(observed) and not prefix)):
+                rankings = rank_tag_glyphs(crop, _observed_suffixes(passes))
+                if rankings:
+                    best = rankings[0]
+                    gap = rankings[1]["mismatch"] - best["mismatch"] if len(rankings) > 1 else float("inf")
+                    if best["mismatch"] <= 0.29 and gap >= 0.002:
+                        observed = best["text"]
+                        selection = "segmented glyph comparison on the scanned label"
+            results.append({"component_id": label["id"], "observed_tag": observed,
+                            "source_word_bbox": box, "native_text": passes[0]["text"] if passes else None,
+                            "ocr_selection": selection, "crop_passes": passes, "glyph_alternatives": rankings,
+                            "uncertainty": None if observed else "No consistent label reading from the supplied image region."})
+            crops.append(crop)
+        _check_repeated_prefix(results, crops)
+    return results
 
 
 def recognize_tag_crops(image_path, initial=None, timeout=90, max_candidates=16, scratch_dir=None):

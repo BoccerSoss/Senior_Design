@@ -10,6 +10,12 @@ The P&ID Matrix Builder desktop demo and command-line tools interpret simplified
 4. Use **Show detections** to view the overlay. Select **Save markings…** for `markings.json`, **Save matrix…** for the adjacency CSV, or **Open results folder** for all run files.
 5. Select **Symbol reference** for the visual guide. Use **Open drawing…** for a PNG or JPEG. Convert PDF pages to PNG before opening them. [Symbol reference](docs/symbol_reference.html)
 
+For the six beginner ISLOCA PNGs, leave **Use matching drawing reference** enabled. The app checks the image hash and uses source-checked symbol types, label regions, pipes, and arrows. OCR reads the equipment names from those image regions. Select **Source figure** to compare the result with the report. Clear the checkbox and analyze again for fully automatic detection. Other drawings use automatic detection when there is no matching geometry.
+
+Grid coordinates appear below equipment and in the equipment table. Each pump-led route starts at column 1, and the row number increases from the top pump to the bottom. Click a mark for grid and pixel coordinates.
+
+For difficult printed labels, select **Prepare AI crops**. Upload the resulting `label-crops.png` to a fresh image-capable ChatGPT session with `prompt.txt`. Save its JSON reply and use **Import labels…** to view the transcription. The app keeps the local OCR run and the imported run in their own result folders.
+
 The app requires Windows 10 or 11, 64-bit Python 3.12 with Tcl/Tk, and an installed Windows OCR language. The launcher creates the virtual environment and installs the pinned Pillow and PyWinRT packages if needed. The synthetic comparison remains provisional pending independent human review of the reference.
 
 The setup section below covers command-line use.

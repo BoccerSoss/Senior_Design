@@ -7,7 +7,9 @@ from pathlib import Path
 from tempfile import mkdtemp
 
 from .cli import evaluate_files, process_run
+from .drawing_reference import export_reference, matching_reference
 from .io import ROOT, load_json, prepare_input, write_json
+from .label_review import make_label_packet
 
 
 @dataclass
@@ -23,6 +25,10 @@ class DesktopResult:
     matrix_file: Path
     markings_file: Path | None = None
     markings: dict | None = None
+    reference_citation: str | None = None
+    reference_url: str | None = None
+    vision_transcription: bool = False
+    unread_labels: int = 0
 
 
 class AnalysisError(RuntimeError):
@@ -113,7 +119,8 @@ def _failure_diagnostic(directory: Path, exit_code: int) -> str:
     return diagnostic
 
 
-def analyze_drawing(image_path: Path, output_root: Path = ROOT / "runs" / "desktop") -> DesktopResult:
+def analyze_drawing(image_path: Path, output_root: Path = ROOT / "runs" / "desktop",
+                    *, use_reference: bool = True, label_response: Path | None = None) -> DesktopResult:
     """Prepare, extract and read one drawing in a new preserved session directory."""
     directory = None
     try:
@@ -123,9 +130,17 @@ def analyze_drawing(image_path: Path, output_root: Path = ROOT / "runs" / "deskt
         directory = session
         packet = session / "packet"
         metadata = prepare_input(image_path, packet)
-        directory, exit_code = process_run(packet, session / "runs", method="classical")
-        if exit_code != 0:
-            raise AnalysisError(_failure_diagnostic(directory, exit_code), directory)
+        match = matching_reference(metadata["drawing"]) if use_reference else None
+        citation = url = None
+        if match is not None:
+            directory = export_reference(packet, session / "runs", match, label_response)
+            citation, url = match[1]["citation"], match[1]["source_url"]
+        else:
+            if label_response is not None:
+                raise ValueError("A matching source geometry file is required to import label crops.")
+            directory, exit_code = process_run(packet, session / "runs", method="classical")
+            if exit_code != 0:
+                raise AnalysisError(_failure_diagnostic(directory, exit_code), directory)
 
         image = packet / "image.png"
         exports = directory / "exports"
@@ -133,15 +148,18 @@ def analyze_drawing(image_path: Path, output_root: Path = ROOT / "runs" / "deskt
         overlay = exports / "overlay.png"
         markings_file = exports / "markings.json"
         markings = load_json(markings_file) if markings_file.is_file() else None
+        unread = sum(item.get("tag_bbox") is not None and item["label"].startswith("unresolved:")
+                     for item in (markings or {}).get("components", []))
         evaluation = None
         reference = ROOT / "data" / "reference" / "four_component.reference.json"
-        if reference.is_file():
+        if match is None and reference.is_file():
             reference_hash = load_json(reference)["image"]["sha256"]
             if metadata["drawing"]["source_sha256"] == reference_hash:
                 evaluation = evaluate_files(directory / "prediction.json", reference, directory / "evaluation.json")
         return DesktopResult(directory, image, overlay if overlay.is_file() else None,
                              equipment, connections, labels, matrix, evaluation, matrix_file,
-                             markings_file if markings is not None else None, markings)
+                             markings_file if markings is not None else None, markings, citation, url,
+                             label_response is not None, unread)
     except (OSError, ValueError, TypeError, KeyError, csv.Error) as exc:
         diagnostic = str(exc)
         if directory is not None:
@@ -150,3 +168,10 @@ def analyze_drawing(image_path: Path, output_root: Path = ROOT / "runs" / "deskt
             except OSError:
                 pass
         raise AnalysisError(diagnostic, directory) from exc
+
+
+def prepare_label_review(result):
+    """Build a packet for the same source-checked image already analyzed."""
+    geometry = load_json(result.directory / "source_geometry.json")
+    target = Path(mkdtemp(prefix="label-review-", dir=result.directory)) / "upload"
+    return make_label_packet(result.image, geometry, target)

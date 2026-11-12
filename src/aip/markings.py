@@ -22,12 +22,16 @@ def _raster_points(points, width, height):
     return [[min(width - 1, round(x)), min(height - 1, round(y))] for x, y in points]
 
 
-def _label_mark(component_id, text, box, draw, font, width, height):
+def _label_mark(component_id, text, box, draw, font, width, height, *, below=False, clear_box=None):
     left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
     text_width, text_height = right - left, bottom - top
-    x = min(box[0], max(0, width - text_width))
-    y = min(max(0, box[1] - 24), max(0, height - text_height))
-    return {"kind": "label", "component_id": component_id, "text": text,
+    target_x = (box[0] + box[2] - text_width) // 2 if below else box[0]
+    x = max(0, min(target_x, width - text_width))
+    target_y = box[3] + 4 if below else box[1] - 24
+    y = min(max(0, target_y), max(0, height - text_height))
+    if clear_box and x < clear_box[2] and clear_box[0] < x + text_width and y < clear_box[3] and clear_box[1] < y + text_height:
+        y = max(0, clear_box[1] - text_height - 3)
+    return {"kind": "equipment_grid_label" if below else "label", "component_id": component_id, "text": text,
             "anchor": [x - left, y - top],
             "bbox": [x, y, min(width, x + text_width), min(height, y + text_height)],
             "font_size": LABEL_SIZE, "color": SYMBOL_COLOR, "background": "white"}
@@ -40,7 +44,7 @@ def _draw_mark(draw, mark, font):
         return
     x0, y0, x1, y1 = mark["bbox"]
     inclusive = (x0, y0, x1 - 1, y1 - 1)
-    if kind == "label":
+    if kind in {"label", "equipment_grid_label"}:
         draw.rectangle(inclusive, fill=mark["background"])
         draw.text(tuple(mark["anchor"]), mark["text"], font=font, fill=mark["color"])
     else:
@@ -146,7 +150,14 @@ def build_markings(drawing, equipment, edges, labels, image=None, *, arrows=(), 
             marks.append({"kind": "symbol_outline", "component_id": component_id, "bbox": box,
                           "color": SYMBOL_COLOR, "stroke_width": 3})
             marks.append(_label_mark(component_id, f"{labels[component_id]} ({item['type']})",
-                                     box, draw, font, width, height))
+                                     box, draw, font, width, height,
+                                     clear_box=_raster_box(tag_bbox) if tag_bbox is not None else None))
+            if item.get("grid"):
+                column, row = item["grid"]
+                bottom = max(box[3], ceil(tag_bbox[3]) if tag_bbox else box[3])
+                anchor = [box[0], box[1], box[2], bottom]
+                marks.append(_label_mark(component_id, f"({column},{row})", anchor,
+                                         draw, font, width, height, below=True))
     marks.extend(arrow_marks)
     for mark in marks:
         _draw_mark(draw, mark, font)

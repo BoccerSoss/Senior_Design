@@ -1,0 +1,2959 @@
+{
+  "citation": "NUREG/CR-5745 Figure A.1 · Printed A-5 · PDF 65",
+  "source_url": "https://www.osti.gov/servlets/purl/10145659#page=65",
+  "image": {
+    "sha256": "3e37667dac87ad55025f4a8a8d66e1103662afc291354db060d8119853e1dd67",
+    "source_sha256": "b58dc3fcbf8acfb06bc63b6c2b23d3c3f6b193a733898fa2691ca815026e0f90",
+    "width": 2791,
+    "height": 3600
+  },
+  "observations": {
+    "image": {
+      "width": 2791,
+      "height": 3600
+    },
+    "components": [
+      {
+        "type": "pump",
+        "bbox": [
+          615,
+          1422,
+          713,
+          1507
+        ],
+        "tag_bbox": [
+          550,
+          1353,
+          805,
+          1393
+        ],
+        "id": "symbol-01",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          919,
+          1404,
+          1028,
+          1472
+        ],
+        "tag_bbox": [
+          905,
+          1514,
+          1051,
+          1546
+        ],
+        "id": "symbol-02",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1137,
+          1411,
+          1252,
+          1473
+        ],
+        "tag_bbox": [
+          1127,
+          1515,
+          1274,
+          1546
+        ],
+        "id": "symbol-03",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1350,
+          1382,
+          1466,
+          1474
+        ],
+        "tag_bbox": [
+          1350,
+          1512,
+          1495,
+          1543
+        ],
+        "id": "symbol-04",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1671,
+          1217,
+          1784,
+          1308
+        ],
+        "tag_bbox": [
+          1649,
+          1156,
+          1793,
+          1188
+        ],
+        "id": "symbol-05",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1877,
+          1240,
+          1984,
+          1308
+        ],
+        "tag_bbox": [
+          1863,
+          1156,
+          2009,
+          1188
+        ],
+        "id": "symbol-06",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1671,
+          1546,
+          1784,
+          1636
+        ],
+        "tag_bbox": [
+          1646,
+          1489,
+          1791,
+          1521
+        ],
+        "id": "symbol-07",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1877,
+          1567,
+          1984,
+          1636
+        ],
+        "tag_bbox": [
+          1861,
+          1490,
+          2006,
+          1521
+        ],
+        "id": "symbol-08",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "pump",
+        "bbox": [
+          609,
+          2070,
+          708,
+          2155
+        ],
+        "tag_bbox": [
+          548,
+          2009,
+          801,
+          2048
+        ],
+        "id": "symbol-09",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          917,
+          2053,
+          1028,
+          2121
+        ],
+        "tag_bbox": [
+          900,
+          2001,
+          1048,
+          2033
+        ],
+        "id": "symbol-10",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1137,
+          2060,
+          1252,
+          2122
+        ],
+        "tag_bbox": [
+          1112,
+          1995,
+          1258,
+          2027
+        ],
+        "id": "symbol-11",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1350,
+          2033,
+          1466,
+          2122
+        ],
+        "tag_bbox": [
+          1349,
+          1995,
+          1494,
+          2026
+        ],
+        "id": "symbol-12",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1670,
+          1870,
+          1784,
+          1960
+        ],
+        "tag_bbox": [
+          1660,
+          1804,
+          1804,
+          1837
+        ],
+        "id": "symbol-13",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1877,
+          1893,
+          1984,
+          1962
+        ],
+        "tag_bbox": [
+          1874,
+          1799,
+          2021,
+          1830
+        ],
+        "id": "symbol-14",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1671,
+          2196,
+          1784,
+          2286
+        ],
+        "tag_bbox": [
+          1660,
+          2129,
+          1806,
+          2162
+        ],
+        "id": "symbol-15",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1877,
+          2218,
+          1984,
+          2287
+        ],
+        "tag_bbox": [
+          1875,
+          2130,
+          2022,
+          2161
+        ],
+        "id": "symbol-16",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          2168,
+          1122,
+          2234,
+          1233
+        ],
+        "tag_bbox": [
+          2260,
+          1157,
+          2413,
+          1188
+        ],
+        "id": "symbol-17",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          2169,
+          1448,
+          2235,
+          1559
+        ],
+        "tag_bbox": [
+          2261,
+          1484,
+          2414,
+          1516
+        ],
+        "id": "symbol-18",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          2168,
+          1773,
+          2235,
+          1885
+        ],
+        "tag_bbox": [
+          2260,
+          1807,
+          2413,
+          1840
+        ],
+        "id": "symbol-19",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          2168,
+          2098,
+          2235,
+          2210
+        ],
+        "tag_bbox": [
+          2261,
+          2132,
+          2414,
+          2164
+        ],
+        "id": "symbol-20",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      }
+    ],
+    "connections": [
+      {
+        "source": "symbol-01",
+        "target": "symbol-02",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            707,
+            1441
+          ],
+          [
+            924,
+            1441
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-02",
+        "target": "symbol-03",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1024,
+            1441
+          ],
+          [
+            1139,
+            1441
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-03",
+        "target": "symbol-04",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1248,
+            1441
+          ],
+          [
+            1352,
+            1441
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-09",
+        "target": "symbol-10",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            702,
+            2090
+          ],
+          [
+            924,
+            2090
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-10",
+        "target": "symbol-11",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1024,
+            2090
+          ],
+          [
+            1139,
+            2090
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-11",
+        "target": "symbol-12",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1248,
+            2090
+          ],
+          [
+            1352,
+            2090
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-04",
+        "target": "symbol-05",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1460,
+            1441
+          ],
+          [
+            1566,
+            1441
+          ],
+          [
+            1566,
+            1278
+          ],
+          [
+            1672,
+            1278
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-05",
+        "target": "symbol-06",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1782,
+            1278
+          ],
+          [
+            1885,
+            1278
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-06",
+        "target": "symbol-17",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1981,
+            1278
+          ],
+          [
+            2201,
+            1277
+          ],
+          [
+            2204,
+            1278
+          ],
+          [
+            2204,
+            1223
+          ]
+        ],
+        "direction": {
+          "status": "source_to_target",
+          "arrow_tip": [
+            2201,
+            1277
+          ],
+          "arrow_wings": [
+            [
+              2162,
+              1268
+            ],
+            [
+              2162,
+              1287
+            ]
+          ]
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-04",
+        "target": "symbol-07",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1460,
+            1441
+          ],
+          [
+            1566,
+            1441
+          ],
+          [
+            1566,
+            1604
+          ],
+          [
+            1672,
+            1604
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-07",
+        "target": "symbol-08",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1782,
+            1604
+          ],
+          [
+            1885,
+            1604
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-08",
+        "target": "symbol-18",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1981,
+            1604
+          ],
+          [
+            2201,
+            1603
+          ],
+          [
+            2204,
+            1604
+          ],
+          [
+            2204,
+            1550
+          ]
+        ],
+        "direction": {
+          "status": "source_to_target",
+          "arrow_tip": [
+            2201,
+            1603
+          ],
+          "arrow_wings": [
+            [
+              2167,
+              1594
+            ],
+            [
+              2167,
+              1613
+            ]
+          ]
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-12",
+        "target": "symbol-13",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1460,
+            2090
+          ],
+          [
+            1566,
+            2090
+          ],
+          [
+            1566,
+            1929
+          ],
+          [
+            1672,
+            1929
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-13",
+        "target": "symbol-14",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1782,
+            1929
+          ],
+          [
+            1885,
+            1929
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-14",
+        "target": "symbol-19",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1981,
+            1929
+          ],
+          [
+            2201,
+            1930
+          ],
+          [
+            2204,
+            1929
+          ],
+          [
+            2204,
+            1875
+          ]
+        ],
+        "direction": {
+          "status": "source_to_target",
+          "arrow_tip": [
+            2201,
+            1930
+          ],
+          "arrow_wings": [
+            [
+              2167,
+              1920
+            ],
+            [
+              2167,
+              1940
+            ]
+          ]
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-12",
+        "target": "symbol-15",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1460,
+            2090
+          ],
+          [
+            1566,
+            2090
+          ],
+          [
+            1566,
+            2251
+          ],
+          [
+            1672,
+            2251
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-15",
+        "target": "symbol-16",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1782,
+            2251
+          ],
+          [
+            1885,
+            2251
+          ]
+        ],
+        "direction": {
+          "status": "unknown",
+          "arrow_tip": null,
+          "arrow_wings": null
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-16",
+        "target": "symbol-20",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1981,
+            2251
+          ],
+          [
+            2202,
+            2251
+          ],
+          [
+            2204,
+            2251
+          ],
+          [
+            2204,
+            2200
+          ]
+        ],
+        "direction": {
+          "status": "source_to_target",
+          "arrow_tip": [
+            2202,
+            2251
+          ],
+          "arrow_wings": [
+            [
+              2167,
+              2242
+            ],
+            [
+              2167,
+              2261
+            ]
+          ]
+        },
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      }
+    ],
+    "arrows": [
+      {
+        "id": "arrow-001",
+        "arrow_tip": [
+          2204,
+          1026
+        ],
+        "arrow_wings": [
+          [
+            2195,
+            1067
+          ],
+          [
+            2214,
+            1067
+          ]
+        ],
+        "direction": "up"
+      },
+      {
+        "id": "arrow-002",
+        "arrow_tip": [
+          2201,
+          1277
+        ],
+        "arrow_wings": [
+          [
+            2162,
+            1268
+          ],
+          [
+            2162,
+            1287
+          ]
+        ],
+        "direction": "right"
+      },
+      {
+        "id": "arrow-003",
+        "arrow_tip": [
+          2206,
+          1306
+        ],
+        "arrow_wings": [
+          [
+            2239,
+            1308
+          ],
+          [
+            2239,
+            1326
+          ]
+        ],
+        "direction": "up-left"
+      },
+      {
+        "id": "arrow-004",
+        "arrow_tip": [
+          2205,
+          1350
+        ],
+        "arrow_wings": [
+          [
+            2196,
+            1390
+          ],
+          [
+            2215,
+            1390
+          ]
+        ],
+        "direction": "up"
+      },
+      {
+        "id": "arrow-005",
+        "arrow_tip": [
+          1564,
+          1441
+        ],
+        "arrow_wings": [
+          [
+            1529,
+            1432
+          ],
+          [
+            1529,
+            1451
+          ]
+        ],
+        "direction": "right"
+      },
+      {
+        "id": "arrow-006",
+        "arrow_tip": [
+          2201,
+          1603
+        ],
+        "arrow_wings": [
+          [
+            2167,
+            1594
+          ],
+          [
+            2167,
+            1613
+          ]
+        ],
+        "direction": "right"
+      },
+      {
+        "id": "arrow-007",
+        "arrow_tip": [
+          2206,
+          1632
+        ],
+        "arrow_wings": [
+          [
+            2239,
+            1634
+          ],
+          [
+            2239,
+            1652
+          ]
+        ],
+        "direction": "up-left"
+      },
+      {
+        "id": "arrow-008",
+        "arrow_tip": [
+          2205,
+          1674
+        ],
+        "arrow_wings": [
+          [
+            2196,
+            1714
+          ],
+          [
+            2215,
+            1714
+          ]
+        ],
+        "direction": "up"
+      },
+      {
+        "id": "arrow-009",
+        "arrow_tip": [
+          2201,
+          1930
+        ],
+        "arrow_wings": [
+          [
+            2167,
+            1920
+          ],
+          [
+            2167,
+            1940
+          ]
+        ],
+        "direction": "right"
+      },
+      {
+        "id": "arrow-010",
+        "arrow_tip": [
+          2205,
+          1956
+        ],
+        "arrow_wings": [
+          [
+            2238,
+            1958
+          ],
+          [
+            2238,
+            1976
+          ]
+        ],
+        "direction": "up-left"
+      },
+      {
+        "id": "arrow-011",
+        "arrow_tip": [
+          2205,
+          1999
+        ],
+        "arrow_wings": [
+          [
+            2195,
+            2037
+          ],
+          [
+            2215,
+            2037
+          ]
+        ],
+        "direction": "up"
+      },
+      {
+        "id": "arrow-012",
+        "arrow_tip": [
+          1564,
+          2090
+        ],
+        "arrow_wings": [
+          [
+            1528,
+            2081
+          ],
+          [
+            1528,
+            2100
+          ]
+        ],
+        "direction": "right"
+      },
+      {
+        "id": "arrow-013",
+        "arrow_tip": [
+          2202,
+          2251
+        ],
+        "arrow_wings": [
+          [
+            2167,
+            2242
+          ],
+          [
+            2167,
+            2261
+          ]
+        ],
+        "direction": "right"
+      },
+      {
+        "id": "arrow-014",
+        "arrow_tip": [
+          2206,
+          2282
+        ],
+        "arrow_wings": [
+          [
+            2239,
+            2284
+          ],
+          [
+            2239,
+            2302
+          ]
+        ],
+        "direction": "up-left"
+      }
+    ],
+    "flow_routes": [
+      {
+        "arrow_id": "arrow-005",
+        "path": [
+          [
+            707,
+            1441
+          ],
+          [
+            920,
+            1441
+          ],
+          [
+            921,
+            1440
+          ],
+          [
+            923,
+            1440
+          ],
+          [
+            924,
+            1439
+          ],
+          [
+            924,
+            1428
+          ],
+          [
+            931,
+            1421
+          ],
+          [
+            934,
+            1421
+          ],
+          [
+            936,
+            1423
+          ],
+          [
+            937,
+            1423
+          ],
+          [
+            938,
+            1424
+          ],
+          [
+            939,
+            1424
+          ],
+          [
+            940,
+            1425
+          ],
+          [
+            941,
+            1425
+          ],
+          [
+            942,
+            1426
+          ],
+          [
+            943,
+            1426
+          ],
+          [
+            945,
+            1428
+          ],
+          [
+            946,
+            1428
+          ],
+          [
+            947,
+            1429
+          ],
+          [
+            949,
+            1429
+          ],
+          [
+            953,
+            1433
+          ],
+          [
+            954,
+            1433
+          ],
+          [
+            955,
+            1434
+          ],
+          [
+            956,
+            1434
+          ],
+          [
+            957,
+            1435
+          ],
+          [
+            959,
+            1435
+          ],
+          [
+            960,
+            1436
+          ],
+          [
+            961,
+            1436
+          ],
+          [
+            963,
+            1438
+          ],
+          [
+            964,
+            1438
+          ],
+          [
+            965,
+            1439
+          ],
+          [
+            966,
+            1439
+          ],
+          [
+            967,
+            1440
+          ],
+          [
+            968,
+            1440
+          ],
+          [
+            971,
+            1443
+          ],
+          [
+            973,
+            1443
+          ],
+          [
+            974,
+            1444
+          ],
+          [
+            975,
+            1444
+          ],
+          [
+            977,
+            1446
+          ],
+          [
+            978,
+            1446
+          ],
+          [
+            979,
+            1447
+          ],
+          [
+            981,
+            1447
+          ],
+          [
+            983,
+            1449
+          ],
+          [
+            984,
+            1449
+          ],
+          [
+            985,
+            1450
+          ],
+          [
+            986,
+            1450
+          ],
+          [
+            987,
+            1451
+          ],
+          [
+            988,
+            1451
+          ],
+          [
+            989,
+            1452
+          ],
+          [
+            990,
+            1452
+          ],
+          [
+            992,
+            1454
+          ],
+          [
+            993,
+            1454
+          ],
+          [
+            995,
+            1456
+          ],
+          [
+            996,
+            1456
+          ],
+          [
+            998,
+            1458
+          ],
+          [
+            999,
+            1458
+          ],
+          [
+            1000,
+            1459
+          ],
+          [
+            1001,
+            1459
+          ],
+          [
+            1002,
+            1460
+          ],
+          [
+            1004,
+            1460
+          ],
+          [
+            1006,
+            1462
+          ],
+          [
+            1007,
+            1462
+          ],
+          [
+            1009,
+            1464
+          ],
+          [
+            1020,
+            1464
+          ],
+          [
+            1021,
+            1463
+          ],
+          [
+            1021,
+            1447
+          ],
+          [
+            1027,
+            1441
+          ],
+          [
+            1136,
+            1441
+          ],
+          [
+            1138,
+            1439
+          ],
+          [
+            1138,
+            1426
+          ],
+          [
+            1143,
+            1421
+          ],
+          [
+            1145,
+            1421
+          ],
+          [
+            1146,
+            1422
+          ],
+          [
+            1147,
+            1422
+          ],
+          [
+            1148,
+            1423
+          ],
+          [
+            1149,
+            1423
+          ],
+          [
+            1150,
+            1424
+          ],
+          [
+            1151,
+            1424
+          ],
+          [
+            1152,
+            1425
+          ],
+          [
+            1154,
+            1425
+          ],
+          [
+            1155,
+            1426
+          ],
+          [
+            1156,
+            1426
+          ],
+          [
+            1157,
+            1427
+          ],
+          [
+            1159,
+            1427
+          ],
+          [
+            1161,
+            1429
+          ],
+          [
+            1162,
+            1429
+          ],
+          [
+            1163,
+            1430
+          ],
+          [
+            1164,
+            1430
+          ],
+          [
+            1166,
+            1432
+          ],
+          [
+            1167,
+            1432
+          ],
+          [
+            1168,
+            1433
+          ],
+          [
+            1169,
+            1433
+          ],
+          [
+            1170,
+            1434
+          ],
+          [
+            1171,
+            1434
+          ],
+          [
+            1172,
+            1435
+          ],
+          [
+            1175,
+            1435
+          ],
+          [
+            1177,
+            1437
+          ],
+          [
+            1178,
+            1437
+          ],
+          [
+            1179,
+            1438
+          ],
+          [
+            1181,
+            1438
+          ],
+          [
+            1182,
+            1439
+          ],
+          [
+            1183,
+            1439
+          ],
+          [
+            1184,
+            1440
+          ],
+          [
+            1197,
+            1440
+          ],
+          [
+            1198,
+            1439
+          ],
+          [
+            1199,
+            1439
+          ],
+          [
+            1200,
+            1438
+          ],
+          [
+            1201,
+            1438
+          ],
+          [
+            1202,
+            1437
+          ],
+          [
+            1203,
+            1437
+          ],
+          [
+            1204,
+            1436
+          ],
+          [
+            1205,
+            1436
+          ],
+          [
+            1208,
+            1433
+          ],
+          [
+            1209,
+            1433
+          ],
+          [
+            1210,
+            1432
+          ],
+          [
+            1211,
+            1432
+          ],
+          [
+            1212,
+            1431
+          ],
+          [
+            1213,
+            1431
+          ],
+          [
+            1214,
+            1430
+          ],
+          [
+            1215,
+            1430
+          ],
+          [
+            1216,
+            1429
+          ],
+          [
+            1217,
+            1429
+          ],
+          [
+            1218,
+            1428
+          ],
+          [
+            1220,
+            1428
+          ],
+          [
+            1221,
+            1427
+          ],
+          [
+            1222,
+            1427
+          ],
+          [
+            1223,
+            1426
+          ],
+          [
+            1224,
+            1426
+          ],
+          [
+            1225,
+            1425
+          ],
+          [
+            1226,
+            1425
+          ],
+          [
+            1228,
+            1423
+          ],
+          [
+            1229,
+            1423
+          ],
+          [
+            1230,
+            1422
+          ],
+          [
+            1231,
+            1422
+          ],
+          [
+            1232,
+            1421
+          ],
+          [
+            1244,
+            1421
+          ],
+          [
+            1245,
+            1422
+          ],
+          [
+            1245,
+            1423
+          ],
+          [
+            1246,
+            1424
+          ],
+          [
+            1246,
+            1437
+          ],
+          [
+            1250,
+            1441
+          ],
+          [
+            1351,
+            1441
+          ],
+          [
+            1351,
+            1439
+          ],
+          [
+            1352,
+            1438
+          ],
+          [
+            1352,
+            1425
+          ],
+          [
+            1356,
+            1421
+          ],
+          [
+            1359,
+            1421
+          ],
+          [
+            1360,
+            1422
+          ],
+          [
+            1362,
+            1422
+          ],
+          [
+            1363,
+            1423
+          ],
+          [
+            1364,
+            1423
+          ],
+          [
+            1365,
+            1424
+          ],
+          [
+            1366,
+            1424
+          ],
+          [
+            1367,
+            1425
+          ],
+          [
+            1368,
+            1425
+          ],
+          [
+            1369,
+            1426
+          ],
+          [
+            1371,
+            1426
+          ],
+          [
+            1372,
+            1427
+          ],
+          [
+            1373,
+            1427
+          ],
+          [
+            1374,
+            1428
+          ],
+          [
+            1375,
+            1428
+          ],
+          [
+            1376,
+            1429
+          ],
+          [
+            1377,
+            1429
+          ],
+          [
+            1380,
+            1432
+          ],
+          [
+            1382,
+            1432
+          ],
+          [
+            1383,
+            1433
+          ],
+          [
+            1384,
+            1433
+          ],
+          [
+            1385,
+            1434
+          ],
+          [
+            1386,
+            1434
+          ],
+          [
+            1387,
+            1435
+          ],
+          [
+            1388,
+            1435
+          ],
+          [
+            1389,
+            1436
+          ],
+          [
+            1391,
+            1436
+          ],
+          [
+            1392,
+            1437
+          ],
+          [
+            1393,
+            1437
+          ],
+          [
+            1394,
+            1438
+          ],
+          [
+            1412,
+            1438
+          ],
+          [
+            1413,
+            1437
+          ],
+          [
+            1415,
+            1437
+          ],
+          [
+            1416,
+            1436
+          ],
+          [
+            1417,
+            1436
+          ],
+          [
+            1419,
+            1434
+          ],
+          [
+            1420,
+            1434
+          ],
+          [
+            1421,
+            1433
+          ],
+          [
+            1422,
+            1433
+          ],
+          [
+            1423,
+            1432
+          ],
+          [
+            1424,
+            1432
+          ],
+          [
+            1425,
+            1431
+          ],
+          [
+            1426,
+            1431
+          ],
+          [
+            1427,
+            1430
+          ],
+          [
+            1428,
+            1430
+          ],
+          [
+            1429,
+            1429
+          ],
+          [
+            1430,
+            1429
+          ],
+          [
+            1431,
+            1428
+          ],
+          [
+            1432,
+            1428
+          ],
+          [
+            1434,
+            1426
+          ],
+          [
+            1435,
+            1426
+          ],
+          [
+            1436,
+            1425
+          ],
+          [
+            1438,
+            1425
+          ],
+          [
+            1441,
+            1422
+          ],
+          [
+            1443,
+            1422
+          ],
+          [
+            1444,
+            1421
+          ],
+          [
+            1457,
+            1421
+          ],
+          [
+            1458,
+            1422
+          ],
+          [
+            1458,
+            1425
+          ],
+          [
+            1459,
+            1426
+          ],
+          [
+            1459,
+            1431
+          ],
+          [
+            1458,
+            1432
+          ],
+          [
+            1458,
+            1437
+          ],
+          [
+            1462,
+            1441
+          ],
+          [
+            1564,
+            1441
+          ]
+        ],
+        "component_ids": [
+          "symbol-01",
+          "symbol-02",
+          "symbol-03",
+          "symbol-04"
+        ]
+      },
+      {
+        "arrow_id": "arrow-012",
+        "path": [
+          [
+            702,
+            2090
+          ],
+          [
+            919,
+            2090
+          ],
+          [
+            920,
+            2089
+          ],
+          [
+            922,
+            2089
+          ],
+          [
+            924,
+            2087
+          ],
+          [
+            924,
+            2077
+          ],
+          [
+            931,
+            2070
+          ],
+          [
+            934,
+            2070
+          ],
+          [
+            935,
+            2071
+          ],
+          [
+            936,
+            2071
+          ],
+          [
+            938,
+            2073
+          ],
+          [
+            939,
+            2073
+          ],
+          [
+            940,
+            2074
+          ],
+          [
+            941,
+            2074
+          ],
+          [
+            942,
+            2075
+          ],
+          [
+            943,
+            2075
+          ],
+          [
+            944,
+            2076
+          ],
+          [
+            945,
+            2076
+          ],
+          [
+            946,
+            2077
+          ],
+          [
+            947,
+            2077
+          ],
+          [
+            949,
+            2079
+          ],
+          [
+            950,
+            2079
+          ],
+          [
+            953,
+            2082
+          ],
+          [
+            954,
+            2082
+          ],
+          [
+            955,
+            2083
+          ],
+          [
+            956,
+            2083
+          ],
+          [
+            957,
+            2084
+          ],
+          [
+            959,
+            2084
+          ],
+          [
+            960,
+            2085
+          ],
+          [
+            961,
+            2085
+          ],
+          [
+            963,
+            2087
+          ],
+          [
+            964,
+            2087
+          ],
+          [
+            965,
+            2088
+          ],
+          [
+            966,
+            2088
+          ],
+          [
+            967,
+            2089
+          ],
+          [
+            968,
+            2089
+          ],
+          [
+            969,
+            2090
+          ],
+          [
+            970,
+            2090
+          ],
+          [
+            972,
+            2092
+          ],
+          [
+            973,
+            2092
+          ],
+          [
+            974,
+            2093
+          ],
+          [
+            975,
+            2093
+          ],
+          [
+            977,
+            2095
+          ],
+          [
+            978,
+            2095
+          ],
+          [
+            979,
+            2096
+          ],
+          [
+            981,
+            2096
+          ],
+          [
+            983,
+            2098
+          ],
+          [
+            985,
+            2098
+          ],
+          [
+            987,
+            2100
+          ],
+          [
+            988,
+            2100
+          ],
+          [
+            990,
+            2102
+          ],
+          [
+            991,
+            2102
+          ],
+          [
+            992,
+            2103
+          ],
+          [
+            993,
+            2103
+          ],
+          [
+            995,
+            2105
+          ],
+          [
+            996,
+            2105
+          ],
+          [
+            997,
+            2106
+          ],
+          [
+            998,
+            2106
+          ],
+          [
+            1000,
+            2108
+          ],
+          [
+            1001,
+            2108
+          ],
+          [
+            1002,
+            2109
+          ],
+          [
+            1004,
+            2109
+          ],
+          [
+            1005,
+            2110
+          ],
+          [
+            1006,
+            2110
+          ],
+          [
+            1009,
+            2113
+          ],
+          [
+            1019,
+            2113
+          ],
+          [
+            1020,
+            2112
+          ],
+          [
+            1020,
+            2111
+          ],
+          [
+            1021,
+            2110
+          ],
+          [
+            1021,
+            2095
+          ],
+          [
+            1026,
+            2090
+          ],
+          [
+            1137,
+            2090
+          ],
+          [
+            1137,
+            2086
+          ],
+          [
+            1138,
+            2085
+          ],
+          [
+            1138,
+            2077
+          ],
+          [
+            1137,
+            2076
+          ],
+          [
+            1143,
+            2070
+          ],
+          [
+            1146,
+            2070
+          ],
+          [
+            1147,
+            2071
+          ],
+          [
+            1148,
+            2071
+          ],
+          [
+            1150,
+            2073
+          ],
+          [
+            1153,
+            2073
+          ],
+          [
+            1155,
+            2075
+          ],
+          [
+            1157,
+            2075
+          ],
+          [
+            1158,
+            2076
+          ],
+          [
+            1159,
+            2076
+          ],
+          [
+            1160,
+            2077
+          ],
+          [
+            1161,
+            2077
+          ],
+          [
+            1162,
+            2078
+          ],
+          [
+            1163,
+            2078
+          ],
+          [
+            1164,
+            2079
+          ],
+          [
+            1165,
+            2079
+          ],
+          [
+            1167,
+            2081
+          ],
+          [
+            1168,
+            2081
+          ],
+          [
+            1169,
+            2082
+          ],
+          [
+            1170,
+            2082
+          ],
+          [
+            1171,
+            2083
+          ],
+          [
+            1172,
+            2083
+          ],
+          [
+            1173,
+            2084
+          ],
+          [
+            1175,
+            2084
+          ],
+          [
+            1177,
+            2086
+          ],
+          [
+            1178,
+            2086
+          ],
+          [
+            1179,
+            2087
+          ],
+          [
+            1180,
+            2087
+          ],
+          [
+            1181,
+            2088
+          ],
+          [
+            1182,
+            2088
+          ],
+          [
+            1183,
+            2089
+          ],
+          [
+            1195,
+            2089
+          ],
+          [
+            1196,
+            2088
+          ],
+          [
+            1198,
+            2088
+          ],
+          [
+            1200,
+            2086
+          ],
+          [
+            1201,
+            2086
+          ],
+          [
+            1202,
+            2085
+          ],
+          [
+            1204,
+            2085
+          ],
+          [
+            1206,
+            2083
+          ],
+          [
+            1207,
+            2083
+          ],
+          [
+            1209,
+            2081
+          ],
+          [
+            1210,
+            2081
+          ],
+          [
+            1211,
+            2080
+          ],
+          [
+            1212,
+            2080
+          ],
+          [
+            1213,
+            2079
+          ],
+          [
+            1214,
+            2079
+          ],
+          [
+            1216,
+            2077
+          ],
+          [
+            1219,
+            2077
+          ],
+          [
+            1220,
+            2076
+          ],
+          [
+            1221,
+            2076
+          ],
+          [
+            1222,
+            2075
+          ],
+          [
+            1223,
+            2075
+          ],
+          [
+            1226,
+            2072
+          ],
+          [
+            1228,
+            2072
+          ],
+          [
+            1229,
+            2071
+          ],
+          [
+            1230,
+            2071
+          ],
+          [
+            1231,
+            2070
+          ],
+          [
+            1232,
+            2070
+          ],
+          [
+            1233,
+            2069
+          ],
+          [
+            1243,
+            2069
+          ],
+          [
+            1245,
+            2071
+          ],
+          [
+            1245,
+            2084
+          ],
+          [
+            1251,
+            2090
+          ],
+          [
+            1347,
+            2090
+          ],
+          [
+            1348,
+            2089
+          ],
+          [
+            1350,
+            2089
+          ],
+          [
+            1351,
+            2088
+          ],
+          [
+            1351,
+            2075
+          ],
+          [
+            1356,
+            2070
+          ],
+          [
+            1360,
+            2070
+          ],
+          [
+            1361,
+            2071
+          ],
+          [
+            1362,
+            2071
+          ],
+          [
+            1363,
+            2072
+          ],
+          [
+            1364,
+            2072
+          ],
+          [
+            1365,
+            2073
+          ],
+          [
+            1366,
+            2073
+          ],
+          [
+            1367,
+            2074
+          ],
+          [
+            1368,
+            2074
+          ],
+          [
+            1369,
+            2075
+          ],
+          [
+            1371,
+            2075
+          ],
+          [
+            1372,
+            2076
+          ],
+          [
+            1373,
+            2076
+          ],
+          [
+            1374,
+            2077
+          ],
+          [
+            1375,
+            2077
+          ],
+          [
+            1376,
+            2078
+          ],
+          [
+            1377,
+            2078
+          ],
+          [
+            1380,
+            2081
+          ],
+          [
+            1381,
+            2081
+          ],
+          [
+            1382,
+            2082
+          ],
+          [
+            1383,
+            2082
+          ],
+          [
+            1384,
+            2083
+          ],
+          [
+            1385,
+            2083
+          ],
+          [
+            1386,
+            2084
+          ],
+          [
+            1387,
+            2084
+          ],
+          [
+            1388,
+            2085
+          ],
+          [
+            1390,
+            2085
+          ],
+          [
+            1391,
+            2086
+          ],
+          [
+            1393,
+            2086
+          ],
+          [
+            1394,
+            2087
+          ],
+          [
+            1411,
+            2087
+          ],
+          [
+            1412,
+            2086
+          ],
+          [
+            1415,
+            2086
+          ],
+          [
+            1419,
+            2082
+          ],
+          [
+            1421,
+            2082
+          ],
+          [
+            1422,
+            2081
+          ],
+          [
+            1423,
+            2081
+          ],
+          [
+            1424,
+            2080
+          ],
+          [
+            1425,
+            2080
+          ],
+          [
+            1426,
+            2079
+          ],
+          [
+            1427,
+            2079
+          ],
+          [
+            1428,
+            2078
+          ],
+          [
+            1429,
+            2078
+          ],
+          [
+            1430,
+            2077
+          ],
+          [
+            1431,
+            2077
+          ],
+          [
+            1432,
+            2076
+          ],
+          [
+            1433,
+            2076
+          ],
+          [
+            1435,
+            2074
+          ],
+          [
+            1436,
+            2074
+          ],
+          [
+            1438,
+            2072
+          ],
+          [
+            1440,
+            2072
+          ],
+          [
+            1442,
+            2070
+          ],
+          [
+            1444,
+            2070
+          ],
+          [
+            1445,
+            2069
+          ],
+          [
+            1456,
+            2069
+          ],
+          [
+            1458,
+            2071
+          ],
+          [
+            1458,
+            2084
+          ],
+          [
+            1464,
+            2090
+          ],
+          [
+            1564,
+            2090
+          ]
+        ],
+        "component_ids": [
+          "symbol-09",
+          "symbol-10",
+          "symbol-11",
+          "symbol-12"
+        ]
+      },
+      {
+        "arrow_id": "arrow-002",
+        "path": [
+          [
+            1672,
+            1278
+          ],
+          [
+            2201,
+            1277
+          ]
+        ],
+        "component_ids": [
+          "symbol-05",
+          "symbol-06"
+        ]
+      },
+      {
+        "arrow_id": "arrow-001",
+        "path": [
+          [
+            2204,
+            1278
+          ],
+          [
+            2204,
+            1026
+          ]
+        ],
+        "component_ids": [
+          "symbol-17"
+        ]
+      },
+      {
+        "arrow_id": "arrow-006",
+        "path": [
+          [
+            1672,
+            1604
+          ],
+          [
+            2201,
+            1603
+          ]
+        ],
+        "component_ids": [
+          "symbol-07",
+          "symbol-08"
+        ]
+      },
+      {
+        "arrow_id": "arrow-004",
+        "path": [
+          [
+            2204,
+            1604
+          ],
+          [
+            2205,
+            1350
+          ]
+        ],
+        "component_ids": [
+          "symbol-18"
+        ]
+      },
+      {
+        "arrow_id": "arrow-009",
+        "path": [
+          [
+            1672,
+            1929
+          ],
+          [
+            2201,
+            1930
+          ]
+        ],
+        "component_ids": [
+          "symbol-13",
+          "symbol-14"
+        ]
+      },
+      {
+        "arrow_id": "arrow-008",
+        "path": [
+          [
+            2204,
+            1929
+          ],
+          [
+            2205,
+            1674
+          ]
+        ],
+        "component_ids": [
+          "symbol-19"
+        ]
+      },
+      {
+        "arrow_id": "arrow-013",
+        "path": [
+          [
+            1672,
+            2251
+          ],
+          [
+            2202,
+            2251
+          ]
+        ],
+        "component_ids": [
+          "symbol-15",
+          "symbol-16"
+        ]
+      },
+      {
+        "arrow_id": "arrow-011",
+        "path": [
+          [
+            2204,
+            2251
+          ],
+          [
+            2205,
+            1999
+          ]
+        ],
+        "component_ids": [
+          "symbol-20"
+        ]
+      }
+    ],
+    "uncertainties": []
+  }
+}

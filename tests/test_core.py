@@ -195,6 +195,7 @@ class ExportTests(unittest.TestCase):
             markings = json.loads(Path(outputs["markings.json"]).read_text(encoding="utf-8"))
             self.assertEqual(markings["arrows"], response["arrows"])
             self.assertEqual(markings["flow_routes"][0]["component_labels"], ["A-7", "B-8", "C-9"])
+            self.assertEqual(markings["flow_routes"][0]["component_grid"], [[1, 1], [2, 1], [3, 1]])
             marks = {mark["kind"]: mark for mark in markings["marks"]}
             self.assertEqual(marks["flow_route"]["points"], [[15, 50], [110, 50]])
             self.assertEqual(marks["observed_arrow"]["points"], [[100, 45], [110, 50], [100, 55]])

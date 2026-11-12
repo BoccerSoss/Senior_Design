@@ -8,10 +8,11 @@ from pathlib import Path
 import shutil
 import tkinter as tk
 from tkinter import filedialog, font, messagebox, ttk
+import webbrowser
 
 from PIL import Image, ImageTk
 
-from .desktop_analysis import AnalysisError, analyze_drawing
+from .desktop_analysis import AnalysisError, analyze_drawing, prepare_label_review
 from .io import ROOT, image_info
 
 SAMPLE = ROOT / "data" / "input" / "four_component.png"
@@ -98,6 +99,7 @@ class DesktopApp:
         self.status = tk.StringVar(root)
         self.matrix_detail = tk.StringVar(root)
         self.reference_detail = tk.StringVar(root)
+        self.use_reference = tk.BooleanVar(root, True)
         self.component_marks = {}
         self.connection_marks = {}
         self.root.title("P&ID Matrix Builder")
@@ -162,6 +164,10 @@ class DesktopApp:
         toolbar.columnconfigure(0, weight=1)
         ttk.Label(toolbar, textvariable=self.filename, style="PanelHeading.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(toolbar, textvariable=self.image_detail, style="PanelMuted.TLabel").grid(row=1, column=0, sticky="w")
+        self.reference_toggle = ttk.Checkbutton(
+            toolbar, text="Use matching drawing reference", variable=self.use_reference, style="Preview.TCheckbutton",
+        )
+        self.reference_toggle.grid(row=2, column=0, columnspan=4, sticky="w", pady=(4, 0))
         self.sample_button = ttk.Menubutton(toolbar, text="Samples")
         sample_menu = tk.Menu(self.sample_button, tearoff=False)
         sample_menu.add_command(label="Four equipment items", command=lambda: self.load_drawing(SAMPLE))
@@ -256,6 +262,12 @@ class DesktopApp:
         self.reference_label = ttk.Label(results, textvariable=self.reference_detail,
                                          style="PanelMuted.TLabel", wraplength=370)
         self.reference_label.grid(row=5, column=0, sticky="w", pady=(8, 0))
+        self.reference_actions = ttk.Frame(results, style="Panel.TFrame")
+        self.reference_actions.grid(row=6, column=0, sticky="w", pady=(4, 0))
+        ttk.Button(self.reference_actions, text="Source figure", command=self.open_reference_source).pack(side="left")
+        ttk.Button(self.reference_actions, text="Prepare AI crops", command=self.open_label_packet).pack(side="left", padx=4)
+        ttk.Button(self.reference_actions, text="Import labels…", command=self.import_labels).pack(side="left")
+        self.reference_actions.grid_remove()
 
         footer = ttk.Frame(root)
         footer.grid(row=3, column=0, sticky="ew", padx=22, pady=(9, 13))
@@ -316,6 +328,7 @@ class DesktopApp:
         busy = self.future is not None
         self.sample_button.configure(state="disabled" if busy else "normal")
         self.open_button.configure(state="disabled" if busy else "normal")
+        self.reference_toggle.configure(state="disabled" if busy else "normal")
         self.analyze_button.configure(state="normal" if self.source_path and not busy else "disabled")
         self.overlay_toggle.configure(state="normal" if self.overlay_image is not None and not busy else "disabled")
         self.save_button.configure(state="normal" if self.result and not busy else "disabled")
@@ -339,6 +352,7 @@ class DesktopApp:
         self.connections_title.configure(text="Direct connections")
         self.matrix_detail.set("Select Analyze drawing to build the matrix.")
         self.reference_detail.set("")
+        self.reference_actions.grid_remove()
 
     def load_drawing(self, path):
         if self.future is not None:
@@ -570,11 +584,16 @@ class DesktopApp:
                 if len(labels) > 4:
                     through += f" + {len(labels) - 4} more"
                 lines.append(f"Route equipment {through}")
+            route_record = next((item for item in self.result.markings.get("flow_routes", [])
+                                 if item["arrow_id"] == route_id), {})
+            if route_record.get("component_grid"):
+                cells = " → ".join(self.grid_label(cell) for cell in route_record["component_grid"])
+                lines.append(f"Equipment grid {cells}")
         elif arrow is not None:
-            lines.append("Equipment route unresolved")
+            lines.append("No equipment route recorded")
         return lines
 
-    def analyze(self):
+    def analyze(self, label_response=None):
         if self.source_path is None or self.future is not None:
             return
         self.clear_results()
@@ -582,7 +601,9 @@ class DesktopApp:
         self.set_status("Analyzing drawing…")
         self.progress.grid()
         self.progress.start(16)
-        self.future = self.executor.submit(analyze_drawing, self.source_path, self.output_root)
+        self.future = self.executor.submit(analyze_drawing, self.source_path, self.output_root,
+                                           use_reference=label_response is not None or self.use_reference.get(),
+                                           label_response=label_response)
         self.refresh_buttons()
         self.redraw()
         self.root.after(100, self.poll_result)
@@ -628,10 +649,12 @@ class DesktopApp:
         self.columns(self.matrix, ("Tag", *result.matrix_labels), stretch=not result.matrix_labels,
                      rows=[(label,) for label in result.matrix_labels])
         self.fill_table(self.matrix, [(label, *values) for label, values in zip(result.matrix_labels, result.matrix)])
-        self.columns(self.equipment, ("Tag", "Type"), rows=result.equipment)
+        equipment_rows = [(self.grid_label(self.component_marks.get(label, {}).get("grid")), label, typ)
+                          for label, typ in result.equipment]
+        self.columns(self.equipment, ("Grid", "Tag", "Type"), rows=equipment_rows)
         connection_rows = [(a, b, self.flow_label(a, b)) for a, b in result.connections]
         self.columns(self.connections, ("Tag A", "Tag B", "Flow"), rows=connection_rows)
-        self.fill_table(self.equipment, result.equipment)
+        self.fill_table(self.equipment, equipment_rows)
         self.fill_table(self.connections, connection_rows)
         self.equipment_title.configure(text=f"Equipment ({len(result.equipment)})")
         self.connections_title.configure(text=f"Direct connections ({len(result.connections)})")
@@ -641,14 +664,22 @@ class DesktopApp:
             self.matrix_detail.set("No direct connections detected.")
         else:
             self.matrix_detail.set("Select an equipment row, connection, or matrix cell to inspect it.")
-        if result.evaluation is not None:
+        if result.reference_citation:
+            mode = "Imported image labels" if result.vision_transcription else "Image OCR"
+            self.reference_detail.set(f"{mode} with source-checked geometry · {result.reference_citation}")
+            self.reference_actions.grid()
+        elif result.evaluation is not None:
             score = result.evaluation["connections"]["f1"]
             score_text = f"{score:.2f}" if score is not None else "unavailable"
             self.reference_detail.set(f"Synthetic reference comparison  ·  Connection F1 {score_text} (provisional)")
         elif result.equipment and self.source_path != FLOW_SAMPLE:
             self.reference_detail.set("Review candidate detections against the drawing.")
-        equipment_name = "equipment items" if self.source_path in {SAMPLE, FLOW_SAMPLE} else "equipment candidates"
-        self.set_status(f"Analysis complete  ·  {len(result.equipment)} {equipment_name}  ·  {len(result.connections)} direct connections")
+        equipment_name = ("equipment items" if result.reference_citation or self.source_path in {SAMPLE, FLOW_SAMPLE}
+                          else "equipment candidates")
+        detail = f"Analysis complete  ·  {len(result.equipment)} {equipment_name}  ·  {len(result.connections)} direct connections"
+        if result.unread_labels:
+            detail += f"  ·  {result.unread_labels} printed labels unread"
+        self.set_status(detail)
         self.redraw()
 
     def inspect_cell(self, event):
@@ -672,20 +703,29 @@ class DesktopApp:
 
     def flow_label(self, a, b):
         record = self.connection_marks.get(frozenset((a, b)))
-        if record is None or record["direction"]["status"] == "unknown":
+        if record is None:
             return "Unknown"
-        destination = record["target_label"] if record["direction"]["to"] == record["target"] else record["source_label"]
+        direction = record["direction"] if record["direction"]["to"] else record.get("route_direction")
+        if direction is None:
+            return "No direction shown" if self.result and self.result.reference_citation else "Unknown"
+        destination = record["target_label"] if direction["to"] == record["target"] else record["source_label"]
         return "A → B" if destination == b else "B → A"
 
     def show_connection(self, a, b, point=None):
         flow = self.flow_label(a, b)
-        flow_text = {"Unknown": "Flow unknown", "A → B": f"Flow {a} → {b}", "B → A": f"Flow {b} → {a}"}[flow]
+        flow_text = {"Unknown": "Flow unknown", "No direction shown": "No direction shown",
+                     "A → B": f"Flow {a} → {b}", "B → A": f"Flow {b} → {a}"}[flow]
         record = self.connection_marks.get(frozenset((a, b)), {})
         path = record.get("path")
         direction = record.get("direction", {})
         tip = direction.get("arrow_tip")
+        if tip is None and record.get("route_direction"):
+            flow_text += " · from route arrow"
         detail = f"{a} ↔ {b}  ·  Direct connection (1)  ·  {flow_text}"
         popup = [f"{a} ↔ {b}", flow_text]
+        if record.get("source_grid"):
+            by_label = {record["source_label"]: record["source_grid"], record["target_label"]: record["target_grid"]}
+            popup.append(f"Equipment grid {self.grid_label(by_label[a])} ↔ {self.grid_label(by_label[b])}")
         if path:
             popup.append(f"Pipe {path[0]} to {path[-1]} px")
         if tip is not None:
@@ -694,7 +734,7 @@ class DesktopApp:
             popup.append(f"Arrow wings {direction['arrow_wings']} px")
             detail += f"  ·  {tip_text}"
         elif path:
-            detail += f"  ·  {popup[2]}"
+            detail += f"  ·  Pipe {path[0]} to {path[-1]} px"
         self.matrix_detail.set(detail)
         if point is not None:
             self.show_coordinates(point, popup)
@@ -719,6 +759,8 @@ class DesktopApp:
         record = self.component_marks.get(label, {})
         box, tag_box = record.get("bbox"), record.get("tag_bbox")
         lines = [f"{label}  ·  {equipment_type}"]
+        if record.get("grid"):
+            lines.append(f"Equipment grid {self.grid_label(record['grid'])}")
         if box is not None:
             lines.append(f"Symbol {box} px")
         if tag_box is not None:
@@ -731,6 +773,10 @@ class DesktopApp:
             self.show_coordinates(((x0 + x1 - 1) / 2, (y0 + y1 - 1) / 2), lines, show_pixel=False)
         else:
             self.hide_coordinates()
+
+    @staticmethod
+    def grid_label(cell):
+        return f"({cell[0]},{cell[1]})" if cell else ""
 
     def save_matrix(self):
         if self.result:
@@ -760,6 +806,25 @@ class DesktopApp:
             os.startfile(str(SYMBOL_REFERENCE))
         except OSError as exc:
             messagebox.showerror("Could not open symbol reference", str(exc), parent=self.root)
+
+    def open_reference_source(self):
+        if self.result and self.result.reference_url:
+            webbrowser.open(self.result.reference_url)
+
+    def open_label_packet(self):
+        if self.result and self.result.reference_citation:
+            try:
+                os.startfile(str(prepare_label_review(self.result)))
+                self.set_status("Upload label-crops.png and use prompt.txt in your vision session.")
+            except (OSError, ValueError) as exc:
+                self.set_status(f"Could not prepare label crops. {exc}", error=True)
+
+    def import_labels(self):
+        if self.result and self.result.reference_citation:
+            path = filedialog.askopenfilename(parent=self.root, title="Import image label response",
+                                              filetypes=[("JSON or text", ("*.json", "*.txt"))])
+            if path:
+                self.analyze(Path(path))
 
     def open_results(self):
         if self.run_folder is None:

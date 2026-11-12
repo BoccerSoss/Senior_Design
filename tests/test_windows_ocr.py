@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from PIL import Image, ImageDraw, ImageFont
 
-from aip.windows_ocr import OCRUnavailable, _original_box, recognize_image, recognize_tag_crops
+from aip.windows_ocr import OCRUnavailable, _original_box, recognize_image, recognize_label_boxes, recognize_tag_crops
 
 
 class WindowsOCRAvailabilityTests(unittest.TestCase):
@@ -143,6 +143,20 @@ class WindowsOCRPixelTests(unittest.TestCase):
         for item in records[0]["passes"]:
             self.assertTrue((scratch/item["crop_image_filename"]).is_file())
             self.assertEqual(json.loads((scratch/item["ocr_json_filename"]).read_text())["words"],item["ocr"]["words"])
+
+    def test_box_reader_changes_with_glyphs_using_unchanged_coordinates(self):
+        boxes = [{"id": "first", "tag_bbox": [50, 70, 340, 140]}, {"id": "second", "tag_bbox": [50, 180, 340, 250]}]
+        for index, text in enumerate(("SI-742", "LX-836")):
+            with self.subTest(text=text):
+                image = Image.new("RGB", (400, 270), "white")
+                ImageDraw.Draw(image).text((54, 74), text, fill="black", font=self.font())
+                path = self.root / f"boxed-control-{index}.png"
+                image.save(path)
+                found, empty = recognize_label_boxes(path, boxes)
+                self.assertEqual(found["observed_tag"].upper(), text)
+                self.assertEqual(found["source_word_bbox"], boxes[0]["tag_bbox"])
+                self.assertTrue(found["crop_passes"])
+                self.assertIsNone(empty["observed_tag"])
 
 
 if __name__ == "__main__":
