@@ -73,6 +73,18 @@ class NormalizationTests(unittest.TestCase):
             with self.subTest(box=box), self.assertRaises(ValidationError):
                 normalize_response(value, DRAWING, RUN)
 
+    def test_known_direction_requires_traced_path_and_in_bounds_arrow(self):
+        response = raw()
+        edge = response["connections"][0]
+        edge["direction"] = {"status": "source_to_target", "arrow_tip": [70, 50],
+                             "arrow_wings": [[65, 45], [65, 55]]}
+        with self.assertRaisesRegex(ValidationError, "requires a traced path"):
+            normalize_response(response, DRAWING, RUN)
+        edge["path"] = [[35, 50], [130, 50]]
+        edge["direction"]["arrow_tip"] = [200, 50]
+        with self.assertRaisesRegex(ValidationError, "in-bounds arrow points"):
+            normalize_response(response, DRAWING, RUN)
+
     def test_image_dimensions_and_metadata(self):
         value = raw(); value["image"]["width"] = 900
         with self.assertRaisesRegex(ValidationError, "do not rescale"):
@@ -167,6 +179,37 @@ class EvaluationTests(unittest.TestCase):
 
 
 class ExportTests(unittest.TestCase):
+    def test_markings_match_overlay_and_preserve_flow_when_endpoints_are_sorted(self):
+        response = raw(edges=((1, 0), (1, 2)))
+        response["components"][0].update(bbox=[10, 20, 40, 60], tag_bbox=[10, 10, 34, 17])
+        response["connections"][0].update(
+            path=[[140, 50], [39, 50]],
+            direction={"status": "target_to_source", "arrow_tip": [100, 50],
+                       "arrow_wings": [[92, 42], [92, 58]]},
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            image_path = root / "source.png"
+            Image.new("RGB", (200, 100), "white").save(image_path)
+            drawing = {**DRAWING, "sha256": hashlib.sha256(image_path.read_bytes()).hexdigest()}
+            document = normalize_response(response, drawing, RUN)
+            outputs = export_document(document, root / "exports", image_path)
+            markings = json.loads(Path(outputs["markings.json"]).read_text(encoding="utf-8"))
+            first, second = markings["connections"]
+            self.assertEqual(first["path"], [[39, 50], [140, 50]])
+            self.assertEqual(first["direction"]["status"], "source_to_target")
+            self.assertEqual((first["direction"]["from"], first["direction"]["to"]), ("o0", "o1"))
+            self.assertEqual(second["direction"]["status"], "unknown")
+            self.assertIsNone(second["path"])
+            by_kind = {mark["kind"]: mark for mark in markings["marks"]}
+            self.assertEqual(by_kind["pipe_trace"]["points"], first["path"])
+            self.assertEqual(by_kind["flow_arrow"]["points"], [[92, 42], [100, 50], [92, 58]])
+            self.assertEqual(by_kind["tag_outline"]["bbox"], [10, 10, 34, 17])
+            with Image.open(outputs["overlay.png"]) as overlay:
+                self.assertEqual(overlay.getpixel((100, 50)), (18, 98, 79))
+                self.assertEqual(overlay.getpixel((70, 50)), (8, 126, 139))
+            self.assertEqual(response["connections"][0]["direction"]["status"], "target_to_source")
+
     def test_export_preserves_unresolved_ids_and_draws_only_evidence(self):
         value = raw(tags=("A-7", None, "C-9"))
         value["components"][0]["bbox"] = [10,20,40,60]

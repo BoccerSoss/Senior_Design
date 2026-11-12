@@ -50,9 +50,11 @@ $runDir = 'runs/REPLACE_WITH_PRINTED_RUN_ID'
 .\.venv\Scripts\python.exe scripts/aip.py evaluate "$runDir/prediction.json" --reference data/reference/four_component.reference.json --out "$runDir/evaluation.json"
 ```
 
-Exports include equipment JSON/CSV, direct-edge JSON/CSV, labeled adjacency CSV and a readable connection list. An overlay is produced only for supplied image-supported boxes; connector coordinates are not invented. The overlay image must match recorded input provenance. Unknown identities remain explicit in matrix labels.
+Exports include equipment JSON/CSV, direct-edge JSON/CSV, labeled adjacency CSV, `markings.json`, and a readable connection list. The overlay image must match the recorded input provenance. Unknown identities remain explicit in matrix labels.
 
-Tag normalization uses Unicode NFKC, uppercase, trimming, normalized dashes and removal of spaces beside `-`, `/` and `:`. It never inserts missing punctuation or repairs a tag using truth. Reversed/duplicate undirected edges normalize to one unordered pair with a warning, while the original response remains intact. Instrument signals and directed links are outside this contract.
+`markings.json` lists each component's symbol and associated tag boxes, each connection's observed pipe path, and any supported flow arrow. Use `direction.from` and `direction.to` for the component IDs at each end of an observed arrow. Unknown direction has null endpoints and arrow coordinates. Points use `[x,y]` in prepared image pixels from the top-left. Boxes use `[xmin,ymin,xmax,ymax]` with exclusive maximums. The ordered `marks` array records the exact positions and styles used for symbol outlines, tag outlines, labels, pipe traces, and arrows on `overlay.png`. Exports without an overlay still include the observations.
+
+Tag normalization uses Unicode NFKC, uppercase, trimming, normalized dashes and removal of spaces beside `-`, `/` and `:`. Reversed or duplicate observations normalize to one unordered pair with a warning. Normalization preserves the physical arrow direction if it reverses endpoint order. The adjacency matrix and evaluation use the unordered connection. Instrument signals are outside the extraction contract.
 
 Equipment tags, `(tag,type)` pairs and unordered direct-edge tag pairs are scored separately. Each metric reports correct/missing/extra items and TP, FP, FN, precision, recall and F1:
 

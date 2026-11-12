@@ -14,6 +14,8 @@ from .desktop_analysis import AnalysisError, analyze_drawing
 from .io import ROOT, image_info
 
 SAMPLE = ROOT / "data" / "input" / "four_component.png"
+FLOW_SAMPLE = ROOT / "data" / "input" / "four_component_flow.png"
+SYMBOL_REFERENCE = ROOT / "docs" / "symbol_reference.html"
 PAGE = "#edf2f5"
 PANEL = "#ffffff"
 INK = "#172c39"
@@ -42,6 +44,8 @@ class DesktopApp:
         self.status = tk.StringVar(root)
         self.matrix_detail = tk.StringVar(root)
         self.reference_detail = tk.StringVar(root)
+        self.component_marks = {}
+        self.connection_marks = {}
         self.root.title("P&ID Matrix Builder")
         max_width, max_height = self.root.maxsize()
         self.root.geometry(f"{min(1120, max_width)}x{min(780, max_height)}")
@@ -94,6 +98,7 @@ class DesktopApp:
 
         header = ttk.Frame(root)
         header.grid(row=0, column=0, sticky="ew", padx=22, pady=(14, 9))
+        ttk.Button(header, text="Symbol reference", command=self.open_symbol_reference).pack(side="right")
         ttk.Label(header, text="P&ID Matrix Builder", style="Title.TLabel").pack(anchor="w")
         ttk.Label(header, text="Turn a piping drawing into a connection matrix.",
                   style="Subtitle.TLabel").pack(anchor="w", pady=(2, 0))
@@ -103,7 +108,11 @@ class DesktopApp:
         toolbar.columnconfigure(0, weight=1)
         ttk.Label(toolbar, textvariable=self.filename, style="PanelHeading.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(toolbar, textvariable=self.image_detail, style="PanelMuted.TLabel").grid(row=1, column=0, sticky="w")
-        self.sample_button = ttk.Button(toolbar, text="Use sample", command=lambda: self.load_drawing(SAMPLE))
+        self.sample_button = ttk.Menubutton(toolbar, text="Samples")
+        sample_menu = tk.Menu(self.sample_button, tearoff=False)
+        sample_menu.add_command(label="Four equipment items", command=lambda: self.load_drawing(SAMPLE))
+        sample_menu.add_command(label="Flow arrows", command=lambda: self.load_drawing(FLOW_SAMPLE))
+        self.sample_button.configure(menu=sample_menu)
         self.sample_button.grid(row=0, column=1, rowspan=2, padx=(10, 6))
         self.open_button = ttk.Button(toolbar, text="Open drawing…", command=self.open_drawing)
         self.open_button.grid(row=0, column=2, rowspan=2, padx=(0, 9))
@@ -150,7 +159,8 @@ class DesktopApp:
 
         observations = ttk.Frame(results, style="Panel.TFrame")
         observations.grid(row=4, column=0, sticky="nsew")
-        observations.columnconfigure((0, 1), weight=1, uniform="observations")
+        observations.columnconfigure(0, weight=2, uniform="observations")
+        observations.columnconfigure(1, weight=3, uniform="observations")
         observations.rowconfigure(1, weight=1)
         self.equipment_title = ttk.Label(observations, text="Equipment", style="PanelHeading.TLabel")
         self.equipment_title.grid(row=0, column=0, sticky="w", pady=(0, 5))
@@ -159,9 +169,11 @@ class DesktopApp:
         eq_frame, self.equipment = self.table(observations, height=4, horizontal=True)
         eq_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 5))
         self.columns(self.equipment, ("Tag", "Type"), stretch=True)
+        self.equipment.bind("<<TreeviewSelect>>", self.inspect_equipment)
         cn_frame, self.connections = self.table(observations, height=4, horizontal=True)
         cn_frame.grid(row=1, column=1, sticky="nsew", padx=(6, 0))
-        self.columns(self.connections, ("Equipment A", "Equipment B"), stretch=True)
+        self.columns(self.connections, ("Tag A", "Tag B", "Flow"), stretch=True)
+        self.connections.bind("<<TreeviewSelect>>", self.inspect_connection)
         self.reference_label = ttk.Label(results, textvariable=self.reference_detail,
                                          style="PanelMuted.TLabel", wraplength=370)
         self.reference_label.grid(row=5, column=0, sticky="w", pady=(8, 0))
@@ -169,13 +181,15 @@ class DesktopApp:
         footer = ttk.Frame(root)
         footer.grid(row=3, column=0, sticky="ew", padx=22, pady=(9, 13))
         footer.columnconfigure(0, weight=1)
-        self.status_label = ttk.Label(footer, textvariable=self.status, style="Status.TLabel", wraplength=635)
+        self.status_label = ttk.Label(footer, textvariable=self.status, style="Status.TLabel", wraplength=440)
         self.status_label.grid(row=0, column=0, sticky="w")
         self.progress = ttk.Progressbar(footer, mode="indeterminate", length=85)
         self.progress.grid(row=0, column=1, padx=8)
         self.progress.grid_remove()
+        self.markings_button = ttk.Button(footer, text="Save markings…", command=self.save_markings)
+        self.markings_button.grid(row=0, column=2, sticky="e", padx=(0, 7))
         self.folder_button = ttk.Button(footer, text="Open results folder", command=self.open_results)
-        self.folder_button.grid(row=0, column=2, sticky="e")
+        self.folder_button.grid(row=0, column=3, sticky="e")
 
     def table(self, parent, height, horizontal=False):
         frame = ttk.Frame(parent, style="Panel.TFrame")
@@ -226,12 +240,15 @@ class DesktopApp:
         self.analyze_button.configure(state="normal" if self.source_path and not busy else "disabled")
         self.overlay_toggle.configure(state="normal" if self.overlay_image is not None and not busy else "disabled")
         self.save_button.configure(state="normal" if self.result and not busy else "disabled")
+        self.markings_button.configure(state="normal" if self.result and self.result.markings_file and not busy else "disabled")
         self.folder_button.configure(state="normal" if self.run_folder and not busy else "disabled")
 
     def clear_results(self):
         self.result = None
         self.run_folder = None
         self.overlay_image = None
+        self.component_marks.clear()
+        self.connection_marks.clear()
         self.show_detections.set(False)
         self.fill_table(self.matrix, ())
         self.columns(self.matrix, ("Tag",), stretch=True)
@@ -256,7 +273,7 @@ class DesktopApp:
         self.clear_results()
         name = self.source_path.name
         self.filename.set(name if len(name) <= 50 else name[:46] + "…")
-        kind = "Synthetic example" if self.source_path == SAMPLE.resolve() else "Selected drawing"
+        kind = "Synthetic example" if self.source_path in {SAMPLE, FLOW_SAMPLE} else "Selected drawing"
         self.image_detail.set(f"{kind}  ·  {source.width} × {source.height} pixels")
         self.set_status("Ready to analyze")
         self.refresh_buttons()
@@ -316,16 +333,23 @@ class DesktopApp:
         self.source_image = image_info(result.image)
         self.overlay_image = image_info(result.overlay) if result.overlay else None
         self.result = result
-        kind = "Synthetic example" if self.source_path == SAMPLE.resolve() else "Selected drawing"
+        markings = result.markings or {}
+        self.component_marks = {record["label"]: record for record in markings.get("components", [])}
+        self.connection_marks = {
+            frozenset((record["source_label"], record["target_label"])): record
+            for record in markings.get("connections", [])
+        }
+        kind = "Synthetic example" if self.source_path in {SAMPLE, FLOW_SAMPLE} else "Selected drawing"
         self.image_detail.set(f"{kind}  ·  {self.source_image.width} × {self.source_image.height} pixels")
         self.show_detections.set(self.overlay_image is not None)
         self.columns(self.matrix, ("Tag", *result.matrix_labels), stretch=not result.matrix_labels,
                      rows=[(label,) for label in result.matrix_labels])
         self.fill_table(self.matrix, [(label, *values) for label, values in zip(result.matrix_labels, result.matrix)])
         self.columns(self.equipment, ("Tag", "Type"), rows=result.equipment)
-        self.columns(self.connections, ("Equipment A", "Equipment B"), rows=result.connections)
+        connection_rows = [(a, b, self.flow_label(a, b)) for a, b in result.connections]
+        self.columns(self.connections, ("Tag A", "Tag B", "Flow"), rows=connection_rows)
         self.fill_table(self.equipment, result.equipment)
-        self.fill_table(self.connections, result.connections)
+        self.fill_table(self.connections, connection_rows)
         self.equipment_title.configure(text=f"Equipment ({len(result.equipment)})")
         self.connections_title.configure(text=f"Direct connections ({len(result.connections)})")
         if not result.equipment:
@@ -333,12 +357,15 @@ class DesktopApp:
         elif not result.connections:
             self.matrix_detail.set("No direct connections detected.")
         else:
-            self.matrix_detail.set("Select a matrix cell to inspect the connection.")
+            self.matrix_detail.set("Select an equipment row, connection, or matrix cell to inspect it.")
         if result.evaluation is not None:
             score = result.evaluation["connections"]["f1"]
             score_text = f"{score:.2f}" if score is not None else "unavailable"
             self.reference_detail.set(f"Synthetic reference comparison  ·  Connection F1 {score_text} (provisional)")
-        self.set_status(f"Analysis complete  ·  {len(result.equipment)} equipment items  ·  {len(result.connections)} direct connections")
+        elif result.equipment and self.source_path != FLOW_SAMPLE:
+            self.reference_detail.set("Review candidate detections against the drawing.")
+        equipment_name = "equipment items" if self.source_path in {SAMPLE, FLOW_SAMPLE} else "equipment candidates"
+        self.set_status(f"Analysis complete  ·  {len(result.equipment)} {equipment_name}  ·  {len(result.connections)} direct connections")
         self.redraw()
 
     def inspect_cell(self, event):
@@ -353,26 +380,75 @@ class DesktopApp:
         if i == j:
             self.matrix_detail.set(f"{labels[i]} is the same equipment in this row and column.")
         else:
-            value = self.result.matrix[i][j]
-            relation = "Direct connection" if value else "No direct connection"
-            self.matrix_detail.set(f"{labels[i]} ↔ {labels[j]}  ·  {relation} ({value})")
+            if self.result.matrix[i][j]:
+                self.show_connection(labels[i], labels[j])
+            else:
+                self.matrix_detail.set(f"{labels[i]} ↔ {labels[j]}  ·  No direct connection (0)")
+
+    def flow_label(self, a, b):
+        record = self.connection_marks.get(frozenset((a, b)))
+        if record is None or record["direction"]["status"] == "unknown":
+            return "Unknown"
+        destination = record["target_label"] if record["direction"]["to"] == record["target"] else record["source_label"]
+        return "A → B" if destination == b else "B → A"
+
+    def show_connection(self, a, b):
+        flow = self.flow_label(a, b)
+        flow_text = {"Unknown": "Flow unknown", "A → B": f"Flow {a} → {b}", "B → A": f"Flow {b} → {a}"}[flow]
+        record = self.connection_marks.get(frozenset((a, b)))
+        detail = f"{a} ↔ {b}  ·  Direct connection (1)  ·  {flow_text}"
+        if record and record["direction"]["arrow_tip"] is not None:
+            detail += f"  ·  Arrow tip {record['direction']['arrow_tip']} px"
+        elif record and record["path"]:
+            detail += f"  ·  Pipe {record['path'][0]} to {record['path'][-1]} px"
+        self.matrix_detail.set(detail)
+
+    def inspect_connection(self, _event=None):
+        selected = self.connections.selection()
+        if self.result and selected:
+            self.show_connection(*self.result.connections[int(selected[0])])
+
+    def inspect_equipment(self, _event=None):
+        selected = self.equipment.selection()
+        if not self.result or not selected:
+            return
+        label, equipment_type = self.result.equipment[int(selected[0])]
+        record = self.component_marks.get(label, {})
+        detail = f"{label}  ·  {equipment_type}"
+        if record.get("bbox") is not None:
+            detail += f"  ·  Symbol {record['bbox']} px"
+        if record.get("tag_bbox") is not None:
+            detail += f"  ·  Tag {record['tag_bbox']} px"
+        self.matrix_detail.set(detail)
 
     def save_matrix(self):
-        if not self.result:
-            return
-        target = filedialog.asksaveasfilename(parent=self.root, title="Save connection matrix",
-                                               defaultextension=".csv", initialfile="adjacency.csv",
-                                               filetypes=[("CSV table", "*.csv")])
+        if self.result:
+            self.save_export(self.result.matrix_file, "connection matrix", "CSV table")
+
+    def save_markings(self):
+        if self.result and self.result.markings_file:
+            self.save_export(self.result.markings_file, "markings JSON", "JSON file")
+
+    def save_export(self, source, description, filetype):
+        target = filedialog.asksaveasfilename(parent=self.root, title=f"Save {description}",
+                                               defaultextension=source.suffix, initialfile=source.name,
+                                               filetypes=[(filetype, f"*{source.suffix}")])
         if not target:
             return
         path = Path(target)
         try:
-            if path.resolve() != self.result.matrix_file.resolve():
-                shutil.copyfile(self.result.matrix_file, path)
+            if path.resolve() != source.resolve():
+                shutil.copyfile(source, path)
         except OSError as exc:
-            messagebox.showerror("Could not save matrix", str(exc), parent=self.root)
+            messagebox.showerror(f"Could not save {description}", str(exc), parent=self.root)
             return
-        self.set_status(f"Matrix saved to {path}")
+        self.set_status(f"Saved {path.name}")
+
+    def open_symbol_reference(self):
+        try:
+            os.startfile(str(SYMBOL_REFERENCE))
+        except OSError as exc:
+            messagebox.showerror("Could not open symbol reference", str(exc), parent=self.root)
 
     def open_results(self):
         if self.run_folder is None:

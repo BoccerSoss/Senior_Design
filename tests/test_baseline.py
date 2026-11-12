@@ -17,7 +17,7 @@ class BaselineControls(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def diagram(self, connected=True):
+    def diagram(self, connected=True, arrows=(), crossing=False):
         # Generic test shapes and coordinates differ from the drawing fixture.
         image = Image.new("RGB", (700, 300), "white")
         draw = ImageDraw.Draw(image)
@@ -28,6 +28,15 @@ class BaselineControls(unittest.TestCase):
         else:
             draw.line((170, 150, 290, 150), fill="black", width=4)
             draw.line((320, 150, 450, 150), fill="black", width=4)
+        for tip_x, signed_length, wing_height, filled in arrows:
+            rear_x = tip_x - signed_length
+            arrow = [(rear_x, 150 - wing_height), (tip_x, 150), (rear_x, 150 + wing_height)]
+            if filled:
+                draw.polygon(arrow, fill="black")
+            else:
+                draw.line(arrow, fill="black", width=3)
+        if crossing:
+            draw.line((280, 140, 315, 160), fill="black", width=3)
         path = self.root / ("connected.png" if connected else "disconnected.png")
         image.save(path)
         return path
@@ -54,6 +63,38 @@ class BaselineControls(unittest.TestCase):
         result = extract_image(path)
         self.assertEqual(result["image"], {"width": 700, "height": 300})
         self.assertGreater(len(result["components"]), 0)
+
+    def test_connection_path_is_on_the_visible_stroke(self):
+        connection, = extract_image(self.diagram())["connections"]
+        self.assertEqual(connection["path"], [[170, 150], [450, 150]])
+        self.assertEqual(connection["direction"], {"status": "unknown", "arrow_tip": None, "arrow_wings": None})
+
+    def test_direction_follows_an_on_pipe_arrow(self):
+        cases = [(300, 20, 20, False, "source_to_target"),
+                 (330, -20, 20, True, "target_to_source"),
+                 (305, 40, 10, True, "source_to_target")]
+        for tip, length, height, filled, expected in cases:
+            with self.subTest(expected=expected):
+                result = extract_image(self.diagram(arrows=[(tip, length, height, filled)]))
+                # A visible arrow is flow evidence for the same pipe, not a third equipment item.
+                self.assertEqual(len(result["components"]), 2)
+                connection, = result["connections"]
+                self.assertEqual(connection["path"], [[170, 150], [450, 150]])
+                direction = connection["direction"]
+                self.assertEqual(direction["status"], expected)
+                tip_x, tip_y = direction["arrow_tip"]
+                self.assertAlmostEqual(tip_x, tip, delta=4)
+                self.assertEqual(tip_y, 150)
+                upper, lower = direction["arrow_wings"]
+                self.assertLess(upper[1], tip_y)
+                self.assertGreater(lower[1], tip_y)
+                self.assertTrue(all((tip_x - x) * length > 0 for x, _ in (upper, lower)))
+
+    def test_conflicting_arrows_and_crossings_keep_direction_unknown(self):
+        for drawing in ({"arrows": [(280, 20, 10, False), (340, -20, 10, False)]}, {"crossing": True}):
+            with self.subTest(drawing=drawing):
+                connection, = extract_image(self.diagram(**drawing))["connections"]
+                self.assertEqual(connection["direction"], {"status": "unknown", "arrow_tip": None, "arrow_wings": None})
 
     def test_not_reading_reference_or_neighbor_files(self):
         # The same image produces the same output despite poisoned neighbor data.

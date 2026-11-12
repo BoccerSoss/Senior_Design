@@ -6,10 +6,9 @@ import hashlib
 import json
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
-
 from .core import ValidationError, validate_document
 from .io import image_info
+from .markings import build_markings
 
 
 def _write_json(path, data):
@@ -20,8 +19,9 @@ def export_document(document: dict, outdir, image_path=None) -> dict:
     validate_document(document)
     root = Path(outdir)
     overlay_image = None
-    has_boxes = any(c["bbox"] is not None for c in document["components"])
-    if image_path is not None and has_boxes:
+    has_marks = (any(c["bbox"] is not None or c.get("tag_bbox") is not None for c in document["components"])
+                 or any(edge.get("path") is not None for edge in document["connections"]))
+    if image_path is not None and has_marks:
         image_digest = hashlib.sha256(Path(image_path).read_bytes()).hexdigest()
         permitted_digests = {document["drawing"]["sha256"].lower()}
         if document["drawing"].get("source_sha256"):
@@ -46,8 +46,10 @@ def export_document(document: dict, outdir, image_path=None) -> dict:
         raise ValidationError("matrix labels collide with an unresolved placeholder; rename observation IDs before export")
     edges = [{**e, "source_tag": by_id[e["source"]]["normalized_tag"],
               "target_tag": by_id[e["target"]]["normalized_tag"]} for e in document["connections"]]
+    markings = build_markings(document["drawing"], equipment, edges, labels, overlay_image)
     _write_json(root / "equipment.json", equipment)
     _write_json(root / "edges.json", edges)
+    _write_json(root / "markings.json", markings)
     with (root / "equipment.csv").open("w", newline="", encoding="utf-8") as stream:
         fields = ["id", "observed_tag", "normalized_tag", "type", "bbox", "evidence", "uncertainty", "review_status", "matrix_label"]
         writer = csv.DictWriter(stream, fieldnames=fields, lineterminator="\n")
@@ -68,29 +70,22 @@ def export_document(document: dict, outdir, image_path=None) -> dict:
         for c in components:
             writer.writerow([labels[c["id"]]] + [int(frozenset((c["id"], d["id"])) in pairs) for d in components])
     review = ["Observed direct undirected connections", ""]
-    review.extend(f"{labels[e['source']]} -- {labels[e['target']]} | evidence: {e['evidence'] or 'not supplied'} | uncertainty: {e['uncertainty'] or 'none reported'}" for e in edges)
+    for edge, marking in zip(edges, markings["connections"]):
+        direction = marking["direction"]
+        flow = f"{labels[direction['from']]} -> {labels[direction['to']]}" if direction["from"] else "unknown"
+        review.append(f"{labels[edge['source']]} -- {labels[edge['target']]} | flow: {flow}"
+                      f" | evidence: {edge['evidence'] or 'not supplied'}"
+                      f" | uncertainty: {edge['uncertainty'] or 'none reported'}")
     if not edges:
         review.append("No direct connections reported.")
     missing_boxes = [c["id"] for c in components if c["bbox"] is None]
     review.extend(["", "Missing box observations (not drawn): " + (", ".join(missing_boxes) or "none"),
-                   "Overlay boxes are observed coordinates; lines between box centers are not fabricated.",
+                   "markings.json records observed coordinates and the exact positions drawn on the overlay.",
                    "Review status: pending human review."])
     (root / "review.txt").write_text("\n".join(review) + "\n", encoding="utf-8")
-    outputs = {name: str(root / name) for name in ["equipment.json", "equipment.csv", "edges.json", "edges.csv", "adjacency.csv", "review.txt"]}
+    outputs = {name: str(root / name) for name in ["equipment.json", "equipment.csv", "edges.json", "edges.csv",
+                                                  "adjacency.csv", "markings.json", "review.txt"]}
     if overlay_image is not None:
-        image = overlay_image
-        draw = ImageDraw.Draw(image)
-        font = ImageFont.load_default(size=18)
-        for c in components:
-            if c["bbox"] is None:
-                continue
-            x0, y0, x1, y1 = c["bbox"]
-            draw.rectangle((x0, y0, max(x0, x1-1), max(y0, y1-1)), outline="#b00020", width=3)
-            label = f"{labels[c['id']]} ({c['type']})"
-            text_y = max(0, y0-24)
-            bounds = draw.textbbox((x0, text_y), label, font=font)
-            draw.rectangle(bounds, fill="white")
-            draw.text((x0, text_y), label, font=font, fill="#b00020")
-        image.save(root / "overlay.png")
+        overlay_image.save(root / "overlay.png")
         outputs["overlay.png"] = str(root / "overlay.png")
     return outputs

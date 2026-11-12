@@ -16,6 +16,8 @@ COORDINATE_CONVENTION = {
     "bounds": "minimum inclusive, maximum exclusive",
     "scope": "symbol only; excludes tag text and external pipes",
 }
+REVERSED_FLOW = {"source_to_target": "target_to_source", "target_to_source": "source_to_target",
+                 "unknown": "unknown"}
 
 
 class ValidationError(ValueError):
@@ -73,6 +75,38 @@ def _bbox(value, location, width, height, errors):
     x0, y0, x1, y1 = value
     if not (0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height):
         errors.append(f"{location} must enclose positive area within original image {width}x{height}")
+
+
+def _pixel_point(value, width, height):
+    return (isinstance(value, list) and len(value) == 2
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)
+            and 0 <= value[0] < width and 0 <= value[1] < height)
+
+
+def _connection_geometry(item, location, width, height, errors):
+    path = item.get("path")
+    if path is not None and (
+        not isinstance(path, list) or len(path) < 2
+        or not all(_pixel_point(point, width, height) for point in path)
+        or any(a == b for a, b in zip(path, path[1:]))
+    ):
+        errors.append(f"{location}.path must contain two or more distinct consecutive [x,y] points within the image")
+    if "direction" not in item:
+        return
+    direction = _object(item["direction"], f"{location}.direction", errors)
+    if set(direction) != {"status", "arrow_tip", "arrow_wings"}:
+        errors.append(f"{location}.direction must contain status, arrow_tip, and arrow_wings")
+    status, tip, wings = (direction.get(key) for key in ("status", "arrow_tip", "arrow_wings"))
+    if not isinstance(status, str) or status not in REVERSED_FLOW:
+        errors.append(f"{location}.direction.status must be source_to_target, target_to_source, or unknown")
+    elif status == "unknown":
+        if tip is not None or wings is not None:
+            errors.append(f"{location}.direction arrow coordinates must be null when direction is unknown")
+    elif (path is None or not _pixel_point(tip, width, height)
+          or not isinstance(wings, list) or len(wings) != 2
+          or not all(_pixel_point(point, width, height) for point in wings)
+          or tip in wings or wings[0] == wings[1]):
+        errors.append(f"{location}.direction requires a traced path and three distinct in-bounds arrow points")
 
 
 def _metadata(drawing, run, errors):
@@ -169,10 +203,13 @@ def normalize_response(raw: dict, drawing: dict, run: dict) -> dict:
         for key in ("evidence", "uncertainty"):
             _text_or_null(item.get(key), f"{loc}.{key}", errors)
         _bbox(item.get("bbox"), f"{loc}.bbox", width, height, errors)
+        _bbox(item.get("tag_bbox"), f"{loc}.tag_bbox", width, height, errors)
         components.append({"id": item_id, "observed_tag": tag, "normalized_tag": normalized,
                            "type": typ, "bbox": copy.deepcopy(item.get("bbox")),
                            "evidence": item.get("evidence"), "uncertainty": item.get("uncertainty"),
                            "review_status": "pending human review"})
+        if "tag_bbox" in item:
+            components[-1]["tag_bbox"] = copy.deepcopy(item["tag_bbox"])
     connections = []
     seen_pairs = set()
     for i, item in enumerate(_array(raw.get("connections"), "connections", errors)):
@@ -191,15 +228,26 @@ def normalize_response(raw: dict, drawing: dict, run: dict) -> dict:
             errors.append(f"{loc}.kind must be 'direct_undirected'; do not mix instrument signals or directed links")
         for key in ("evidence", "uncertainty"):
             _text_or_null(item.get(key), f"{loc}.{key}", errors)
+        _connection_geometry(item, loc, width, height, errors)
         if endpoints_valid:
             pair = tuple(sorted((source, target)))
             if pair in seen_pairs:
                 warnings.append(f"{loc} duplicates/reverses {pair[0]}--{pair[1]}; one unordered edge retained; raw response preserves every observation")
                 continue
             seen_pairs.add(pair)
-            connections.append({"source": pair[0], "target": pair[1], "kind": "direct_undirected",
-                                "evidence": item.get("evidence"), "uncertainty": item.get("uncertainty"),
-                                "review_status": "pending human review"})
+            edge = {"source": pair[0], "target": pair[1], "kind": "direct_undirected",
+                    "evidence": item.get("evidence"), "uncertainty": item.get("uncertainty"),
+                    "review_status": "pending human review"}
+            reverse = source != pair[0]
+            if "path" in item:
+                path = copy.deepcopy(item["path"])
+                edge["path"] = path[::-1] if reverse and isinstance(path, list) else path
+            if "direction" in item:
+                direction = copy.deepcopy(item["direction"])
+                if reverse and isinstance(direction, dict) and isinstance(direction.get("status"), str):
+                    direction["status"] = REVERSED_FLOW.get(direction["status"], direction["status"])
+                edge["direction"] = direction
+            connections.append(edge)
     uncertainties = _array(raw.get("uncertainties", []), "uncertainties", errors)
     if any(not isinstance(v, str) for v in uncertainties):
         errors.append("uncertainties must contain only strings")
@@ -246,8 +294,8 @@ def validate_document(document: dict) -> dict:
         errors.append("canonical connections contain duplicate unordered pairs; rerun normalization and preserve warnings")
     for i, (actual, normalized) in enumerate(zip(document["components"], checked["components"])):
         allowed = {"id", "observed_tag", "normalized_tag", "type", "bbox", "evidence", "uncertainty", "review_status"}
-        if set(actual) - allowed or allowed - set(actual):
-            errors.append(f"components[{i}] must contain exactly the canonical component fields")
+        if set(actual) - (allowed | {"tag_bbox"}) or allowed - set(actual):
+            errors.append(f"components[{i}] contains unsupported or missing canonical component fields")
         if "normalized_tag" not in actual or actual["normalized_tag"] != normalized["normalized_tag"]:
             errors.append(f"components[{i}].normalized_tag disagrees with truth-independent normalization")
         if actual.get("type") != normalized["type"]:
@@ -256,8 +304,8 @@ def validate_document(document: dict) -> dict:
             errors.append(f"components[{i}].review_status is required")
     for i, edge in enumerate(document["connections"]):
         allowed = {"source", "target", "kind", "evidence", "uncertainty", "review_status"}
-        if set(edge) != allowed:
-            errors.append(f"connections[{i}] must contain exactly the canonical connection fields")
+        if set(edge) - (allowed | {"path", "direction"}) or allowed - set(edge):
+            errors.append(f"connections[{i}] contains unsupported or missing canonical connection fields")
         if not isinstance(edge.get("review_status"), str) or not edge["review_status"].strip():
             errors.append(f"connections[{i}].review_status is required")
     if not isinstance(document.get("warnings"), list) or any(not isinstance(x, str) for x in document.get("warnings", [])):

@@ -12,6 +12,8 @@ from pathlib import Path
 
 from PIL import Image, ImageOps, __version__ as pillow_version
 
+from .connection_geometry import flow_direction, horizontal_stroke, is_pipe_arrow_box
+
 
 def baseline_info():
     """Describe actual capabilities without implying OCR or VLM inference."""
@@ -22,11 +24,12 @@ def baseline_info():
         "access_route": "local deterministic raster processing",
         "pillow_version": pillow_version,
         "ocr_available": False,
-        "scope": "unlabeled symbol candidates and uninterrupted horizontal pipe contacts",
+        "scope": "unlabeled symbol candidates, uninterrupted horizontal pipe contacts, and visible flow arrows on supported pipes",
         "limitations": [
             "No OCR: observed tags remain null.",
             "No semantic symbol classifier: type remains unknown.",
             "Only horizontal direct contacts are traced; bends and branches need review.",
+            "Flow direction requires a visible paired-wing arrow on the pipe span.",
             "Large connected text or unusual linework can be misidentified.",
         ],
     }
@@ -122,11 +125,8 @@ def _horizontal_contact(mask, width, left, right):
     top, bottom = max(ay0, by0), min(ay1, by1)
     if bottom <= top:
         return None
-    for y in range(top, bottom):
-        # Include the inferred symbol border at both ends; mere proximity fails.
-        if all(mask[y*width+x] for x in range(ax1-1, bx0+1)):
-            return [ax1-1, y, bx0, y]
-    return None
+    # Include the candidate border at both ends; mere proximity fails.
+    return horizontal_stroke(mask, width, ax1 - 1, bx0, top, bottom)
 
 
 def extract_image(image_path):
@@ -145,7 +145,8 @@ def extract_image(image_path):
     mask = gray.point(lambda v: 1 if v < 160 else 0).tobytes()
     boxes = []
     for points, _ in _ink_components(mask, width, height):
-        boxes.extend(_candidate_boxes(points, width))
+        boxes.extend(box for box in _candidate_boxes(points, width)
+                     if not is_pipe_arrow_box(mask, width, box))
     boxes.sort(key=lambda b: (b[0], b[1], b[2], b[3]))
     components = []
     for index, box in enumerate(boxes, 1):
@@ -166,7 +167,9 @@ def extract_image(image_path):
                     "source": components[i]["id"],
                     "target": components[j]["id"],
                     "kind": "direct_undirected",
-                    "evidence": f"Uninterrupted dark horizontal raster stroke between candidate borders: {contact} (x1,y1,x2,y2).",
+                    "path": contact.path,
+                    "direction": flow_direction(mask, width, contact),
+                    "evidence": f"Uninterrupted dark horizontal raster stroke between candidate borders at {contact.path}.",
                     "uncertainty": "Geometric contact only; candidate identity and process-line interpretation require review.",
                 })
     uncertainties = [

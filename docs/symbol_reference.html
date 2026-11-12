@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIP P&amp;ID Symbol Reference</title>
+  <style>
+    :root {
+      color: #182c3d;
+      background: #f4f7fa;
+      font: 1rem / 1.5 system-ui, sans-serif;
+    }
+    body { margin: 0; }
+    main { max-width: 58rem; margin: auto; padding: 1.8rem 1.25rem; }
+    header { border-top: .3rem solid #1d6180; padding-top: 1.15rem; }
+    h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 2.65rem); line-height: 1.13; }
+    h2 { margin: 1.35rem 0 .55rem; font-size: 1.25rem; }
+    h3 { margin: .65rem 0 .25rem; font-size: 1.12rem; }
+    p { margin: 0; }
+    header p { margin-top: .55rem; }
+    header p, article p, footer { color: #3b5063; }
+    .grid { display: grid; gap: .8rem; }
+    .equipment { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .connections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    article { border: 1px solid #cad6e1; border-radius: .55rem; background: #fff; padding: .8rem 1rem .85rem; }
+    svg { display: block; width: 100%; height: 4.85rem; color: #182c3d; }
+    .connection-glyph { height: 3rem; }
+    .note { margin-top: .8rem; padding: .55rem .8rem; border-left: .22rem solid #1d6180; background: #e8f0f6; }
+    footer { margin-top: 1.1rem; border-top: 1px solid #cad6e1; padding-top: .75rem; font-size: .9rem; }
+    footer p + p { margin-top: .35rem; }
+    a { color: #075575; text-underline-offset: .14em; }
+    a:focus-visible { outline: .14rem solid #075575; outline-offset: .15rem; }
+    @media (max-width: 38rem) {
+      main { padding: 1.4rem 1rem; }
+      .equipment, .connections { grid-template-columns: 1fr; }
+    }
+    @media print {
+      :root { background: #fff; font-size: 10pt; }
+      main { padding: 0; }
+      h1 { font-size: 22pt; }
+      .equipment { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .connections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      article, footer { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>AIP P&amp;ID Symbol Reference</h1>
+      <p>Quick guide to the simplified equipment shapes and pipe markings used in the prototype.</p>
+    </header>
+
+    <section aria-labelledby="equipment-heading">
+      <h2 id="equipment-heading">Equipment symbols</h2>
+      <div class="grid equipment">
+        <article>
+          <svg viewBox="138 254 284 254" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="round">
+            <rect x="160" y="320" width="240" height="170"/>
+            <polyline points="160,320 280,270 400,320"/>
+          </svg>
+          <h3>Tank</h3>
+          <p>Rectangular vessel with a peaked roof. Treat the roof and vessel body as one symbol.</p>
+        </article>
+        <article>
+          <svg viewBox="620 346 200 128" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+            <polygon points="650,370 720,410 650,450"/>
+            <polygon points="790,370 720,410 790,450"/>
+          </svg>
+          <h3>Valve</h3>
+          <p>Two opposed triangles sharing a tip. The prototype classifies this as a generic valve.</p>
+        </article>
+        <article>
+          <svg viewBox="1008 318 194 184" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+            <circle cx="1100" cy="410" r="75"/>
+            <polyline points="1025,410 1100,410"/>
+            <polyline points="1100,335 1185,335"/>
+          </svg>
+          <h3>Pump</h3>
+          <p>Circular body with a line to its center and a tangent line. The strokes are part of the pump symbol.</p>
+        </article>
+      </div>
+      <p class="note">These three equipment shapes are the current classification scope. For other symbols on a supplied drawing, check that drawing’s legend.</p>
+    </section>
+
+    <section aria-labelledby="connection-heading">
+      <h2 id="connection-heading">Connection markings</h2>
+      <div class="grid connections">
+        <article>
+          <svg class="connection-glyph" viewBox="0 0 190 44" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3">
+            <path d="M18 8v28M18 22h154M172 8v28"/>
+          </svg>
+          <h3>Direct pipe</h3>
+          <p>A solid pipe touching both equipment ports shows a direct connection when the route passes through no other equipment.</p>
+        </article>
+        <article>
+          <svg class="connection-glyph" viewBox="0 0 190 44" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 22h154M85 10l15 12-15 12"/>
+          </svg>
+          <h3>Flow arrow</h3>
+          <p>A clear arrowhead on the pipe supplies direction evidence. This arrow points toward the right-hand endpoint.</p>
+        </article>
+      </div>
+      <p class="note"><strong>Unknown direction.</strong> The connection can still be present when its arrow is missing, ambiguous, or conflicting.</p>
+    </section>
+
+    <footer>
+      <p>Equipment drawings are adapted from the U.S. Department of Energy handbook DOE-HDBK-1016/1-93, Module PR-02. <a href="https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf#page=55">Figure 1, valve symbols</a> · <a href="https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf#page=66">Figure 15, major components</a></p>
+      <p>Project geometry and adaptation notes are in the <a href="../output/aip_four_component/source/four_component.svg">synthetic drawing</a> and <a href="../output/aip_four_component/source/symbol_reference.json">symbol provenance record</a>.</p>
+    </footer>
+  </main>
+</body>
+</html>

@@ -1,11 +1,9 @@
 """Small Windows-friendly CLI. Inference and reference evaluation are separate stages."""
 from __future__ import annotations
 import argparse
-import ast
 import json
 import os
 import platform
-import re
 import shutil
 import subprocess
 import sys
@@ -166,13 +164,12 @@ def demo(out, method="classical"):
     cut = image.copy()
     contacts = observations["clean"]["connections"]
     removed = None
-    if contacts:
-        match = re.search(r"\[[\d, ]+\]", contacts[0].get("evidence", ""))
-        if match:
-            x0, y0, x1, y1 = ast.literal_eval(match.group())
-            x, y = (x0+x1)//2, (y0+y1)//2
-            removed = [x-12, y-9, x+12, y+9]
-            ImageDraw.Draw(cut).rectangle(removed, fill="white")
+    path = next((edge["path"] for edge in contacts if edge.get("path")), None)
+    if path:
+        (x0, y0), (x1, y1) = path[:2]
+        x, y = (x0 + x1) // 2, (y0 + y1) // 2
+        removed = [x - 12, y - 9, x + 12, y + 9]
+        ImageDraw.Draw(cut).rectangle(removed, fill="white")
     if removed is None:
         raise ValueError("Baseline found no supported pipe evidence for a disconnected control; cannot claim control passed.")
     cut.save(controls / "disconnected.png")

@@ -21,6 +21,8 @@ class DesktopResult:
     matrix: list[list[int]]
     evaluation: dict | None
     matrix_file: Path
+    markings_file: Path | None = None
+    markings: dict | None = None
 
 
 class AnalysisError(RuntimeError):
@@ -129,6 +131,8 @@ def analyze_drawing(image_path: Path, output_root: Path = ROOT / "runs" / "deskt
         exports = directory / "exports"
         equipment, connections, labels, matrix, matrix_file = _read_exports(exports)
         overlay = exports / "overlay.png"
+        markings_file = exports / "markings.json"
+        markings = load_json(markings_file) if markings_file.is_file() else None
         evaluation = None
         reference = ROOT / "data" / "reference" / "four_component.reference.json"
         if reference.is_file():
@@ -136,7 +140,8 @@ def analyze_drawing(image_path: Path, output_root: Path = ROOT / "runs" / "deskt
             if metadata["drawing"]["source_sha256"] == reference_hash:
                 evaluation = evaluate_files(directory / "prediction.json", reference, directory / "evaluation.json")
         return DesktopResult(directory, image, overlay if overlay.is_file() else None,
-                             equipment, connections, labels, matrix, evaluation, matrix_file)
+                             equipment, connections, labels, matrix, evaluation, matrix_file,
+                             markings_file if markings is not None else None, markings)
     except (OSError, ValueError, TypeError, KeyError, csv.Error) as exc:
         diagnostic = str(exc)
         if directory is not None:

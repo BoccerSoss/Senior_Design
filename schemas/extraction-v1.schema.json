@@ -56,6 +56,11 @@
   },
   "$defs": {
     "nullableText": {"type": ["string", "null"]},
+    "point": {
+      "description": "Top-left image pixels. The semantic validator checks image bounds.",
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "items": {"type": "number", "minimum": 0}
+    },
     "bbox": {
       "description": "Original pixels, top-left origin, minimum inclusive / maximum exclusive, symbol only. Semantic validator enforces finite values and bounds.",
       "oneOf": [
@@ -72,6 +77,10 @@
         "normalized_tag": {"$ref": "#/$defs/nullableText"},
         "type": {"type": "string", "minLength": 1},
         "bbox": {"$ref": "#/$defs/bbox"},
+        "tag_bbox": {
+          "description": "Half-open bounds of the associated visible tag text.",
+          "$ref": "#/$defs/bbox"
+        },
         "evidence": {"$ref": "#/$defs/nullableText"},
         "uncertainty": {"$ref": "#/$defs/nullableText"},
         "review_status": {"type": "string", "minLength": 1}
@@ -84,6 +93,25 @@
         "source": {"type": "string", "minLength": 1},
         "target": {"type": "string", "minLength": 1},
         "kind": {"const": "direct_undirected"},
+        "path": {
+          "description": "Observed pipe points in source-to-target order. Null means the route was not traced.",
+          "oneOf": [{"type": "null"}, {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/point"}}]
+        },
+        "direction": {
+          "description": "Direction supported by a visible arrow, relative to source and target. Unknown leaves both arrow fields null.",
+          "type": "object", "additionalProperties": false,
+          "required": ["status", "arrow_tip", "arrow_wings"],
+          "properties": {
+            "status": {"enum": ["source_to_target", "target_to_source", "unknown"]},
+            "arrow_tip": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/point"}]},
+            "arrow_wings": {
+              "oneOf": [{"type": "null"}, {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/point"}}]
+            }
+          },
+          "if": {"properties": {"status": {"const": "unknown"}}},
+          "then": {"properties": {"arrow_tip": {"type": "null"}, "arrow_wings": {"type": "null"}}},
+          "else": {"properties": {"arrow_tip": {"type": "array"}, "arrow_wings": {"type": "array"}}}
+        },
         "evidence": {"$ref": "#/$defs/nullableText"},
         "uncertainty": {"$ref": "#/$defs/nullableText"},
         "review_status": {"type": "string", "minLength": 1}

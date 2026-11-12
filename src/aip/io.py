@@ -75,7 +75,8 @@ def prepare_input(image_path, packet, prompt_path=None):
     image_path, packet = Path(image_path).resolve(), Path(packet).resolve()
     if packet.exists() and any(packet.iterdir()):
         raise ValueError(f"Packet directory must be new or empty to prevent mixed inputs: {packet}")
-    prompt_path = Path(prompt_path or ROOT / "prompts/extract_from_image.txt")
+    default_prompt = ROOT / "prompts/extract_from_image.txt"
+    prompt_path = Path(prompt_path or default_prompt)
     image = image_info(image_path)
     prompt = prompt_path.read_bytes()
     packet.mkdir(parents=True, exist_ok=True)
@@ -88,7 +89,8 @@ def prepare_input(image_path, packet, prompt_path=None):
             "source": str(image_path), "page": None, "width": image.width, "height": image.height,
             "coordinate_convention": "top-left pixels, x right/y down, half-open [xmin,ymin,xmax,ymax]",
         },
-        "prompt_version": "1.0.0", "prompt_sha256": digest(packet / "prompt.txt"),
+        "prompt_version": "1.1.0" if prompt_path.resolve() == default_prompt else "1.0.0",
+        "prompt_sha256": digest(packet / "prompt.txt"),
         "created_at": stamp(), "timezone": "America/New_York",
         "allowed_files": ["image.png", "prompt.txt"],
         "transform": "EXIF transpose, transparency on white, RGB PNG, metadata stripped; no resize",

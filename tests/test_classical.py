@@ -90,6 +90,27 @@ class ClassicalCompositionTests(unittest.TestCase):
         self.assertEqual(result["components"][0]["type"],"tank")
         self.assertIn("Raster",result["components"][0]["evidence"])
 
+    def test_duplicate_ocr_tags_are_unresolved_and_retain_their_evidence(self):
+        raw = {**self.raw, "components": [
+            candidate("left", [20, 120, 90, 240]),
+            candidate("middle", [105, 120, 175, 240]),
+            candidate("right", [200, 120, 275, 240]),
+        ]}
+        tags = ["ZZ-742", "zz-742", "QX-836"]
+        boxes = [[25, 70, 85, 100], [110, 70, 170, 100], [205, 70, 265, 100]]
+        fixture = self.ocr_fixture(tags[0])
+        fixture["tag_crop_passes"] = [text_record(tag, box) for tag, box in zip(tags, boxes)]
+        with patch("aip.classical.geometry_extract", return_value=raw), \
+             patch("aip.classical.recognize_tag_crops", return_value=fixture):
+            result = extract_image(self.path, self.root / "scratch")
+        components = result["components"]
+        self.assertEqual([item["observed_tag"] for item in components], [None, None, "QX-836"])
+        self.assertEqual([item["tag_bbox"] for item in components], boxes)
+        self.assertEqual([item["observed_tag"] for item in result["method_evidence"]["associations"]], tags)
+        for item, tag in zip(components[:2], tags):
+            self.assertIn(tag, item["evidence"])
+            self.assertIn("Identity is unresolved", item["uncertainty"])
+
     def test_unavailable_ocr_fails_without_inventing_labels(self):
         raw = copy.deepcopy(self.raw)
         with patch("aip.classical.geometry_extract",return_value=raw), \
