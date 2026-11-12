@@ -6,7 +6,7 @@ The P&ID Matrix Builder desktop demo and command-line tools interpret simplified
 
 1. On GitHub, select the `codex/aip-prototype` branch and choose **Code → Download ZIP**. In File Explorer, choose **Extract All**, then open the project folder inside the extracted folder. You can also use a Git checkout.
 2. Double-click `Open AIP Demo.cmd`. The app opens with the synthetic drawing loaded.
-3. Select **Analyze drawing**. Click the drawing to see its pixel coordinates. Click a green arrow or blue route to inspect the direction, coordinates and equipment sequence. You can also click an equipment or connection row to see its coordinates. Choose **Samples → Flow arrows** to try the arrow example.
+3. Select **Analyze drawing**. Scroll over the drawing or use **+** and **−** to zoom. Drag to pan and select **Fit** to see the whole page. Click a green arrow or blue route for its coordinates, direction and equipment sequence. Choose **Samples → Flow arrows** to try the arrow example.
 4. Use **Show detections** to view the overlay. Select **Save markings…** for `markings.json`, **Save matrix…** for the adjacency CSV, or **Open results folder** for all run files.
 5. Select **Symbol reference** for the visual guide. Use **Open drawing…** for a PNG or JPEG. Convert PDF pages to PNG before opening them. [Symbol reference](docs/symbol_reference.html)
 

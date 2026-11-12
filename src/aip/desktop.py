@@ -25,7 +25,10 @@ ACCENT = "#116a57"
 LINE = "#d8e2e7"
 STRIPE = "#f3f7f8"
 ERROR = "#a12838"
-COORDINATE_HINT = "Click the drawing for coordinates."
+COORDINATE_HINT = "Scroll to zoom · Drag to pan · Click for coordinates"
+ZOOM_STEP = 1.4
+MAX_ZOOM = 4.0
+DRAG_THRESHOLD = 4
 
 
 @dataclass(frozen=True)
@@ -37,16 +40,26 @@ class PreviewGeometry:
     image_width: int
     image_height: int
 
+    def source_point(self, x, y):
+        return ((x - self.left) * self.image_width / self.width,
+                (y - self.top) * self.image_height / self.height)
+
     def image_point(self, x, y):
-        x, y = x - self.left, y - self.top
-        if 0 <= x < self.width and 0 <= y < self.height:
-            return int(x * self.image_width / self.width), int(y * self.image_height / self.height)
+        x, y = self.source_point(x, y)
+        if 0 <= x < self.image_width and 0 <= y < self.image_height:
+            return int(x), int(y)
         return None
 
     def canvas_point(self, point):
         x, y = point
         return (self.left + (x + 0.5) * self.width / self.image_width,
                 self.top + (y + 0.5) * self.height / self.image_height)
+
+
+def _preview_offset(view_size, image_size, center_fraction):
+    if image_size <= view_size:
+        return (view_size - image_size) // 2
+    return min(0, max(view_size - image_size, round(view_size / 2 - center_fraction * image_size)))
 
 
 def _segment_distance_squared(point, start, end):
@@ -70,6 +83,12 @@ class DesktopApp:
         self.overlay_image = None
         self.preview_photo = None
         self.preview_geometry = None
+        self.preview_scale = None
+        self.preview_center = None
+        self.preview_fit = 1.0
+        self.pan_start = None
+        self.panning = False
+        self.zoom_text = tk.StringVar(root)
         self.coordinate_point = None
         self.coordinate_text = tk.StringVar(root)
         self.drawing_hint = tk.StringVar(root, COORDINATE_HINT)
@@ -163,18 +182,30 @@ class DesktopApp:
         drawing = ttk.Frame(workspace, style="Panel.TFrame", padding=13)
         drawing.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         drawing.columnconfigure(0, weight=1)
-        drawing.rowconfigure(1, weight=1)
+        drawing.rowconfigure(2, weight=1)
         ttk.Label(drawing, text="Drawing", style="PanelHeading.TLabel").grid(row=0, column=0, sticky="w")
         self.overlay_toggle = ttk.Checkbutton(drawing, text="Show detections", variable=self.show_detections,
                                               command=self.redraw, style="Preview.TCheckbutton")
         self.overlay_toggle.grid(row=0, column=1, sticky="e")
+        zoom = ttk.Frame(drawing, style="Panel.TFrame")
+        zoom.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        self.zoom_out_button = ttk.Button(zoom, text="−", width=2, command=lambda: self.zoom_preview(1 / ZOOM_STEP))
+        self.zoom_out_button.pack(side="left")
+        ttk.Label(zoom, textvariable=self.zoom_text, width=6, anchor="center", style="PanelMuted.TLabel").pack(side="left")
+        self.zoom_in_button = ttk.Button(zoom, text="+", width=2, command=lambda: self.zoom_preview(ZOOM_STEP))
+        self.zoom_in_button.pack(side="left")
+        self.fit_button = ttk.Button(zoom, text="Fit", command=self.fit_preview)
+        self.fit_button.pack(side="left", padx=(7, 0))
         self.canvas = tk.Canvas(drawing, background=PANEL, highlightthickness=1,
                                 highlightbackground=LINE, width=360, height=220)
-        self.canvas.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        self.canvas.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(6, 0))
         self.canvas.bind("<Configure>", self.redraw)
-        self.canvas.bind("<Button-1>", self.inspect_drawing)
+        self.canvas.bind("<MouseWheel>", self.zoom_wheel)
+        self.canvas.bind("<ButtonPress-1>", self.begin_pan)
+        self.canvas.bind("<B1-Motion>", self.pan_drawing)
+        self.canvas.bind("<ButtonRelease-1>", self.end_pan)
         ttk.Label(drawing, textvariable=self.drawing_hint,
-                  style="PanelMuted.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+                  style="PanelMuted.TLabel").grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self.coordinate_popup = ttk.Frame(self.canvas, padding=(10, 8), style="Panel.TFrame",
                                           relief="solid", borderwidth=1)
         self.coordinate_popup.columnconfigure(0, weight=1)
@@ -320,6 +351,7 @@ class DesktopApp:
             return
         self.source_path = Path(path).resolve()
         self.source_image = source
+        self.preview_scale = self.preview_center = None
         self.clear_results()
         name = self.source_path.name
         self.filename.set(name if len(name) <= 50 else name[:46] + "…")
@@ -336,19 +368,97 @@ class DesktopApp:
             self.load_drawing(path)
 
     def redraw(self, _event=None):
-        width, height = self.canvas.winfo_width(), self.canvas.winfo_height()
+        view_width, view_height = self.canvas.winfo_width(), self.canvas.winfo_height()
         source = self.overlay_image if self.show_detections.get() and self.overlay_image is not None else self.source_image
-        if source is None or width < 4 or height < 4:
+        if source is None or view_width < 4 or view_height < 4:
             self.preview_geometry = None
             return
-        scaled = source.copy()
-        scaled.thumbnail((max(1, width - 20), max(1, height - 20)), Image.Resampling.LANCZOS)
+        self.preview_fit = min(1.0, max(1, view_width - 20) / source.width,
+                               max(1, view_height - 20) / source.height)
+        scale = max(self.preview_fit, self.preview_scale or self.preview_fit)
+        width, height = max(1, round(source.width * scale)), max(1, round(source.height * scale))
+        center_x, center_y = self.preview_center or (source.width / 2, source.height / 2)
+        left = _preview_offset(view_width, width, center_x / source.width)
+        top = _preview_offset(view_height, height, center_y / source.height)
+        geometry = PreviewGeometry(left, top, width, height, source.width, source.height)
+        x0, y0 = max(0, left), max(0, top)
+        x1, y1 = min(view_width, left + width), min(view_height, top + height)
+        box = (*geometry.source_point(x0, y0), *geometry.source_point(x1, y1))
+        # Keep the render bounded by the viewport, even on large drawings at 400%.
+        scaled = source.resize((x1 - x0, y1 - y0), Image.Resampling.LANCZOS, box=box)
         self.preview_photo = ImageTk.PhotoImage(scaled, master=self.root)
         self.canvas.delete("preview")
-        left, top = (width - scaled.width) // 2, (height - scaled.height) // 2
-        self.preview_geometry = PreviewGeometry(left, top, scaled.width, scaled.height, source.width, source.height)
-        self.canvas.create_image(left, top, anchor="nw", image=self.preview_photo, tags="preview")
+        self.preview_geometry = geometry
+        if self.preview_scale is not None:
+            self.preview_center = geometry.source_point(view_width / 2, view_height / 2)
+        self.canvas.create_image(x0, y0, anchor="nw", image=self.preview_photo, tags="preview")
+        self.zoom_text.set(f"{scale:.0%}")
+        self.zoom_in_button.configure(state="normal" if scale < MAX_ZOOM else "disabled")
+        self.zoom_out_button.configure(state="normal" if scale > self.preview_fit else "disabled")
+        self.fit_button.configure(state="normal" if self.preview_scale is not None else "disabled")
         self.place_coordinates()
+
+    def fit_preview(self):
+        self.preview_scale = self.preview_center = None
+        self.redraw()
+
+    def zoom_preview(self, factor, anchor=None):
+        geometry = self.preview_geometry
+        if geometry is None:
+            return
+        scale = max(self.preview_fit, self.preview_scale or self.preview_fit)
+        new_scale = min(MAX_ZOOM, max(self.preview_fit, scale * factor))
+        if new_scale == scale:
+            return
+        if new_scale == self.preview_fit:
+            self.fit_preview()
+            return
+        middle = self.canvas.winfo_width() / 2, self.canvas.winfo_height() / 2
+        if anchor is None or geometry.image_point(*anchor) is None:
+            anchor = middle
+        source_anchor = geometry.source_point(*anchor)
+        self.preview_center = tuple(
+            point + (center - cursor) * original / max(1, round(original * new_scale))
+            for point, center, cursor, original in zip(
+                source_anchor, middle, anchor, (geometry.image_width, geometry.image_height))
+        )
+        self.preview_scale = new_scale
+        self.redraw()
+
+    def zoom_wheel(self, event):
+        if event.delta and self.pan_start is None:
+            self.zoom_preview(ZOOM_STEP ** (event.delta / 120), (event.x, event.y))
+        return "break"
+
+    def begin_pan(self, event):
+        if self.preview_geometry is not None:
+            self.pan_start = (event.x, event.y, self.preview_geometry)
+            self.panning = False
+
+    def pan_drawing(self, event):
+        if self.pan_start is None:
+            return
+        x, y, geometry = self.pan_start
+        dx, dy = event.x - x, event.y - y
+        if not self.panning and max(abs(dx), abs(dy)) < DRAG_THRESHOLD:
+            return
+        self.panning = True
+        self.canvas.configure(cursor="fleur")
+        if geometry.width > self.canvas.winfo_width() or geometry.height > self.canvas.winfo_height():
+            self.preview_center = geometry.source_point(self.canvas.winfo_width() / 2 - dx,
+                                                        self.canvas.winfo_height() / 2 - dy)
+            self.redraw()
+
+    def end_pan(self, event):
+        if self.pan_start is not None:
+            x, y, _ = self.pan_start
+            if self.panning or max(abs(event.x - x), abs(event.y - y)) >= DRAG_THRESHOLD:
+                self.pan_drawing(event)
+            else:
+                self.inspect_drawing(event)
+        self.pan_start = None
+        self.panning = False
+        self.canvas.configure(cursor="")
 
     def show_coordinates(self, point, details=(), show_pixel=True):
         self.coordinate_point = point
@@ -367,9 +477,10 @@ class DesktopApp:
         left = False
         if self.coordinate_point is not None:
             x, y = self.preview_geometry.canvas_point(self.coordinate_point)
-            self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5, outline=PANEL, width=4, tags="coordinate-point")
-            self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5, outline=ACCENT, width=2, tags="coordinate-point")
-            left = x > width / 2
+            if 0 <= x < width and 0 <= y < self.canvas.winfo_height():
+                self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5, outline=PANEL, width=4, tags="coordinate-point")
+                self.canvas.create_oval(x - 5, y - 5, x + 5, y + 5, outline=ACCENT, width=2, tags="coordinate-point")
+                left = x > width / 2
         self.coordinate_label.configure(wraplength=max(100, min(310, width - 44)))
         self.coordinate_popup.place(relx=0 if left else 1, x=10 if left else -10, y=10,
                                     anchor="nw" if left else "ne")
@@ -385,14 +496,17 @@ class DesktopApp:
             return None
         x, y = image_point
         markings = self.result.markings or {}
+        geometry = self.preview_geometry
+        scale = max(geometry.width / geometry.image_width, geometry.height / geometry.image_height)
         best, best_key = None, None
         for mark in reversed(markings.get("marks", [])):
             box = mark.get("bbox")
             inside = box is not None and box[0] <= x < box[2] and box[1] <= y < box[3]
-            points = [self.preview_geometry.canvas_point(point) for point in mark.get("points", ())]
+            points = [geometry.canvas_point(point) for point in mark.get("points", ())]
             distance = 0 if inside else min((_segment_distance_squared(canvas_point, start, end)
                                              for start, end in zip(points, points[1:])), default=float("inf"))
-            if distance > 6 ** 2:
+            tolerance = max(6, scale * mark.get("stroke_width", 0) / 2 + 2)
+            if distance > tolerance ** 2:
                 continue
             priority = {"observed_arrow": 2, "flow_arrow": 2, "flow_route": 1}.get(mark["kind"], 0)
             key = (-priority, distance)
