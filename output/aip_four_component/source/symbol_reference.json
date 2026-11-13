@@ -1,0 +1,32 @@
+{
+  "reference_version": "1.0.0",
+  "primary_shape_source": {
+    "title": "DOE Fundamentals Handbook Engineering Symbology, Prints, and Drawings, Volume 1 of 2",
+    "identifier": "DOE-HDBK-1016/1-93",
+    "publication_date": "1993-01",
+    "url": "https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf",
+    "download_sha256": "98e614c25f9949a6e0b3130a78642a48d23e47e4e1be855c00dfff13fb4e71e5",
+    "access_date": "2026-11-10",
+    "valve": {
+      "module": "PR-02",
+      "printed_page": 3,
+      "pdf_page_one_based": 55,
+      "figure": "Figure 1 Valve Symbols",
+      "adaptation": "Opposed triangles from the gate/globe-alternative examples; local legend assigns generic valve only and leaves type subtype, actuation and position unspecified."
+    },
+    "tank_and_pump": {
+      "module": "PR-02",
+      "printed_page": 14,
+      "pdf_page_one_based": 66,
+      "figure": "Figure 15 Symbols for Major Components",
+      "adaptation": "Roofed rectangular tank example; arrow-free circular centrifugal-pump alternative with center entry and top tangent exit. Reference type remains pump, without operating state or asserted flow direction."
+    }
+  },
+  "contextual_reference": {
+    "url": "https://dexpi.org/specifications/",
+    "access_date": "2026-11-10",
+    "use": "Contextual public data-model reference only. DOE figures provide the shape basis; no DEXPI serialization or conformance claim."
+  },
+  "scope": "Simplified educational redrawing with new geometry, labels and ports; not a plant standard or a claim of ISA, DOE or DEXPI compliance.",
+  "human_review_status": "pending independent human review"
+}

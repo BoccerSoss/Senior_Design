@@ -1,0 +1,10 @@
+# Supported platform: CPython 3.12 on Windows x64. All wheels are pinned.
+Pillow==12.0.0 --hash=sha256:9fe611163f6303d1619bbcb653540a4d60f9e55e622d60a3108be0d5b441017a
+typing_extensions==4.15.0 --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
+winrt-runtime==3.2.1 --hash=sha256:06510db215d4f0dc45c00fbb1251c6544e91742a0ad928011db33b30677e1576
+winrt-Windows.Foundation==3.2.1 --hash=sha256:45550c5b6c2125cde495c409633e6b1ea5aa1677724e3b95eb8140bfccbe30c9
+winrt-Windows.Foundation.Collections==3.2.1 --hash=sha256:550dfb8c82fe74d9e0728a2a16a9175cc9e34ca2b8ef758d69b2a398894b698b
+winrt-Windows.Globalization==3.2.1 --hash=sha256:fa4dbf6b18586e435bdd5d40b8536fe1dfd95810a264a135d121b34e33d39aa5
+winrt-Windows.Graphics.Imaging==3.2.1 --hash=sha256:066038a96df12c23d6da6a591472436ada50103f575d8a1f802778a044f668c8
+winrt-Windows.Media.Ocr==3.2.1 --hash=sha256:9984824864b49eb65765f60ea9d910928888efe3cdf5f71f037d6fe9133134f6
+winrt-Windows.Storage.Streams==3.2.1 --hash=sha256:e4508ee135af53e4fc142876abbf4bc7c2a95edfc7d19f52b291a8499cacd6dc

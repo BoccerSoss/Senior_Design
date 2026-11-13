@@ -1,0 +1,18 @@
+{
+  "result": "pass",
+  "component_count": 4,
+  "direct_edge_count": 3,
+  "checks": [
+    "unique IDs and correct types",
+    "valid endpoints and unique undirected edges",
+    "matrix symmetry and zero diagonal",
+    "JSON/CSV agreement",
+    "in-bounds symbol boxes",
+    "raster pipe continuity at all six contacts",
+    "RGB PNG dimensions and metadata",
+    "primary input isolation",
+    "prompt excludes expected tags"
+  ],
+  "method": "deterministic generator/reference quality checks, not image extraction",
+  "review_status": "pending independent human review"
+}

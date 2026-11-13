@@ -1,0 +1,529 @@
+{
+  "citation": "NUREG/CR-5745 Figure A.5 · Printed A-9 · PDF 69",
+  "source_url": "https://www.osti.gov/servlets/purl/10145659#page=69",
+  "image": {
+    "sha256": "c7c655953bf92f717f9726fc6acfcf628b85db7995d9fa2cb453e2f3a6c6ae4b",
+    "source_sha256": "84a597a64d36fa32ed2a063c0098189b81fd8220c1acdd7846e47c8d0c7474da",
+    "width": 2786,
+    "height": 3600
+  },
+  "observations": {
+    "image": {
+      "width": 2786,
+      "height": 3600
+    },
+    "components": [
+      {
+        "type": "vessel",
+        "bbox": [
+          1402,
+          1149,
+          1503,
+          1394
+        ],
+        "tag_bbox": [
+          1234,
+          1026,
+          1645,
+          1071
+        ],
+        "id": "symbol-01",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1086,
+          1481,
+          1178,
+          1604
+        ],
+        "tag_bbox": [
+          1212,
+          1520,
+          1408,
+          1562
+        ],
+        "id": "symbol-02",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1715,
+          1481,
+          1807,
+          1604
+        ],
+        "tag_bbox": [
+          1855,
+          1523,
+          2052,
+          1563
+        ],
+        "id": "symbol-03",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1085,
+          1714,
+          1178,
+          1839
+        ],
+        "tag_bbox": [
+          1210,
+          1753,
+          1418,
+          1794
+        ],
+        "id": "symbol-04",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1715,
+          1714,
+          1807,
+          1839
+        ],
+        "tag_bbox": [
+          1854,
+          1749,
+          2062,
+          1789
+        ],
+        "id": "symbol-05",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1009,
+          2036,
+          1066,
+          2088
+        ],
+        "tag_bbox": [
+          1212,
+          2041,
+          1418,
+          2081
+        ],
+        "id": "symbol-06",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1635,
+          2036,
+          1692,
+          2090
+        ],
+        "tag_bbox": [
+          1852,
+          2042,
+          2057,
+          2083
+        ],
+        "id": "symbol-07",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1086,
+          2269,
+          1178,
+          2393
+        ],
+        "tag_bbox": [
+          1212,
+          2302,
+          1418,
+          2344
+        ],
+        "id": "symbol-08",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      },
+      {
+        "type": "valve",
+        "bbox": [
+          1715,
+          2269,
+          1807,
+          2393
+        ],
+        "tag_bbox": [
+          1848,
+          2305,
+          2055,
+          2346
+        ],
+        "id": "symbol-09",
+        "evidence": "Symbol type and box checked against the cited source figure. Printed label read from the image.",
+        "uncertainty": null
+      }
+    ],
+    "connections": [
+      {
+        "source": "symbol-01",
+        "target": "symbol-02",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1403,
+            1340
+          ],
+          [
+            1145,
+            1341
+          ],
+          [
+            1145,
+            1484
+          ]
+        ],
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-01",
+        "target": "symbol-03",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1502,
+            1340
+          ],
+          [
+            1774,
+            1341
+          ],
+          [
+            1774,
+            1484
+          ]
+        ],
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-02",
+        "target": "symbol-04",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1145,
+            1601
+          ],
+          [
+            1145,
+            1717
+          ]
+        ],
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-03",
+        "target": "symbol-05",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1774,
+            1601
+          ],
+          [
+            1774,
+            1717
+          ]
+        ],
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-04",
+        "target": "symbol-08",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1145,
+            1836
+          ],
+          [
+            1146,
+            2069
+          ],
+          [
+            1146,
+            2270
+          ]
+        ],
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-05",
+        "target": "symbol-09",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1774,
+            1836
+          ],
+          [
+            1775,
+            2071
+          ],
+          [
+            1775,
+            2270
+          ]
+        ],
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-04",
+        "target": "symbol-06",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1145,
+            1836
+          ],
+          [
+            1146,
+            2069
+          ],
+          [
+            1064,
+            2069
+          ]
+        ],
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      },
+      {
+        "source": "symbol-05",
+        "target": "symbol-07",
+        "kind": "direct_undirected",
+        "path": [
+          [
+            1774,
+            1836
+          ],
+          [
+            1775,
+            2071
+          ],
+          [
+            1690,
+            2071
+          ]
+        ],
+        "evidence": "Piping and arrow placement checked against the cited source figure.",
+        "uncertainty": null
+      }
+    ],
+    "arrows": [
+      {
+        "id": "hot-loop-1",
+        "arrow_tip": [
+          714,
+          1339
+        ],
+        "arrow_wings": [
+          [
+            756,
+            1329
+          ],
+          [
+            756,
+            1350
+          ]
+        ],
+        "direction": "left"
+      },
+      {
+        "id": "hot-loop-2",
+        "arrow_tip": [
+          2273,
+          1339
+        ],
+        "arrow_wings": [
+          [
+            2231,
+            1328
+          ],
+          [
+            2231,
+            1350
+          ]
+        ],
+        "direction": "right"
+      },
+      {
+        "id": "suction-b",
+        "arrow_tip": [
+          1146,
+          2506
+        ],
+        "arrow_wings": [
+          [
+            1135,
+            2464
+          ],
+          [
+            1157,
+            2464
+          ]
+        ],
+        "direction": "down"
+      },
+      {
+        "id": "suction-a",
+        "arrow_tip": [
+          1775,
+          2506
+        ],
+        "arrow_wings": [
+          [
+            1765,
+            2462
+          ],
+          [
+            1785,
+            2462
+          ]
+        ],
+        "direction": "down"
+      }
+    ],
+    "flow_routes": [
+      {
+        "arrow_id": "hot-loop-1",
+        "path": [
+          [
+            1403,
+            1340
+          ],
+          [
+            1145,
+            1341
+          ],
+          [
+            714,
+            1339
+          ]
+        ],
+        "component_ids": [
+          "symbol-01"
+        ]
+      },
+      {
+        "arrow_id": "hot-loop-2",
+        "path": [
+          [
+            1502,
+            1340
+          ],
+          [
+            1774,
+            1341
+          ],
+          [
+            2273,
+            1339
+          ]
+        ],
+        "component_ids": [
+          "symbol-01"
+        ]
+      },
+      {
+        "arrow_id": "suction-b",
+        "path": [
+          [
+            1403,
+            1340
+          ],
+          [
+            1145,
+            1341
+          ],
+          [
+            1145,
+            1484
+          ],
+          [
+            1145,
+            1836
+          ],
+          [
+            1146,
+            2069
+          ],
+          [
+            1146,
+            2506
+          ]
+        ],
+        "component_ids": [
+          "symbol-01",
+          "symbol-02",
+          "symbol-04",
+          "symbol-08"
+        ]
+      },
+      {
+        "arrow_id": "suction-a",
+        "path": [
+          [
+            1502,
+            1340
+          ],
+          [
+            1774,
+            1341
+          ],
+          [
+            1774,
+            1484
+          ],
+          [
+            1774,
+            1836
+          ],
+          [
+            1775,
+            2071
+          ],
+          [
+            1775,
+            2506
+          ]
+        ],
+        "component_ids": [
+          "symbol-01",
+          "symbol-03",
+          "symbol-05",
+          "symbol-09"
+        ]
+      }
+    ],
+    "uncertainties": []
+  }
+}

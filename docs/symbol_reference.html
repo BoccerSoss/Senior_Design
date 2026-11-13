@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIP P&amp;ID Symbol Reference</title>
+  <style>
+    :root {
+      color: #182c3d;
+      background: #f4f7fa;
+      font: 1rem / 1.5 system-ui, sans-serif;
+    }
+    body { margin: 0; }
+    main { max-width: 58rem; margin: auto; padding: 1.8rem 1.25rem; }
+    header { border-top: .3rem solid #1d6180; padding-top: 1.15rem; }
+    h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 2.65rem); line-height: 1.13; }
+    h2 { margin: 1.35rem 0 .55rem; font-size: 1.25rem; }
+    h3 { margin: .65rem 0 .25rem; font-size: 1.12rem; }
+    p { margin: 0; }
+    header p { margin-top: .55rem; }
+    header p, article p, footer { color: #3b5063; }
+    nav { display: flex; flex-wrap: wrap; gap: .4rem 1.25rem; margin-top: .8rem; }
+    .grid { display: grid; gap: .8rem; }
+    .equipment { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .connections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    article { border: 1px solid #cad6e1; border-radius: .55rem; background: #fff; padding: .8rem 1rem .85rem; }
+    article p + p { margin-top: .45rem; }
+    svg { display: block; width: 100%; height: 4.85rem; color: #182c3d; }
+    .connection-glyph { height: 3rem; }
+    .note { margin-top: .8rem; padding: .55rem .8rem; border-left: .22rem solid #1d6180; background: #e8f0f6; }
+    .route-example { margin-top: .8rem; }
+    .route-example svg { height: 3.75rem; }
+    .route-labels { margin: .25rem 0 .5rem; padding-left: 1.35rem; }
+    .reference-list { margin: 0; display: grid; gap: .65rem; }
+    .reference-list div { border-bottom: 1px solid #cad6e1; padding: 0 0 .6rem; }
+    .reference-list dt { font-weight: 650; }
+    .reference-list dd { margin: .15rem 0 0; color: #3b5063; }
+    footer { margin-top: 1.1rem; border-top: 1px solid #cad6e1; padding-top: .75rem; font-size: .9rem; }
+    footer p + p { margin-top: .35rem; }
+    a { color: #075575; text-underline-offset: .14em; }
+    a:focus-visible { outline: .14rem solid #075575; outline-offset: .15rem; }
+    @media (max-width: 38rem) {
+      main { padding: 1.4rem 1rem; }
+      .equipment, .connections { grid-template-columns: 1fr; }
+    }
+    @media print {
+      :root { background: #fff; font-size: 10pt; }
+      main { padding: 0; }
+      h1 { font-size: 22pt; }
+      .equipment { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .connections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      article, footer { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>AIP P&amp;ID Symbol Reference</h1>
+      <p>Use this guide to compare equipment, flow arrows, and line conventions with the source drawing.</p>
+      <nav aria-label="Reference sections">
+        <a href="#equipment-heading">Equipment</a>
+        <a href="#connection-heading">Lines and arrows</a>
+        <a href="#isloca-heading">ISLOCA pump runs</a>
+        <a href="#sources-heading">Drawing sources</a>
+      </nav>
+    </header>
+
+    <section aria-labelledby="equipment-heading">
+      <h2 id="equipment-heading">Equipment symbols</h2>
+      <div class="grid equipment">
+        <article>
+          <svg viewBox="138 254 284 254" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="round">
+            <rect x="160" y="320" width="240" height="170"/>
+            <polyline points="160,320 280,270 400,320"/>
+          </svg>
+          <h3>Tank and vessel</h3>
+          <p>The synthetic tank has a rectangular body and peaked roof. Actual sheets can show open-top water tanks, horizontal vessels, or tanks with curved ends.</p>
+          <p><a href="https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf#page=66">DOE Figure 15</a> · <a href="https://www.osti.gov/servlets/purl/2305387#page=25">INL Figure 7 legend</a></p>
+        </article>
+        <article>
+          <svg viewBox="620 346 200 128" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+            <polygon points="650,370 720,410 650,450"/>
+            <polygon points="790,370 720,410 790,450"/>
+          </svg>
+          <h3>Valve body</h3>
+          <p>Two opposed triangles form a common valve body. Use the drawing legend or equipment description to distinguish gate, globe, and other valves that share this outline.</p>
+          <p><a href="https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf#page=55">DOE Figure 1</a></p>
+        </article>
+        <article>
+          <svg viewBox="1008 318 194 184" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+            <circle cx="1100" cy="410" r="75"/>
+            <polyline points="1025,410 1100,410"/>
+            <polyline points="1100,335 1185,335"/>
+          </svg>
+          <h3>Pump</h3>
+          <p>Look for the pump body and its inlet and discharge ports. A centrifugal pump may have a round body with a tangent discharge. Trace the attached lines from the ports.</p>
+          <p><a href="https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf#page=66">DOE Figure 15</a> · <a href="https://www.osti.gov/servlets/purl/2377340#page=53">INL Figure 16 legend</a></p>
+        </article>
+        <article>
+          <svg viewBox="0 0 190 75" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round">
+            <path d="M16 45h45m68 0h45M61 27l68 36V27L61 63zM95 45V20m-17 0a17 13 0 0 1 34 0z"/>
+          </svg>
+          <h3>Actuated valve</h3>
+          <p>A stem and operator drawn above a valve identify its actuator. Keep both with the valve body when marking its coordinates. Operator shapes and letters vary by sheet.</p>
+          <p><a href="https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf#page=56">DOE Figure 2</a></p>
+        </article>
+        <article>
+          <svg viewBox="0 0 190 75" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round">
+            <path d="M16 38h49m60 0h49M65 20v36m60-36v36L65 20"/>
+          </svg>
+          <h3>Inline diagonal valve</h3>
+          <p>Look for a diagonal member ending at two upright strokes. This is the outline of SI-122A in the ISLOCA schematic. Use the specific sheet to determine the valve subtype.</p>
+          <p><a href="https://www.osti.gov/servlets/purl/10145659#page=65">ISLOCA Figure A.1</a> · <a href="https://www.osti.gov/servlets/purl/2305387#page=25">INL stop valve example</a></p>
+        </article>
+        <article>
+          <svg viewBox="0 0 190 75" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3">
+            <path d="M16 64h158M95 64V50m-17-17h34"/>
+            <circle cx="95" cy="33" r="17"/>
+          </svg>
+          <h3>Instrument bubble</h3>
+          <p>Read the letters inside the bubble and follow its sensing line to the process connection. The INL legend uses P for pressure and T for temperature.</p>
+          <p><a href="https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf#page=63">DOE Figure 10</a> · <a href="https://www.osti.gov/servlets/purl/2305387#page=25">INL Figure 7 legend</a></p>
+        </article>
+      </div>
+      <p class="note">A glyph suggests a component type. Use the tag next to the symbol, a leader pointing to it, or the report’s equipment description to confirm its identity.</p>
+    </section>
+
+    <section aria-labelledby="connection-heading">
+      <h2 id="connection-heading">Connection markings</h2>
+      <div class="grid connections">
+        <article>
+          <svg class="connection-glyph" viewBox="0 0 190 44" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3">
+            <path d="M18 8v28M18 22h154M172 8v28"/>
+          </svg>
+          <h3>Direct pipe</h3>
+          <p>A solid pipe touching both equipment ports shows a direct connection when the route passes through no other equipment.</p>
+        </article>
+        <article>
+          <svg class="connection-glyph" viewBox="0 0 190 44" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 22h154M85 10l15 12-15 12"/>
+          </svg>
+          <h3>Flow arrow</h3>
+          <p>An open chevron or filled head aligned with the pipe supplies direction evidence. A traced route can extend upstream through several connected components.</p>
+          <p><a href="https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf#page=71">DOE Figure 18 flowpath exercise</a></p>
+        </article>
+        <article>
+          <svg class="connection-glyph" viewBox="0 0 190 44" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3">
+            <path d="M18 13h154"/>
+            <path d="M18 32h154" stroke-dasharray="7 5"/>
+          </svg>
+          <h3>Process and signal lines</h3>
+          <p>Check the legend for the line style and medium. Piping, instrument signals, and electrical wires can share the same view.</p>
+          <p><a href="https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf#page=59">DOE Figure 7</a></p>
+        </article>
+        <article>
+          <svg class="connection-glyph" viewBox="0 0 190 44" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3">
+            <path d="M18 22h76m0-11h61l14 11-14 11H94z"/>
+          </svg>
+          <h3>Off-page connector</h3>
+          <p>An arrow-shaped connector at a line end can carry a destination label or drawing number. Use that reference to find its mate on this sheet or another sheet.</p>
+          <p><a href="https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf#page=67">DOE Figure 16</a> · <a href="https://dexpi.org/specification/2.0.1/html/models/Plant/Piping/PipeOffPageConnector.html">DEXPI connector definition</a></p>
+        </article>
+      </div>
+      <p class="note"><strong>Unknown direction.</strong> The connection can still be present when its arrow is missing, ambiguous, or conflicting.</p>
+    </section>
+
+    <section aria-labelledby="isloca-heading">
+      <h2 id="isloca-heading">ISLOCA pump runs</h2>
+      <article class="route-example">
+        <svg viewBox="0 0 330 55" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round">
+          <path d="M29 26h20v11h-9a11 11 0 1 1-11-11zM49 31h31m30 0h44m36 0h44m36 0h49M319 6v44"/>
+          <path d="M80 22v18m30-18v18L80 22M154 22l36 18V22l-36 18zM234 22l36 18V22l-36 18zM252 31V18m-9 0a9 7 0 0 1 18 0z"/>
+          <path d="M302 27l17 4-17 4z" fill="currentColor"/>
+        </svg>
+        <p>Figure A.1 shows the same sequence on each low-pressure safety injection pump discharge before the branch.</p>
+        <ul class="route-labels">
+          <li><strong>Upper run</strong> LPSI Pump A → SI-122A → SI-124A → SI-129A</li>
+          <li><strong>Lower run</strong> LPSI Pump B → SI-122B → SI-124B → SI-129B</li>
+        </ul>
+        <p>The right-pointing arrow meets the branch. Read the vertical containment boundary and pressure callouts separately from the piping.</p>
+        <p><a href="https://www.osti.gov/servlets/purl/10145659#page=65">NUREG/CR-5745, Figure A.1, printed page A-5</a></p>
+        <p>The demo's numbered grid locates equipment on this image. A branch follows the actual pipe through a shared junction. Engineering drawing grids locate features on a sheet, and DEXPI represents a tee with connection points for the adjoining segments.</p>
+        <p><a href="https://www.energy.gov/sites/default/files/2026-04/DOE-HDBK-1016-93_VOL1.pdf#page=23">DOE drawing grid example</a> · <a href="https://dexpi.org/static/pid_specification_1.4/reference/Piping/PipingNetworkSegment.html#sourcenode">DEXPI tee connection example</a></p>
+      </article>
+    </section>
+
+    <section aria-labelledby="sources-heading">
+      <h2 id="sources-heading">Drawing sources and legends</h2>
+      <dl class="reference-list">
+        <div>
+          <dt>ISLOCA safety injection</dt>
+          <dd>Compare tag suffixes and valve and pump variants in the six adjacent schematics. <a href="https://www.osti.gov/servlets/purl/10145659#page=65">NUREG/CR-5745, Figures A.1–A.6, PDF pages 65–70</a></dd>
+        </div>
+        <div>
+          <dt>HTGR steam and water dump system</dt>
+          <dd>Check the on-sheet instrument legend and equipment labels around the dump tank and pump. <a href="https://www.osti.gov/servlets/purl/714051#page=57">HFD-45013, drawing 14884-PSK-57-2, PDF page 57</a></dd>
+        </div>
+        <div>
+          <dt>INL heat extraction for hydrogen, refinery, and methanol plants</dt>
+          <dd>Use the on-sheet legends for control, stop, and gate valves, centrifugal pumps, heat exchangers, and instruments. <a href="https://www.osti.gov/servlets/purl/2305387#page=25">INL/RPT-24-76271, Figure 7</a> · <a href="https://www.osti.gov/servlets/purl/2377340#page=53">INL/RPT-24-77932, Figure 16</a></dd>
+        </div>
+        <div>
+          <dt>ATR shuttle facility</dt>
+          <dd>Read the faint valve labels at high zoom. The lineup table describes valve positions for each operation. <a href="https://inldigitallibrary.inl.gov/content/uploads/50/2026/04/3314441.pdf#page=7">INEEL/CON-98-01277, Figure 4</a></dd>
+        </div>
+        <div>
+          <dt>Sodium-graphite reactor</dt>
+          <dd>Use the legend at the right of the reactor drawing to distinguish symbols on the historical sheets. <a href="https://www.osti.gov/servlets/purl/4156655#page=70">NAA-SR-3829, Figure 20, printed page A-20</a></dd>
+        </div>
+        <div>
+          <dt>Emergency core cooling survey</dt>
+          <dd>Use each system’s annotations to trace the pumps, injection branches, and spray routes. <a href="https://www.osti.gov/servlets/purl/4825588#page=55">ORNL-NSIC-24, Figures 3.12–3.14, PDF pages 55–57</a></dd>
+        </div>
+        <div>
+          <dt>Westinghouse training and Indian Point inspection drawings</dt>
+          <dd>The Westinghouse containment spray schematic labels the two spray pumps on Figure 5.4-13. Indian Point drawing ISI-27383 uses inspection-class markings and a separate sheet legend. <a href="https://adams-search.nrc.gov/props/9DCA9A0F-C8E9-CF93-89BB-7A14FDB00000">NRC ML21166A218</a> · <a href="https://adams-search.nrc.gov/props/C4F95812-CAD9-40EF-A367-79DC0F84B858">NRC ML100290636</a></dd>
+        </div>
+        <div>
+          <dt>DEXPI utilities reference P&amp;ID</dt>
+          <dd>The reference drawing and its XML let you compare equipment tags, pipe connections, and continuation points. <a href="https://dexpi.org/specification/2.0.1/html/appendix/reference_pid.html">DEXPI drawing 123/A93</a></dd>
+        </div>
+      </dl>
+    </section>
+
+    <footer>
+      <p>The drawings on this page are simplified illustrations. Project geometry and adaptation notes are in the <a href="../output/aip_four_component/source/four_component.svg">synthetic drawing</a> and <a href="../output/aip_four_component/source/symbol_reference.json">symbol provenance record</a>.</p>
+    </footer>
+  </main>
+</body>
+</html>

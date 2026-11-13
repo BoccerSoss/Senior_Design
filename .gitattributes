@@ -1,0 +1,16 @@
+* text=auto
+*.py text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.md text eol=lf
+*.json text eol=lf
+*.csv text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.svg text eol=lf
+*.png binary
+*.ttf binary
+.gitattributes text eol=lf
+requirements.lock text eol=lf
+# Preserve exact bytes covered by the drawing package's own SHA-256 manifest.
+output/aip_four_component/** -text

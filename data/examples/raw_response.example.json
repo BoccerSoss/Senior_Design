@@ -1,0 +1,20 @@
+{
+  "image": {
+    "width": 640,
+    "height": 240
+  },
+  "components": [
+    {
+      "id": "example-1",
+      "observed_tag": " eq - 7 ",
+      "type": "tank",
+      "bbox": null,
+      "evidence": null,
+      "uncertainty": "Software fixture only; no corresponding image observation."
+    }
+  ],
+  "connections": [],
+  "uncertainties": [
+    "Illustrative software fixture; never present this as extraction."
+  ]
+}

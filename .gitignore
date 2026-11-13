@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.py[cod]
+.work/
+.env
+.env.*
+!.env.example
+config.local.json
+*.key
+*.pem
+# Runs/packets may contain future sensitive inputs. Explicitly review before Git.
+runs/
+packets/
+dist/
+
+# Local course records and generated execution evidence are private by default.
+evidence/
+handoff/
+*.docx
+*.xlsx
+output/*.zip
+output/*.sha256

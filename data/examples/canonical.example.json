@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0.0",
+  "drawing": {
+    "drawing_id": "software-example",
+    "filename": "example.png",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "width": 640,
+    "height": 240,
+    "source": "No corresponding image; fixture for schema demonstration only",
+    "page": null,
+    "coordinate_convention": {
+      "origin": "top-left",
+      "units": "original image pixels",
+      "axes": "x right, y down",
+      "bbox_format": [
+        "xmin",
+        "ymin",
+        "xmax",
+        "ymax"
+      ],
+      "bounds": "minimum inclusive, maximum exclusive",
+      "scope": "symbol only; excludes tag text and external pipes"
+    }
+  },
+  "run": {
+    "run_id": "software-example-not-inference",
+    "timestamp": "2026-11-10T12:04:13.880579-05:00",
+    "timezone": "America/New_York",
+    "method": "software-fixture",
+    "provider": "illustrative example",
+    "model": null,
+    "access_route": "software fixture",
+    "settings": {
+      "purpose": "illustrative schema fixture; not an image interpretation"
+    },
+    "manual_stages": [],
+    "duration_seconds": null,
+    "raw_response_location": "raw_response.example.json",
+    "stage": "original",
+    "code": {
+      "revision": null,
+      "dirty_state": "software fixture; not an image inference run"
+    },
+    "prompt_version": "1.0.0",
+    "prompt_sha256": "43a9b09bfaafa815d6160f6679d57be9640ae62b94f36e6c45905f059c136d4e"
+  },
+  "components": [
+    {
+      "id": "example-1",
+      "observed_tag": " eq - 7 ",
+      "normalized_tag": "EQ-7",
+      "type": "tank",
+      "bbox": null,
+      "evidence": null,
+      "uncertainty": "Software fixture only; no corresponding image observation.",
+      "review_status": "pending human review"
+    }
+  ],
+  "connections": [],
+  "uncertainties": [
+    "Illustrative software fixture; never present this as extraction."
+  ],
+  "warnings": []
+}

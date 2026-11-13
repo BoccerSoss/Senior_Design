@@ -1,0 +1,111 @@
+{
+  "date": "2026-11-10",
+  "method": "Windows.Media.Ocr plus separator-crop OCR, pixel outline classification and raster pipe tracing",
+  "scope": "automatic local development on a known educational synthetic image; not held-out general accuracy",
+  "local_validation": {
+    "tests_passed": 63,
+    "skipped": 0,
+    "duration_seconds": 9.968,
+    "python": "3.12.10",
+    "pillow": "12.0.0",
+    "platform": "Windows x64"
+  },
+  "images": {
+    "clean": {
+      "equipment_candidates": 4,
+      "direct_contacts": 3
+    },
+    "blank": {
+      "equipment_candidates": 0,
+      "direct_contacts": 0
+    },
+    "disconnected": {
+      "equipment_candidates": 4,
+      "direct_contacts": 2
+    }
+  },
+  "clean_metrics": {
+    "components": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "component_types": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "connections": {
+      "tp": 3,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    }
+  },
+  "unresolved": {
+    "components": 0,
+    "connections": 0
+  },
+  "input_packet_immutable": true,
+  "manual_exit_code": 3,
+  "label_controls": {
+    "retagged": {
+      "passed": true,
+      "observed_tags": [
+        "ZX-742",
+        "V-101",
+        "P-101",
+        "T-102"
+      ],
+      "observed_types": [
+        "tank",
+        "valve",
+        "pump",
+        "tank"
+      ],
+      "candidate_count": 4,
+      "contact_count": 3
+    },
+    "labels_erased": {
+      "passed": true,
+      "observed_tags": [
+        null,
+        null,
+        null,
+        null
+      ],
+      "observed_types": [
+        "tank",
+        "valve",
+        "pump",
+        "tank"
+      ],
+      "candidate_count": 4,
+      "contact_count": 3
+    }
+  },
+  "all_controls_pass": true,
+  "raw_ocr_policy": "Native misread suffixes and every crop OCR pass remain preserved. Generic separator-ink suffix crops at 1x and 3x select agreeing pixel readings; no known-label whitelist or truth-based repair. Agreement is correlated evidence, not confidence.",
+  "confidence": null,
+  "live_vlm_response_obtained": false,
+  "human_reference_review": "pending independent human review",
+  "earlier_baseline": "reports/baseline_summary.json retains the original geometry-only F1=0 result.",
+  "limitations": [
+    "Only supported educational tank/valve/pump outlines and horizontal contacts.",
+    "WindowsOCR language capability and PowerShell5.1 required.",
+    "No general P&ID accuracy, plant compliance or operating-action claim."
+  ],
+  "public_sources": [
+    "https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr.ocrengine",
+    "https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr.ocrword",
+    "https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr.ocrresult.textangle"
+  ]
+}
