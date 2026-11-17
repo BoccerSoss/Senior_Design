@@ -1,5 +1,13 @@
 # AIP drawing extraction prototype
 
+## V3 equipment connections and drawing questions
+
+Download the `codex/aip-v3` branch, extract the ZIP and double-click [Open AIP V3.cmd](Open%20AIP%20V3.cmd). Open **Four-component example**, choose **Find connections with AI → Local connection model → Trace drawing**, then **View matrix**. Switch between V2 and V3 to compare the traced routes on the original image. **Ask about drawing** accepts questions such as “What connects to V-101?” and links each answer to the recorded evidence.
+
+**Connectivity matrix → Benchmark results** shows the paired evaluation on ten drawings. The offline V3 model reached **0.062 location-matched direct-edge F1** on six provisional NRC sheets, **0.000** on three independently annotated OPEN100 sheets, and **1.000** on the four-component synthetic control. Correctly named edge F1 on the NRC sheets was **0.000** for both methods. The project target is **0.90**. The public OPEN100 annotations support location matching only. The benchmark measured the local model. GPT and Claude are separately configurable.
+
+[V3 demo and model setup](docs/V3_WORKBENCH.md) · [Evaluation results and reproduction](docs/V3_EVALUATION.md) · [Independent annotation source](https://zenodo.org/records/14803338)
+
 ## V2 P&ID Matrix Builder
 
 Extract the repository ZIP and double-click [Open AIP V2.cmd](Open%20AIP%20V2.cmd). It opens locally at `http://127.0.0.1:8765`. Choose **Open example → Four-component example** or import a drawing image. Review the marked **Components** and **Connections**, then choose **View matrix**.

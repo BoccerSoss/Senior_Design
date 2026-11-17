@@ -13,7 +13,8 @@ const app = {
 const $ = (selector, root = document) => root.querySelector(selector);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 const dataValue = value => esc(value ?? "");
-const selectedSheet = () => app.data.sheets.find(sheet => sheet.id === app.sheetId);
+const sourceSheet = () => app.data.sheets.find(sheet => sheet.id === app.sheetId);
+const selectedSheet = () => window.aipV3?.displaySheet(sourceSheet()) || sourceSheet();
 const selectedComponent = () => selectedSheet()?.components?.find(component => component.id === app.componentId);
 const activeSheets = () => app.data.sheets.filter(sheet => sheet.facility_id === app.facilityId);
 const componentName = component => component?.tag || component?.label || component?.observed_tag || component?.normalized_tag || `Unnamed ${component?.type || "component"}`;
@@ -55,6 +56,14 @@ function facilitiesMarkup(selected = app.facilityId) {
 
 function setState(data) {
   app.data = { facilities: [], sheets: [], links: [], jobs: [], audit: [], settings: {}, ...data };
+  if (data.capabilities?.ai_connections && !document.getElementById("v3-script")) {
+    const script = document.createElement("script");
+    script.id = "v3-script";
+    script.src = "/v3.js";
+    script.onload = render;
+    script.onerror = () => { script.remove(); toast("The V3 controls could not be loaded. Refresh to retry.", true); };
+    document.head.append(script);
+  }
   if (!app.data.facilities.some(facility => facility.id === app.facilityId)) app.facilityId = app.data.facilities[0]?.id || "";
   remember("facility", app.facilityId);
   const sheets = activeSheets();
@@ -93,6 +102,7 @@ function render() {
   document.querySelectorAll("[data-view]").forEach(button => button.classList.toggle("active", button.dataset.view === app.view));
   if (app.view === "matrix") renderMatrix();
   else renderDrawings();
+  window.aipV3?.syncDrawing();
   app.initial = false;
 }
 
@@ -115,17 +125,18 @@ function libraryMarkup() {
 
 function renderDrawings() {
   const sheet = selectedSheet(), gridMode = app.view === "grid";
+  const aiView = window.aipV3?.isCandidate() && !gridMode;
   $("#main").innerHTML = `<div class="drawing-layout">${libraryMarkup()}<section class="viewer">
     ${sheet ? `<div class="viewer-heading"><div><h2>${esc(sheetName(sheet))}</h2><div class="muted">${esc(sheet.title || sheet.filename || "")} ${sheet.revision ? `· Revision ${esc(sheet.revision)}` : ""}</div></div><button class="button small sheet-menu" data-action="sheet-settings">Drawing details</button></div>
-    ${!gridMode ? `<div class="drawing-actions"><button class="button primary" data-action="reanalyze">Analyze drawing</button><button class="button" data-action="matrix-view">View matrix</button><span>${sheet.components?.length||0} components · ${sheet.connections?.length||0} recorded connections</span></div>` : ""}
+    ${!gridMode ? `<div class="drawing-actions">${aiView ? "" : '<button class="button primary" data-action="reanalyze">Analyze drawing</button>'}${window.aipV3?.drawingControls() || ""}<button class="button" data-action="matrix-view">View matrix</button><span>${sheet.components?.length||0} components · ${sheet.connections?.length||0} recorded connections</span></div>` : ""}
     <div class="viewer-toolbar">
-      ${gridMode ? `<span class="section-note">Spatial drawing grid</span>` : `<button class="tool-button${app.tool === "select" ? " active" : ""}" data-tool="select" title="Select equipment or pan">Select</button><button class="tool-button${app.tool === "component" ? " active" : ""}" data-tool="component" title="Drag a box around missing equipment">+ Component</button><button class="tool-button${app.tool === "pipe" ? " active" : ""}" data-tool="pipe" title="Connect immediate equipment endpoints">+ Connection</button><button class="tool-button${app.tool === "signal" ? " active" : ""}" data-tool="signal">+ Signal</button><button class="tool-button${app.tool === "move" ? " active" : ""}" data-tool="move">Move</button>`}
+      ${gridMode ? `<span class="section-note">Spatial drawing grid</span>` : aiView ? '<span class="section-note">AI observations · Select to inspect</span>' : `<button class="tool-button${app.tool === "select" ? " active" : ""}" data-tool="select" title="Select equipment or pan">Select</button><button class="tool-button${app.tool === "component" ? " active" : ""}" data-tool="component" title="Drag a box around missing equipment">+ Component</button><button class="tool-button${app.tool === "pipe" ? " active" : ""}" data-tool="pipe" title="Connect immediate equipment endpoints">+ Connection</button><button class="tool-button${app.tool === "signal" ? " active" : ""}" data-tool="signal">+ Signal</button><button class="tool-button${app.tool === "move" ? " active" : ""}" data-tool="move">Move</button>`}
       <span class="toolbar-divider"></span><button class="tool-button" data-action="zoom-out" title="Zoom out">−</button><span class="zoom-label" id="zoom-label"></span><button class="tool-button" data-action="zoom-in" title="Zoom in">+</button><button class="tool-button" data-action="fit">Fit</button>
       <label class="layer-toggle"><input type="checkbox" data-layer="${gridMode ? "gridLabels" : "labels"}"${(gridMode ? app.gridLabels : app.labels) ? " checked" : ""}>Labels</label>
       ${!gridMode ? `<label class="layer-toggle"><input type="checkbox" data-layer="pipes"${app.pipes ? " checked" : ""}>Connections</label><label class="layer-toggle"><input type="checkbox" data-layer="signals"${app.signals ? " checked" : ""}>Signals</label>` : `<label class="layer-toggle"><input type="checkbox" data-layer="gridVisible"${app.gridVisible ? " checked" : ""}>Grid</label>`}
     </div><div class="canvas-wrap"><canvas class="drawing-canvas" id="drawing-canvas" aria-label="Interactive drawing. Scroll to zoom, drag to pan and click components or connections to inspect." tabindex="0"></canvas><div class="canvas-caption" id="canvas-caption">${gridMode ? "Source drawing · grid intersections at component centers · Scroll to zoom" : toolHint()}</div></div>
     <div class="viewer-legend">${gridMode ? `<span>Component centers are (column, row) intersections. Grid lines are coordinate guides.</span>` : `<span><i class="legend-line"></i>Equipment connection</span><span><i class="legend-line signal"></i>Signal</span><span><i class="legend-line unknown"></i>Unclassified</span>`}</div>` : `<div class="empty-workspace"><div class="eyebrow">Drawing → Components and connections → Matrix</div><h1>Build a connectivity matrix</h1><p>Open a PNG or JPEG, review detected components and direct connections, then view the labeled matrix. PDFs are converted to images before analysis.</p><div class="actions"><button class="button primary" data-action="import">Import drawings</button><button class="button" data-action="show-demo">Open example</button></div></div>`}
-    </section><aside class="inspector">${gridMode ? `<div class="inspector-content">${gridPanelMarkup()}</div>` : `<div class="inspector-tabs">${["components", "connections"].map(tab => `<button data-tab="${tab}" class="${app.tab === tab ? "active" : ""}">${tab === "components" ? "Components" : "Connections"}</button>`).join("")}</div><div class="inspector-content">${app.tab === "connections" ? connectionsMarkup() : selectionMarkup()}</div>`}</aside></div>`;
+    </section><aside class="inspector">${gridMode ? `<div class="inspector-content">${gridPanelMarkup()}</div>` : `<div class="inspector-tabs">${["components", "connections"].map(tab => `<button data-tab="${tab}" class="${app.tab === tab ? "active" : ""}">${tab === "components" ? "Components" : "Connections"}</button>`).join("")}</div><div class="inspector-content">${aiView ? window.aipV3.inspector(sheet) : app.tab === "connections" ? connectionsMarkup() : selectionMarkup()}</div>`}</aside></div>`;
   if (sheet) { setupCanvas(); if (gridMode) loadGrid(sheet); }
 }
 
@@ -151,7 +162,7 @@ async function loadGrid(sheet) {
   if (app.gridPending.has(key) || gridMap(sheet)) return;
   app.gridPending.add(key);
   try {
-    const result = await api(`/api/grid?sheet_id=${encodeURIComponent(sheet.id)}`);
+    const result = await api(`/api/grid?${matrixQuery()}`);
     if (result.layout_kind !== "source-intersections" || !result.display || !Array.isArray(result.axes?.x) || !Array.isArray(result.axes?.y) || !Array.isArray(result.coordinates)) {
       throw new Error("The aligned grid needs the updated local server. Restart the app, then retry.");
     }
@@ -168,13 +179,13 @@ function gridPanelMarkup() {
   const sheet = selectedSheet();
   if (!sheet) return '<p class="empty-selection">Open a drawing to align its grid.</p>';
   const map = gridMap(sheet);
-  return `<div class="eyebrow">Equipment coordinates</div><h2>Aligned grid</h2><p class="muted tiny">The grid follows the original drawing. Each marked symbol center sits exactly on an integer intersection such as (1,1).</p>
+  return `<div class="eyebrow">Equipment coordinates</div><h2>Aligned grid</h2>${window.aipV3?.sourceSwitch() || ""}<p class="muted tiny">The grid follows the original drawing. Each marked symbol center sits exactly on an integer intersection such as (1,1).</p>
     <p class="section-note">Columns count from left to right and rows from top to bottom. Lines are placed through the component centers, so their spacing can be unequal. These are location references, not physical distances or pipe connections.</p>
     ${map?.grid ? `<p class="section-note">${Number(map.grid.columns)} vertical lines × ${Number(map.grid.rows)} horizontal lines. Zoom in or select a component to read closely spaced axis numbers.</p>` : ""}
     <button class="button wide" data-action="refresh-grid">Align to components</button>
     ${map?.error ? `<div class="report-note error-note">${esc(map.error)}</div>` : !map ? '<p class="section-note">Loading aligned coordinates…</p>' : ""}
     ${map?.warnings?.length ? `<ul class="warning-list">${map.warnings.map(item=>`<li>${esc(typeof item==="string"?item:item.message||JSON.stringify(item))}</li>`).join("")}</ul>` : ""}
-    ${map && !map.error ? `<a class="button wide" style="margin-top:9px" href="/api/export?sheet_id=${encodeURIComponent(sheet.id)}&format=grid" download>Export equipment coordinates</a>` : ""}<hr class="section-divider"><h3>Equipment locations</h3><div class="result-list">${(sheet.components || []).map(component => { const coordinate = gridPosition(component,sheet); return `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(component.id)}">${esc(componentName(component))}</button><div class="result-detail">${esc(component.type)} · ${!map ? "Loading coordinates…" : map.error ? "Unavailable" : coordinate ? `(${coordinate[0]},${coordinate[1]})` : "Unplaced"}</div></div></div>`; }).join("") || '<p class="section-note">Run extraction or mark components to assign locations.</p>'}</div>`;
+    ${map && !map.error ? `<a class="button wide" style="margin-top:9px" href="/api/export?${matrixQuery()}&format=grid" download>Export equipment coordinates</a>` : ""}<hr class="section-divider"><h3>Equipment locations</h3><div class="result-list">${(sheet.components || []).map(component => { const coordinate = gridPosition(component,sheet); return `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(component.id)}">${esc(componentName(component))}</button><div class="result-detail">${esc(component.type)} · ${!map ? "Loading coordinates…" : map.error ? "Unavailable" : coordinate ? `(${coordinate[0]},${coordinate[1]})` : "Unplaced"}</div></div></div>`; }).join("") || '<p class="section-note">Run extraction or mark components to assign locations.</p>'}</div>`;
 }
 
 function options(values, selected) {
@@ -250,10 +261,14 @@ function showLinkedDrawings() {
 }
 function refreshLinkedDrawings() { const content=$("#linked-content");if(content)content.innerHTML=linkedDrawingsMarkup(); }
 
-function matrixQuery() { return `facility_id=${encodeURIComponent(app.facilityId)}&sheet_id=${encodeURIComponent(app.sheetId)}`; }
+function matrixQuery() {
+  return `facility_id=${encodeURIComponent(app.facilityId)}&sheet_id=${encodeURIComponent(app.sheetId)}` +
+    (window.aipV3?.isCandidate() ? "&method=v3" : "");
+}
+function matrixKey(sheet) { return `${matrixQuery()}/${sheet.version}`; }
 
 async function loadMatrix(sheet) {
-  const key=`${app.facilityId}/${sheet.id}/${sheet.version}`;
+  const key=matrixKey(sheet);
   if(app.matrixPending.has(key)||app.matrixData[sheet.id]?.key===key)return;
   app.matrixPending.add(key);
   const query=matrixQuery();
@@ -269,9 +284,10 @@ async function loadMatrix(sheet) {
 
 function renderMatrix() {
   const sheet=selectedSheet(),cached=sheet?app.matrixData[sheet.id]:null;
-  const key=sheet?`${app.facilityId}/${sheet.id}/${sheet.version}`:"";
+  const key=sheet?matrixKey(sheet):"";
   const current=cached?.key===key?cached:null;
   $("#main").innerHTML=`<div class="matrix-layout">${libraryMarkup()}<section class="matrix-page"><div class="page-heading"><div><div class="eyebrow">3 · Connectivity output</div><h1>Connectivity matrix</h1><p>${sheet?`${esc(sheetName(sheet))} · This drawing only. `:""}Immediate equipment adjacency. <strong>1</strong> means a direct connection is recorded; <strong>0</strong> means none is recorded. The matrix is symmetric with a zero diagonal.</p></div>${sheet?`<div class="toolbar-right"><button class="button" data-action="drawing-view">Back to drawing</button><a class="button primary" href="/api/export?${matrixQuery()}&format=matrix" download>Save matrix CSV</a><a class="button" href="/api/export?${matrixQuery()}&format=matrix-json" download>Save JSON</a></div>`:""}</div>${!sheet?'<div class="card"><p>Open an example or import a drawing to create its connectivity matrix.</p><button class="button primary" data-action="show-demo">Open example</button></div>':current?.error?`<div class="card"><h2>Matrix could not be loaded</h2><p class="inline-error">${esc(current.error)}</p><button class="button" data-action="refresh-matrix">Retry matrix</button></div>`:current?.result?matrixMarkup(current.result):'<div class="card matrix-loading"><div class="spinner"></div><p>Building the matrix from recorded components and connections…</p></div>'}</section></div>`;
+  if(sheet&&window.aipV3)window.aipV3.matrixControls();
   if(sheet&&!current)loadMatrix(sheet);
 }
 
@@ -295,7 +311,7 @@ function setupCanvas() {
   const key=`${sheet.id}:${sheet.image_url}`;
   if(app.imageKey!==key){
     app.imageKey=key;app.image=null;const image=new Image();
-    image.onload=()=>{if(app.imageKey!==key)return;app.image=image;fitCanvas();};
+    image.onload=()=>{if(app.imageKey!==key)return;app.image=image;fitCanvas();window.aipV3?.focusSelection();};
     image.onerror=()=>toast("The source image could not be opened.",true);
     image.src=sheet.image_url || `/api/images/${encodeURIComponent(sheet.id)}`;
   } else drawCanvas();

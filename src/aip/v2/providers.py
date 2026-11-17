@@ -102,9 +102,13 @@ def _config(settings, require_ready=False):
     base = _setting(settings, "base_url") or os.environ.get("AIP_AI_BASE_URL", "").strip()
     base, external = _base_url(base or _DEFAULT_BASE.get(provider, ""), provider)
     key_env = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+    if provider == "compatible" and _setting(settings, "credential_env") == "AIP_GATEWAY_API_KEY":
+        key_env = "AIP_GATEWAY_API_KEY"
     # Compatible mode also covers local model servers. A cloud credential must
     # never be forwarded to loopback merely because it exists in the environment.
     key = "" if provider == "local" or not external else os.environ.get(key_env, "").strip()
+    if provider in _DEFAULT_BASE and base == _DEFAULT_BASE[provider]:
+        key = _setting(settings, "_session_key") or key
     if key and any(ord(char) < 32 for char in key):
         raise ProviderError(f"{key_env} contains invalid header characters.")
     config = {"provider": provider, "model": model, "base_url": base,

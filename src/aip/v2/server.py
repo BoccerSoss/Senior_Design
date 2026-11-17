@@ -398,15 +398,24 @@ class Application:
             raise ValueError("Choose a drawing or facility for the connectivity matrix.")
         return build_matrix(self.store.snapshot(), facility_id, sheet_id)
 
+    def matrix_query(self, query):
+        if query.get("method", ["v2"])[0] != "v2":
+            raise ValueError("Unknown matrix method.")
+        return self.matrix(query.get("facility_id", [None])[0], query.get("sheet_id", [None])[0])
+
+    def grid_query(self, query):
+        if query.get("method", ["v2"])[0] != "v2":
+            raise ValueError("Unknown grid method.")
+        return equipment_positions(self.store.sheet(query.get("sheet_id", [None])[0]))
+
     def export(self, query):
         state = self.state(query.get("facility_id", [None])[0])
         sheet_id = query.get("sheet_id", [None])[0]
         kind = query.get("format", ["json"])[0]
         if kind == "grid":
-            sheet = self.store.sheet(sheet_id)
-            return json.dumps(equipment_positions(sheet), indent=2).encode(), "application/json", "equipment-grid.json"
+            return json.dumps(self.grid_query(query), indent=2).encode(), "application/json", "equipment-grid.json"
         if kind in {"matrix", "matrix-json", "connections", "connections-json"}:
-            result = self.matrix(query.get("facility_id", [None])[0], sheet_id)
+            result = self.matrix_query(query)
             if kind == "matrix":
                 return matrix_csv(result).encode("utf-8-sig"), "text/csv", "connectivity-matrix.csv"
             if kind == "matrix-json":
@@ -446,6 +455,8 @@ class Application:
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "AIPV2/" + VERSION
+    app_version = VERSION
+    read_tools = READ_TOOLS
     MCP_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
 
     @property
@@ -454,6 +465,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         return
+
+    def extra_get(self, path, query):
+        return False
+
+    def extra_post(self, path, body):
+        return False
 
     def _host_ok(self):
         name = self.headers.get("Host", "").split(":")[0]
@@ -500,6 +517,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send({"error": "Cross-origin request denied."}, 403)
             parsed = urlsplit(self.path)
             path, query = parsed.path, parse_qs(parsed.query)
+            if self.extra_get(path, query):
+                return
             if path == "/mcp":
                 if not self._authorized():
                     return self.send({"error": "API key required."}, 401)
@@ -512,9 +531,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/providers":
                 return self.send(self.app.providers())
             if path == "/api/matrix":
-                return self.send(self.app.matrix(query.get("facility_id", [None])[0], query.get("sheet_id", [None])[0]))
+                return self.send(self.app.matrix_query(query))
             if path == "/api/grid":
-                return self.send(equipment_positions(self.app.store.sheet(query["sheet_id"][0])))
+                return self.send(self.app.grid_query(query))
             if path.startswith("/api/jobs/"):
                 job = find(self.app.store.snapshot()["jobs"], path.rsplit("/", 1)[-1])
                 return self.send(job or {"error": "Job was not found."}, 200 if job else 404)
@@ -544,13 +563,13 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({"error": "Cross-origin access denied."}, 403)
                 endpoint = "http://" + self.headers["Host"]
                 return self.send({"url": endpoint + "/mcp", "api_key": self.app.store.snapshot(private=True)["api_key"],
-                                  "tools": READ_TOOLS, "rest": endpoint + "/api/v1/docs",
+                                  "tools": self.read_tools, "rest": endpoint + "/api/v1/docs",
                                   "scope": "Read-only facility graph and candidate isolation tools."})
             if path.startswith("/api/v1/"):
                 if not self._authorized():
                     return self.send({"error": "Set X-API-KEY or Authorization Bearer."}, 401)
                 if path == "/api/v1/docs":
-                    return self.send({"tools": READ_TOOLS, "invoke": "POST /api/v1/tools/{tool_name} with tool arguments",
+                    return self.send({"tools": self.read_tools, "invoke": "POST /api/v1/tools/{tool_name} with tool arguments",
                                       "facilities": "/api/v1/facilities", "drawings": "/api/v1/drawings?facility_id=...",
                                       "graph": "/api/v1/graph?facility_id=...", "mcp": "/mcp"})
                 if path == "/api/v1/facilities":
@@ -617,6 +636,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._mcp(body)
             if not isinstance(body, dict):
                 raise ValueError("Request must be a JSON object.")
+            if self.extra_post(parsed.path, body):
+                return
             if parsed.path == "/api/action":
                 result = self.app.action(body)
                 result["state"] = self.app.state()
@@ -696,18 +717,18 @@ class Handler(BaseHTTPRequestHandler):
                 return fail(-32602, "Initialize requires protocolVersion, capabilities, and clientInfo name/version.")
             result = {"protocolVersion": version if version in self.MCP_VERSIONS else self.MCP_VERSIONS[0],
                       "capabilities": {"tools": {}},
-                      "serverInfo": {"name": "aip-local-workbench", "version": VERSION}}
+                      "serverInfo": {"name": "aip-local-workbench", "version": self.app_version}}
         elif method == "tools/list":
             if params.get("cursor") is not None:
                 return fail(-32602, "This tool list does not use pagination cursors.")
             result = {"tools": [{**tool, "annotations": {"readOnlyHint": True, "destructiveHint": False,
                                                          "idempotentHint": True, "openWorldHint": False}}
-                                for tool in READ_TOOLS]}
+                                for tool in self.read_tools]}
         elif method == "tools/call":
             name, arguments = params.get("name"), params.get("arguments", {})
             if not isinstance(name, str) or not isinstance(arguments, dict):
                 return fail(-32602, "Tool call requires a name and an arguments object.")
-            tool = next((value for value in READ_TOOLS if value["name"] == name), None)
+            tool = next((value for value in self.read_tools if value["name"] == name), None)
             if tool is None:
                 return fail(-32602, "Unknown read-only tool.")
             schema = tool["inputSchema"]
@@ -727,13 +748,13 @@ class Handler(BaseHTTPRequestHandler):
         return reply({"jsonrpc": "2.0", "id": request_id, "result": result})
 
 
-def serve(directory, port=8765, open_browser=True):
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    server.app = Application(directory)
+def serve(directory, port=8765, open_browser=True, *, handler=Handler, application=Application, version=VERSION):
+    server = ThreadingHTTPServer(("127.0.0.1", port), handler)
+    server.app = application(directory)
     address = f"http://127.0.0.1:{server.server_address[1]}"
     (server.app.store.directory / "server.json").write_text(
-        json.dumps({"url": address, "pid": os.getpid(), "version": VERSION}), encoding="utf-8")
-    print(f"AIP V2 running at {address}", flush=True)
+        json.dumps({"url": address, "pid": os.getpid(), "version": version}), encoding="utf-8")
+    print(f"AIP {version} running at {address}", flush=True)
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(address)).start()
     try:

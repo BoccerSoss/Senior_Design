@@ -1,0 +1,12 @@
+{
+  "cohort": "Four-component synthetic development drawing",
+  "review_status": "Computer-generated development example. This was used to design the V2 method and is outside the real-drawing comparison.",
+  "sheets": [
+    {
+      "id": "synthetic-four-component",
+      "image": "four_component.png",
+      "image_sha256": "373ecdf79dd7211e9b615b84f8e459f353543a57b5aaf201605be0a388fea74a",
+      "reference": "../reference/four_component.reference.json"
+    }
+  ]
+}
