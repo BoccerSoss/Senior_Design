@@ -10,11 +10,13 @@ Revised 17 November 2026 to restore the original project design: **read a P&ID i
 | Connectivity matrix | Visible labeled 0/1 table, explicit observation order, symmetric immediate adjacency, zero diagonal, direct edge list and CSV/JSON export. [Matrix code](../src/aip/v2/matrix.py) | Zero means no included recorded direct edge; diagnostics can still identify incomplete evidence. No path through another equipment becomes a shortcut edge. |
 | Visual review and correction | Zoom/pan, marked symbols and connections, equipment/connection editing and stored corrections. | Ambiguous reconciliation after reanalysis requires review. |
 | Connected documents | Link review, connector comparison and destination navigation inside **Drawing → Connections**. | Suggestions require confirmation. Off-page flags remain navigation/topology evidence rather than equipment rows or cross-sheet shortcut edges in a selected-sheet matrix. |
-| Coordinates | Separate **Grid** view with rows/columns, equipment coordinate labels and coordinate JSON. [Grid code](../src/aip/v2/grid.py) | Cells reference drawing positions, not physical dimensions. Grid changes do not change matrix adjacency. |
+| Coordinates | Separate **Grid** overlay on the original drawing. Vertical/horizontal axes pass through exact symbol-center positions; their sorted one-based indexes give named coordinates and matching JSON. [Grid code](../src/aip/v2/grid.py) | Counts are derived and read-only. Spacing can vary and near-center lines can be dense. Exact duplicate centers share a point with a warning; missing boxes remain unplaced. Source positions, pipes and matrix adjacency stay unchanged. |
 | Validation and evaluation | Original CLI validation/evaluation and preserved run evidence; matrix diagnostics are shown beside its output. [Original results](results.md), [verification record](V2_VERIFICATION.md) | The handmade/reference acceptance and independent student check remain human steps. Development fixtures do not establish held-out performance. |
 | Reproducible local use | Windows launcher, locked dependencies, local data, public source package and tests. [Guide](V2_WORKBENCH.md) | Teammates must test their own setup; their access/signoff is not inferred. |
 
 The four-component PNG is at `data/input/four_component.png`; its generator and reference answer are under `output/aip_four_component/source` and `output/aip_four_component/truth`. Extraction uses rendered image evidence, while reference answers are reserved for evaluation.
+
+Grid axes come from the exact distinct center coordinates of valid source boxes. The overlay neither shifts equipment nor clusters nearby centers. Axis index coordinates can recompute when the observation set changes. Labels, the coordinate list and JSON export share the grid API's result. Drawing and Connectivity matrix retain the source and direct-connectivity evidence.
 
 ## Optional backend research
 

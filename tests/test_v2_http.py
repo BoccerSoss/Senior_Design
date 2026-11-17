@@ -264,14 +264,23 @@ class HttpTests(unittest.TestCase):
         self.assertFalse(any(item["component_id"] == "cv-201" for item in body["closures"]))
         self.assertFalse(self.provider_transport.called)
 
-    def test_grid_export_uses_spatial_cells_independently_of_connection_topology(self):
+    def test_grid_export_uses_integer_intersections_independently_of_connection_topology(self):
         demo = create_demo(self.app.store)
         query = urlencode({"sheet_id": demo["sheet_ids"][0], "format": "grid"})
         status, first, _ = self.call("GET", "/api/export?" + query)
         self.assertEqual(status, 200)
         coordinates = {item["component_id"]: item["coordinate"] for item in first["coordinates"]}
-        # P-101 center = (550, 410), image = (1400, 850), fixed grid = (14, 10).
-        self.assertEqual(coordinates["p-101"], [6, 5])
+        # A component is exactly on its indexed source-center axes.
+        self.assertEqual(coordinates["p-101"], [first["axes"]["x"].index(550)+1,
+                                               first["axes"]["y"].index(410)+1])
+        status, live, _ = self.call("GET", "/api/grid?sheet_id=" + demo["sheet_ids"][0])
+        self.assertEqual(status, 200)
+        self.assertEqual(first, live)
+        self.assertEqual("source-intersections", first["layout_kind"])
+        for item in first["coordinates"]:
+            col, row = item["coordinate"]
+            self.assertEqual([first["axes"]["x"][col-1], first["axes"]["y"][row-1]], item["display_point"])
+            self.assertEqual(item["source_anchor"], item["display_point"])
         def remove_connections(state):
             next(sheet for sheet in state["sheets"] if sheet["id"] == demo["sheet_ids"][0])["connections"] = []
         self.app.store.mutate(remove_connections)

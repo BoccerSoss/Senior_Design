@@ -8,7 +8,7 @@ const app = {
   tool: "select", search: "", gridVisible: true, gridLabels: true, labels: true, pipes: true, signals: true,
   scale: 1, offset: [0, 0], image: null, imageKey: "", pointer: null, draft: null,
   matrixData: {}, matrixPending: new Set(), linkSourceId: "",
-  poll: null, toastTimer: null, integration: null, gridData: {}, initial: true,
+  poll: null, toastTimer: null, integration: null, gridData: {}, gridPending: new Set(), initial: true,
 };
 const $ = (selector, root = document) => root.querySelector(selector);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
@@ -123,8 +123,8 @@ function renderDrawings() {
       <span class="toolbar-divider"></span><button class="tool-button" data-action="zoom-out" title="Zoom out">−</button><span class="zoom-label" id="zoom-label"></span><button class="tool-button" data-action="zoom-in" title="Zoom in">+</button><button class="tool-button" data-action="fit">Fit</button>
       <label class="layer-toggle"><input type="checkbox" data-layer="${gridMode ? "gridLabels" : "labels"}"${(gridMode ? app.gridLabels : app.labels) ? " checked" : ""}>Labels</label>
       ${!gridMode ? `<label class="layer-toggle"><input type="checkbox" data-layer="pipes"${app.pipes ? " checked" : ""}>Connections</label><label class="layer-toggle"><input type="checkbox" data-layer="signals"${app.signals ? " checked" : ""}>Signals</label>` : `<label class="layer-toggle"><input type="checkbox" data-layer="gridVisible"${app.gridVisible ? " checked" : ""}>Grid</label>`}
-    </div><div class="canvas-wrap"><canvas class="drawing-canvas" id="drawing-canvas" aria-label="Interactive drawing. Scroll to zoom, drag to pan and click components or connections to inspect." tabindex="0"></canvas><div class="canvas-caption" id="canvas-caption">${gridMode ? "Grid cells use column, row from the top-left of the sheet" : toolHint()}</div></div>
-    <div class="viewer-legend">${gridMode ? `<span>Equipment center → (column, row)</span>` : `<span><i class="legend-line"></i>Equipment connection</span><span><i class="legend-line signal"></i>Signal</span><span><i class="legend-line unknown"></i>Unclassified</span>`}</div>` : `<div class="empty-workspace"><div class="eyebrow">Drawing → Components and connections → Matrix</div><h1>Build a connectivity matrix</h1><p>Open a PNG or JPEG, review detected components and direct connections, then view the labeled matrix. PDFs are converted to images before analysis.</p><div class="actions"><button class="button primary" data-action="import">Import drawings</button><button class="button" data-action="show-demo">Open example</button></div></div>`}
+    </div><div class="canvas-wrap"><canvas class="drawing-canvas" id="drawing-canvas" aria-label="Interactive drawing. Scroll to zoom, drag to pan and click components or connections to inspect." tabindex="0"></canvas><div class="canvas-caption" id="canvas-caption">${gridMode ? "Source drawing · grid intersections at component centers · Scroll to zoom" : toolHint()}</div></div>
+    <div class="viewer-legend">${gridMode ? `<span>Component centers are (column, row) intersections. Grid lines are coordinate guides.</span>` : `<span><i class="legend-line"></i>Equipment connection</span><span><i class="legend-line signal"></i>Signal</span><span><i class="legend-line unknown"></i>Unclassified</span>`}</div>` : `<div class="empty-workspace"><div class="eyebrow">Drawing → Components and connections → Matrix</div><h1>Build a connectivity matrix</h1><p>Open a PNG or JPEG, review detected components and direct connections, then view the labeled matrix. PDFs are converted to images before analysis.</p><div class="actions"><button class="button primary" data-action="import">Import drawings</button><button class="button" data-action="show-demo">Open example</button></div></div>`}
     </section><aside class="inspector">${gridMode ? `<div class="inspector-content">${gridPanelMarkup()}</div>` : `<div class="inspector-tabs">${["components", "connections"].map(tab => `<button data-tab="${tab}" class="${app.tab === tab ? "active" : ""}">${tab === "components" ? "Components" : "Connections"}</button>`).join("")}</div><div class="inspector-content">${app.tab === "connections" ? connectionsMarkup() : selectionMarkup()}</div>`}</aside></div>`;
   if (sheet) { setupCanvas(); if (gridMode) loadGrid(sheet); }
 }
@@ -133,34 +133,48 @@ function toolHint() {
   return { select: "Scroll to zoom · Drag to pan · Click to inspect", component: "Drag a rectangle around the equipment symbol", pipe: "Click the first component, then the next. Click a blank point to add a bend.", signal: "Click both signal endpoints. Click blank space to add a bend.", move: "Drag equipment to adjust its box" }[app.tool];
 }
 
-function gridPosition(component, sheet = selectedSheet()) {
+function gridMap(sheet = selectedSheet()) {
   const stored = app.gridData[sheet?.id];
-  if (stored && stored.version === sheet?.version) {
-    const coordinate = stored.coordinates?.find(item => item.component_id === component.id)?.coordinate;
-    if (coordinate) return coordinate;
-  }
-  const grid = sheet?.grid || {};
-  const [x, y] = pointCenter(component);
-  const columns = Number(grid.columns) || 12, rows = Number(grid.rows) || 16;
-  return [Math.min(columns, Math.max(1, Math.floor(x / sheet.width * columns) + 1)), Math.min(rows, Math.max(1, Math.floor(y / sheet.height * rows) + 1))];
+  return stored?.version === sheet?.version ? stored : null;
+}
+
+function gridRecord(component, sheet = selectedSheet()) {
+  return gridMap(sheet)?.coordinates?.find(item => item.component_id === component.id) || null;
+}
+
+function gridPosition(component, sheet = selectedSheet()) {
+  return gridRecord(component, sheet)?.coordinate || null;
 }
 
 async function loadGrid(sheet) {
-  if (app.gridData[sheet.id]?.version === sheet.version) return;
+  const key = `${sheet.id}/${sheet.version}`;
+  if (app.gridPending.has(key) || gridMap(sheet)) return;
+  app.gridPending.add(key);
   try {
     const result = await api(`/api/grid?sheet_id=${encodeURIComponent(sheet.id)}`);
+    if (result.layout_kind !== "source-intersections" || !result.display || !Array.isArray(result.axes?.x) || !Array.isArray(result.axes?.y) || !Array.isArray(result.coordinates)) {
+      throw new Error("The aligned grid needs the updated local server. Restart the app, then retry.");
+    }
+    if (selectedSheet()?.id === sheet.id && selectedSheet()?.version !== sheet.version) return;
     app.gridData[sheet.id] = {...result,version:sheet.version};
-    if (app.view === "grid" && app.sheetId === sheet.id) drawCanvas();
-  } catch (error) { toast(error.message,true); }
+  } catch (error) { app.gridData[sheet.id] = {version:sheet.version,error:error.message}; }
+  finally {
+    app.gridPending.delete(key);
+    if (app.view === "grid" && app.sheetId === sheet.id && selectedSheet()?.version === sheet.version) renderDrawings();
+  }
 }
 
 function gridPanelMarkup() {
   const sheet = selectedSheet();
-  if (!sheet) return '<p class="empty-selection">Open a drawing to set up its grid.</p>';
-  const grid = sheet.grid || {};
-  return `<div class="eyebrow">Drawing coordinates</div><h2>Spatial grid</h2><p class="muted tiny">Every equipment item has a cell based on its center on the sheet. Branches keep their position on the same grid.</p>
-    <form id="grid-form"><div class="form-grid"><label class="field">Columns<input name="columns" type="number" min="1" max="200" required value="${Number(grid.columns) || 12}"></label><label class="field">Rows<input name="rows" type="number" min="1" max="200" required value="${Number(grid.rows) || 16}"></label></div><p class="section-note">Origin at the top-left. Columns increase to the right and rows increase downward. Grid settings do not change connections or the matrix.</p><button class="button primary wide" type="submit">Apply grid</button></form>
-    <a class="button wide" style="margin-top:9px" href="/api/export?sheet_id=${encodeURIComponent(sheet.id)}&format=grid" download>Export equipment coordinates</a><hr class="section-divider"><h3>Equipment locations</h3><div class="result-list">${(sheet.components || []).map(component => { const [col,row] = gridPosition(component,sheet); return `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(component.id)}">${esc(componentName(component))}</button><div class="result-detail">${esc(component.type)} · (${col},${row})</div></div></div>`; }).join("") || '<p class="section-note">Run extraction or add equipment to assign locations.</p>'}</div>`;
+  if (!sheet) return '<p class="empty-selection">Open a drawing to align its grid.</p>';
+  const map = gridMap(sheet);
+  return `<div class="eyebrow">Equipment coordinates</div><h2>Aligned grid</h2><p class="muted tiny">The grid follows the original drawing. Each marked symbol center sits exactly on an integer intersection such as (1,1).</p>
+    <p class="section-note">Columns count from left to right and rows from top to bottom. Lines are placed through the component centers, so their spacing can be unequal. These are location references, not physical distances or pipe connections.</p>
+    ${map?.grid ? `<p class="section-note">${Number(map.grid.columns)} vertical lines × ${Number(map.grid.rows)} horizontal lines. Zoom in or select a component to read closely spaced axis numbers.</p>` : ""}
+    <button class="button wide" data-action="refresh-grid">Align to components</button>
+    ${map?.error ? `<div class="report-note error-note">${esc(map.error)}</div>` : !map ? '<p class="section-note">Loading aligned coordinates…</p>' : ""}
+    ${map?.warnings?.length ? `<ul class="warning-list">${map.warnings.map(item=>`<li>${esc(typeof item==="string"?item:item.message||JSON.stringify(item))}</li>`).join("")}</ul>` : ""}
+    ${map && !map.error ? `<a class="button wide" style="margin-top:9px" href="/api/export?sheet_id=${encodeURIComponent(sheet.id)}&format=grid" download>Export equipment coordinates</a>` : ""}<hr class="section-divider"><h3>Equipment locations</h3><div class="result-list">${(sheet.components || []).map(component => { const coordinate = gridPosition(component,sheet); return `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(component.id)}">${esc(componentName(component))}</button><div class="result-detail">${esc(component.type)} · ${!map ? "Loading coordinates…" : map.error ? "Unavailable" : coordinate ? `(${coordinate[0]},${coordinate[1]})` : "Unplaced"}</div></div></div>`; }).join("") || '<p class="section-note">Run extraction or mark components to assign locations.</p>'}</div>`;
 }
 
 function options(values, selected) {
@@ -334,9 +348,49 @@ function drawConnection(ctx,edge,sheet){
   }
 }
 
-function drawGrid(ctx,sheet){const columns=Number(sheet.grid?.columns)||12,rows=Number(sheet.grid?.rows)||16;const dx=sheet.width/columns,dy=sheet.height/rows;ctx.strokeStyle="#3c796b4d";ctx.lineWidth=.8/app.scale;ctx.beginPath();for(let i=0;i<=columns;i++){ctx.moveTo(i*dx,0);ctx.lineTo(i*dx,sheet.height);}for(let j=0;j<=rows;j++){ctx.moveTo(0,j*dy);ctx.lineTo(sheet.width,j*dy);}ctx.stroke();ctx.font=`${10/app.scale}px Segoe UI`;ctx.textAlign="center";ctx.textBaseline="top";ctx.fillStyle="#246554";for(let i=0;i<columns;i++)ctx.fillText(String(i+1),(i+.5)*dx,6/app.scale);ctx.textAlign="left";ctx.textBaseline="middle";for(let j=0;j<rows;j++)ctx.fillText(String(j+1),6/app.scale,(j+.5)*dy);}
+function drawGrid(ctx,sheet) {
+  const map=gridMap(sheet);
+  if(!map?.axes)return;
+  const xs=map.axes.x,ys=map.axes.y;
+  ctx.strokeStyle="#3c796b4d";ctx.lineWidth=.8/app.scale;ctx.beginPath();
+  for(const x of xs){ctx.moveTo(x,0);ctx.lineTo(x,sheet.height);}
+  for(const y of ys){ctx.moveTo(0,y);ctx.lineTo(sheet.width,y);}
+  ctx.stroke();
+  const selected=selectedComponent(),point=selected?gridRecord(selected,sheet):null;
+  if(point?.display_point){
+    const[x,y]=point.display_point;ctx.strokeStyle="#14654ea6";ctx.lineWidth=1.7/app.scale;ctx.beginPath();
+    ctx.moveTo(x,0);ctx.lineTo(x,sheet.height);ctx.moveTo(0,y);ctx.lineTo(sheet.width,y);ctx.stroke();
+  }
+  ctx.font=`${11/app.scale}px Segoe UI`;
+  function axisLabel(value,x,y,horizontal,active=false){
+    const text=String(value),pad=3/app.scale,width=ctx.measureText(text).width;
+    ctx.textAlign=horizontal?"center":"left";ctx.textBaseline=horizontal?"top":"middle";
+    const left=horizontal?x-width/2-pad:x-pad,top=horizontal?y-pad:y-7/app.scale;
+    ctx.fillStyle=active?"#e5f3eaff":"#ffffffed";ctx.fillRect(left,top,width+2*pad,15/app.scale);
+    ctx.fillStyle=active?"#104f3b":"#246554";ctx.fillText(text,x,y);
+  }
+  const selectedColumn=point?.coordinate?.[0],selectedRow=point?.coordinate?.[1],gap=24/app.scale;
+  let last=-Infinity;
+  xs.forEach((x,index)=>{if(index+1===selectedColumn)return;if(selectedColumn&&Math.abs(x-xs[selectedColumn-1])<gap)return;if(x-last>=gap){axisLabel(index+1,x,6/app.scale,true);last=x;}});
+  last=-Infinity;
+  ys.forEach((y,index)=>{if(index+1===selectedRow)return;if(selectedRow&&Math.abs(y-ys[selectedRow-1])<gap)return;if(y-last>=gap){axisLabel(index+1,6/app.scale,y,false);last=y;}});
+  if(selectedColumn)axisLabel(selectedColumn,xs[selectedColumn-1],6/app.scale,true,true);
+  if(selectedRow)axisLabel(selectedRow,6/app.scale,ys[selectedRow-1],false,true);
+  for(const item of map.coordinates||[]){
+    if(!item.display_point)continue;
+    const[x,y]=item.display_point;ctx.beginPath();ctx.arc(x,y,(item.component_id===app.componentId?3.2:2.2)/app.scale,0,Math.PI*2);
+    ctx.fillStyle="#166b51";ctx.fill();ctx.strokeStyle="white";ctx.lineWidth=.8/app.scale;ctx.stroke();
+  }
+}
 
-function drawEquipmentLabel(ctx,component,sheet){const[x0,,x1,y1]=component.bbox;const[col,row]=gridPosition(component,sheet);const label=app.view==="grid"?`${componentName(component)} (${col},${row})`:componentName(component);ctx.font=`${11/app.scale}px Segoe UI`;ctx.textAlign="center";ctx.textBaseline="top";const width=ctx.measureText(label).width+8/app.scale;const x=(x0+x1)/2,y=y1+5/app.scale;ctx.fillStyle="#fffffff2";ctx.fillRect(x-width/2,y-1/app.scale,width,15/app.scale);ctx.fillStyle=component.id===app.componentId?"#14654e":"#254f62";ctx.fillText(label,x,y);}
+function drawEquipmentLabel(ctx,component,sheet) {
+  const[x0,,x1,y1]=component.bbox,coordinate=gridPosition(component,sheet);
+  const label=app.view==="grid"?`${componentName(component)} ${coordinate?`(${coordinate[0]},${coordinate[1]})`:gridMap(sheet)?.error?"(Unavailable)":gridMap(sheet)?"(Unplaced)":"(Loading…)"}`:componentName(component);
+  ctx.font=`${11/app.scale}px Segoe UI`;ctx.textAlign="center";ctx.textBaseline="top";
+  const width=ctx.measureText(label).width+8/app.scale,x=(x0+x1)/2,y=y1+5/app.scale;
+  ctx.fillStyle="#fffffff2";ctx.fillRect(x-width/2,y-1/app.scale,width,15/app.scale);
+  ctx.fillStyle=component.id===app.componentId?"#14654e":"#254f62";ctx.fillText(label,x,y);
+}
 
 function eventPoint(event){const rect=$("#drawing-canvas").getBoundingClientRect();return[event.clientX-rect.left,event.clientY-rect.top];}
 function hitComponent(point){return [...(selectedSheet()?.components||[])].reverse().find(component=>component.bbox&&component.bbox[0]-4/app.scale<=point[0]&&point[0]<=component.bbox[2]+4/app.scale&&component.bbox[1]-4/app.scale<=point[1]&&point[1]<=component.bbox[3]+4/app.scale);}
@@ -385,6 +439,7 @@ document.addEventListener("click",async event=>{
     else if(name==="zoom-out")zoomCanvas(1/1.3);
     else if(name==="fit")fitCanvas();
     else if(name==="grid-view"){app.view="grid";app.tool="select";render();}
+    else if(name==="refresh-grid"){delete app.gridData[app.sheetId];renderDrawings();}
     else if(name==="sheet-settings")showSheetDetails();
     else if(name==="setup"){const form=$("#setup-form");form.elements.actor.value=app.data.settings.actor||"Local reviewer";form.elements.use_geometry_reference.checked=app.data.settings.use_geometry_reference!==false;$("#setup-dialog").showModal();}
     else if(name==="delete-component"){if(app.componentId&&confirm(`Remove ${componentName(selectedComponent())} and its connections?`)){await action("delete_component",{sheet_id:app.sheetId,component_id:app.componentId});app.componentId="";render();}}
@@ -411,7 +466,6 @@ document.addEventListener("submit",async event=>{
     if(form.id==="component-form"){const component={...selectedComponent(),tag:data.get("tag").trim(),type:data.get("type").trim(),review_status:data.get("review_status")};await action("save_component",{sheet_id:app.sheetId,component},{message:"Component correction saved."});}
     else if(form.id==="connection-form"){const connection={...selectedSheet().connections.find(item=>item.id===app.connectionId),...Object.fromEntries(data.entries())};await action("save_connection",{sheet_id:app.sheetId,connection},{message:"Connection correction saved. The matrix will use this record."});}
     else if(form.id==="link-form"){await action("save_link",{link:{from:{sheet_id:app.sheetId,component_id:data.get("from_component")},to:{sheet_id:data.get("to_sheet"),component_id:data.get("to_component")},status:"confirmed"}},{message:"Off-page connector link confirmed."});refreshLinkedDrawings();}
-    else if(form.id==="grid-form"){await action("update_sheet",{sheet_id:app.sheetId,patch:{grid:{columns:Number(data.get("columns")),rows:Number(data.get("rows")),origin:"top-left"}}},{message:"Drawing grid updated."});}
     else if(form.id==="setup-form"){await action("settings",{settings:{actor:data.get("actor").trim(),use_geometry_reference:data.get("use_geometry_reference")==="on"}},{message:"Extraction setup saved."});$("#setup-dialog").close();}
     else if(form.id==="import-form"){const files=$("#import-files").files;if(!files.length)return;const body=new FormData();for(const file of files)body.append("files",file,file.name);const facility=$("#import-facility").value;body.append("facility_id",facility);await api("/api/import",{method:"POST",body});$("#import-dialog").close();form.reset();if(app.facilityId!==facility){app.facilityId=facility;app.sheetId="";app.componentId="";app.connectionId="";}app.view="drawings";await loadState();toast("Import queued. Converted images and analysis progress appear in the drawing list.");}
   }catch(error){toast(error.message,true);}finally{if(submit&&submit.isConnected)submit.disabled=false;}

@@ -34,8 +34,12 @@ class StoreGridTests(unittest.TestCase):
         self.assertEqual(before["connections"], after["connections"])
         self.assertEqual(before["corrections"], after["corrections"])
         self.assertEqual([[1,1], [2,1]], [p["coordinate"] for p in equipment_positions(after)["coordinates"]])
-        shared = equipment_positions({**after, "grid": {"columns": 1, "rows": 1}})
-        self.assertEqual([[1,1], [1,1]], [p["coordinate"] for p in shared["coordinates"]])
+        aligned = equipment_positions({**after, "grid": {"columns": 1, "rows": 1}})
+        self.assertEqual([15,75], aligned["axes"]["x"])
+        self.assertEqual([15], aligned["axes"]["y"])
+        self.assertEqual([[1,1],[2,1]], [item["coordinate"] for item in aligned["coordinates"]])
+        self.assertEqual([item["coordinate"] for item in equipment_positions(after)["coordinates"]],
+                         [item["coordinate"] for item in aligned["coordinates"]])
 
     def test_grid_bounds_and_missing_symbol_position(self):
         for value in (0, 201, True, 2.5):

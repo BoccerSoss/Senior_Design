@@ -1,5 +1,20 @@
 # V2 verification record
 
+## Source-aligned grid revision — 17 November 2026
+
+The Grid view remains a separate tab and overlays the original source drawing. Vertical axes use exact distinct valid symbol-center x positions and horizontal axes use the corresponding y positions, each sorted in ascending order. Every valid boxed observation lies at an intersection. Its integer coordinate is the one-based column/row axis index. Counts are derived and read-only; spacing can vary and nearby axes can be dense.
+
+Source images, symbol positions, boxes and pipes remain untouched. There is no crop repositioning, projection, clustering or invented collision placement. Exact duplicate centers share a coordinate with a warning; missing boxes remain unplaced. Mark labels, the coordinate list and JSON export must use the same grid API result. Matrix relations and linked-document navigation are unchanged.
+
+Validation for this revision:
+
+- **180 local tests passed**, including 14 source-grid regressions for exact centers, distinct nearby axes, coincident centers, missing/invalid boxes, stable labels/order and finite coordinates.
+- All **125 observations across the six beginner PNGs** resolved to their exact source-box centers and corresponding indexed x/y-axis intersections. Source records and the six matrices remained unchanged.
+- Before/after checks on **13 live drawing sheets** confirmed unchanged equipment records, connection records and labeled matrix values.
+- The Chrome browser displayed the separate Grid tab over the original Figure A.1 image, with 12 vertical and 20 horizontal axes and coordinate labels matching the populated equipment list. JavaScript syntax and VM rendering checks passed; grid export and API data agree in HTTP tests.
+
+The four-component symbols are not assumed to share row 1: their exact source centers yield T-101 (1,1), V-101 (2,3), P-101 (3,2) and T-102 (4,1). Earlier 166- and 149-test results below belong to the earlier matrix/cell-overlay builds and are preserved as historical records.
+
 ## Matrix-focused revision — 17 November 2026
 
 The revised interface restores the drawing-to-equipment-to-matrix workflow. Its primary tabs are **Drawing**, **Connectivity matrix** and **Grid**. The four-component image is the introductory example; the matrix is displayed directly with labeled rows/columns and direct-edge diagnostics. Linked-document review and navigation remain supporting features inside **Drawing → Connections**. Earlier assistant, audit and facility-graph pages are outside this primary workflow. The original extraction/evaluation convention remains immediate undirected adjacency.
@@ -18,7 +33,7 @@ Validation for this revision is recorded separately from the earlier build below
 | P-101 | 0 | 1 | 0 | 1 |
 | T-102 | 0 | 0 | 1 | 0 |
 
-Browser review verified the three primary tabs, the visible Figure A.1 matrix (20 equipment rows and 18 direct edges), matrix-to-source connection inspection, and linked-document navigation from RL-001 to RL-002. In the four-component example, setting Grid to four columns and one row displayed T-101 (1,1), V-101 (2,1), P-101 (3,1) and T-102 (4,1); its matrix retained the three direct connections. The earlier browser observations below belong to the earlier build.
+Browser review of that build verified the three primary tabs, the visible Figure A.1 matrix (20 equipment rows and 18 direct edges), matrix-to-source connection inspection, and linked-document navigation from RL-001 to RL-002. Its Grid was still a source-image cell overlay: setting four columns and one row labeled T-101 (1,1), V-101 (2,1), P-101 (3,1) and T-102 (4,1) without placing symbol centers on the intersections; its matrix retained the three direct connections. The source-aligned grid revision above supersedes that display behavior.
 
 ## Earlier V2 build — 17 November 2026
 

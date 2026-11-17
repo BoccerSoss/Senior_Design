@@ -67,9 +67,15 @@ Only confirmed links are followed as established continuations. Suggested or mis
 
 ## Use the separate Grid tool
 
-Choose **Grid**, set **Columns** and **Rows**, and choose **Apply grid**. Cell **(1,1)** is at the top-left; columns increase to the right and rows downward. The center of each marked symbol determines its **(column,row)** cell. Coordinates appear below equipment and in the equipment locations list. **Export equipment coordinates** writes JSON.
+Choose **Grid** to see a grid aligned over the **original drawing**. Every equipment observation with a valid source box has a vertical and horizontal line passing through its exact symbol center. The source image, symbol positions, boxes and pipes stay in place.
 
-The grid divides the actual drawing. It is independent of the matrix order and connection graph. A branch does not restart the grid, and several nearby items may share one cell. Include the drawing/sheet ID when reporting a coordinate. Increasing rows or columns changes the location references, not direct adjacency. Source pixel boxes remain internal placement evidence.
+The vertical axes use the sorted distinct symbol-center **x** positions; horizontal axes use the sorted distinct **y** positions. Each equipment coordinate is the **one-based column index and row index** of those axes. Columns increase left to right and rows increase top to bottom. **Columns** and **Rows** are read-only counts derived from the observations rather than manual cell-size settings.
+
+Grid spacing can vary. Even slightly different center positions create distinct axes, so nearby lines can become dense; zoom in to inspect them. The grid does not cluster centers, impose uniform distances or assign positions by flow order. Two observations with exactly the same center share a coordinate and produce a warning. Equipment without a valid source box remains explicitly **unplaced**.
+
+Names and coordinates beneath marks, the equipment locations list and **Export equipment coordinates** all use the same grid API result. Include drawing/sheet and equipment IDs with a coordinate. Changing the observations can change the derived axes and their index coordinates.
+
+Equipment aligned visually along a pipe need not share one row if their marked centers differ. In the four-component drawing, the tank centers, pump center and valve center have different exact heights; the grid preserves those differences rather than shifting them onto a single row. Use **Connectivity matrix** for immediate equipment relations. The source-aligned overlay adds location references without changing connectivity or linked-document navigation.
 
 ## Import drawings
 
