@@ -21,6 +21,8 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe scripts/aip_v2.py --port 8766 --data runs/v2-other --no-browser
 ```
 
+The left-hand **Drawing library** groups every saved sheet by collection. Search by drawing or equipment name across the groups, or click a sheet to switch the current tab to its results. If the same page was imported into two collections, each copy retains its own observations and matrix.
+
 ## Demonstrate the original four-component example
 
 1. Choose **Open example → Four-component example**. The app reads the bundled PNG through the extraction pipeline. The generator and answer key are separate assets, outside the extractor input.
@@ -67,15 +69,13 @@ Only confirmed links are followed as established continuations. Suggested or mis
 
 ## Use the separate Grid tool
 
-Choose **Grid** to see a grid aligned over the **original drawing**. Every equipment observation with a valid source box has a vertical and horizontal line passing through its exact symbol center. The source image, symbol positions, boxes and pipes stay in place.
+Open **Grid** to see equipment on the original drawing. **Regular grid** is the initial layout. Read each pair as **(column, row)**. The upper-left intersection is **(1, 1)**, columns increase to the right and rows increase downward. Select a symbol or its entry under **Equipment locations** to inspect its position.
 
-The vertical axes use the sorted distinct symbol-center **x** positions; horizontal axes use the sorted distinct **y** positions. Each equipment coordinate is the **one-based column index and row index** of those axes. Columns increase left to right and rows increase top to bottom. **Columns** and **Rows** are read-only counts derived from the observations rather than manual cell-size settings.
+**Regular grid** uses equal horizontal and vertical spacing. The workbench centers the grid on the sheet and uses the drawing dimensions to fit the available rows and columns. For sheets with the default settings, it fits up to 12 columns and 16 rows. A component gets the nearest intersection to the center of its marked symbol. A center exactly halfway between intersections uses the one to the right or below. Several pieces of equipment can share a coordinate. Adding another mark leaves the existing grid lines in place.
 
-Grid spacing can vary. Even slightly different center positions create distinct axes, so nearby lines can become dense; zoom in to inspect them. The grid does not cluster centers, impose uniform distances or assign positions by flow order. Two observations with exactly the same center share a coordinate and produce a warning. Equipment without a valid source box remains explicitly **unplaced**.
+Choose **Equipment centers** for the original layout. It draws a line through every distinct horizontal and vertical symbol-center position. Each pair gives the indices of those lines, so spacing can vary and adding a symbol can renumber other equipment. Two symbols at the same center share an intersection.
 
-Names and coordinates beneath marks, the equipment locations list and **Export equipment coordinates** all use the same grid API result. Include drawing/sheet and equipment IDs with a coordinate. Changing the observations can change the derived axes and their index coordinates.
-
-Equipment aligned visually along a pipe need not share one row if their marked centers differ. In the four-component drawing, the tank centers, pump center and valve center have different exact heights; the grid preserves those differences rather than shifting them onto a single row. Use **Connectivity matrix** for immediate equipment relations. The source-aligned overlay adds location references without changing connectivity or linked-document navigation.
+**Export JSON** saves the selected layout, axes and equipment records. Each record includes the component ID, integer `coordinate`, original center (`source_anchor`) and assigned intersection (`display_point`). The two point fields use the original image dimensions. A missing or invalid symbol box or an ambiguous component ID leaves the coordinate **unplaced**. When sharing a coordinate, include the drawing, layout and equipment ID. Use **Connectivity matrix** to identify which pieces of equipment connect.
 
 ## Import drawings
 

@@ -4,8 +4,9 @@ function remembered(name, fallback = "") { try { return localStorage.getItem(`ai
 function remember(name, value) { try { localStorage.setItem(`aip-v2-${name}`, value); } catch { /* Storage may be disabled by the browser. */ } }
 const app = {
   data: { facilities: [], sheets: [], links: [], jobs: [], audit: [], settings: {} },
-  facilityId: remembered("facility"), sheetId: "", componentId: "", connectionId: "", view: remembered("view", "drawings"), tab: "components",
-  tool: "select", search: "", gridVisible: true, gridLabels: true, labels: true, pipes: true, signals: true,
+  facilityId: remembered("facility"), sheetId: remembered("sheet"), componentId: "", connectionId: "", view: remembered("view", "drawings"), tab: "components",
+  tool: "select", search: "", gridVisible: true, gridLabels: false, labels: true, pipes: true, signals: true,
+  gridLayout: remembered("grid-layout") === "source" ? "source" : "regular",
   scale: 1, offset: [0, 0], image: null, imageKey: "", pointer: null, draft: null,
   matrixData: {}, matrixPending: new Set(), linkSourceId: "",
   poll: null, toastTimer: null, integration: null, gridData: {}, gridPending: new Set(), initial: true,
@@ -66,24 +67,27 @@ function setState(data) {
     document.head.append(script);
   }
   if (!app.data.facilities.some(facility => facility.id === app.facilityId)) app.facilityId = app.data.facilities[0]?.id || "";
-  remember("facility", app.facilityId);
-  const sheets = activeSheets();
-  if (!sheets.some(sheet => sheet.id === app.sheetId)) {
-    app.sheetId = sheets[0]?.id || "";
+  const sheets = app.data.sheets;
+  if (!sourceSheet()) {
+    const awaitingImport = pendingJobs().some(job => job.facility_id === app.facilityId);
+    const first = activeSheets()[0] || (!awaitingImport && sheets[0]);
+    app.sheetId = first?.id || "";
     app.componentId = app.connectionId = "";
     app.imageKey = "";
   }
+  app.facilityId = sourceSheet()?.facility_id || app.facilityId;
+  remember("sheet", app.sheetId);
+  remember("facility", app.facilityId);
   if (app.componentId && !selectedComponent()) app.componentId = "";
-  $("#facility").innerHTML = facilitiesMarkup();
   const drawings = `${sheets.length} drawing${sheets.length === 1 ? "" : "s"}`;
-  $("#workspace-description").textContent = data.capabilities?.ai_connections ? drawings
-    : `${drawings} · ${sheets.reduce((count, sheet) => count + (sheet.components?.length || 0), 0)} components`;
+  const sets = new Set(sheets.map(sheet => sheet.facility_id)).size;
+  $("#workspace-description").textContent = sets ? `${drawings} in ${sets} drawing set${sets === 1 ? "" : "s"}` : drawings;
   render();
   schedulePoll();
 }
 
 async function loadState() {
-  const state = await api(`/api/state${app.facilityId ? `?facility_id=${encodeURIComponent(app.facilityId)}` : ""}`);
+  const state = await api("/api/state");
   setState(state);
 }
 
@@ -109,9 +113,28 @@ function render() {
   app.initial = false;
 }
 
-function filteredSheets() {
+function groupedLibraryMarkup() {
   const query = norm(app.search).trim();
-  return activeSheets().filter(sheet => !query || norm(`${sheetName(sheet)} ${sheet.title} ${sheet.filename} ${sheet.revision} ${(sheet.components || []).map(componentName).join(" ")} ${(sheet.v3_summary?.names || []).join(" ")}`).includes(query));
+  const groups = app.data.facilities.map(facility => {
+    const matches = app.data.sheets.filter(sheet => sheet.facility_id === facility.id &&
+      (!query || norm([facility.name, sheetName(sheet), sheet.title, sheet.filename, sheet.revision,
+        ...(sheet.components || []).map(componentName), ...(sheet.v3_summary?.names || [])].join(" ")).includes(query)));
+    if (!matches.length) return "";
+    return `<section class="sheet-group" aria-label="${dataValue(facility.name)}">
+      <h3 class="sheet-group-heading">${esc(facility.name)}<span>${matches.length}</span></h3>
+      <div class="sheet-group-items">${matches.map(sheetRowMarkup).join("")}</div>
+    </section>`;
+  }).join("");
+  return groups || `<p class="section-note library-empty">${query ? "No matching drawings." : "Import drawings or open an example to begin."}</p>`;
+}
+
+function sheetRowMarkup(sheet) {
+  const selected = sheet.id === app.sheetId;
+  return `<button class="sheet-row${selected ? " active" : ""}" data-action="open-sheet" data-id="${dataValue(sheet.id)}" aria-current="${selected ? "true" : "false"}" title="${dataValue(`${sheetName(sheet)} · ${sheet.title || sheet.filename || ""}`)}">
+    <div class="sheet-title"><span>${esc(sheetName(sheet))}</span><small>${sheet.active === false ? "Archived · " : ""}${sheet.revision ? `Rev ${esc(sheet.revision)}` : ""}</small></div>
+    <div class="sheet-caption">${esc(sheet.title || sheet.filename || "")}</div>
+    <div class="sheet-count">${esc(libraryCount(sheet))} · Sheet ${esc(sheet.sheet_number || sheet.page || 1)}</div>
+  </button>`;
 }
 
 function libraryCount(sheet) {
@@ -121,31 +144,43 @@ function libraryCount(sheet) {
 }
 
 function libraryMarkup() {
-  const sheets = filteredSheets();
-  const jobs = app.data.jobs.filter(job => !job.facility_id || job.facility_id === app.facilityId).slice(-4);
+  const jobs = app.data.jobs.slice(-4);
   return `<aside class="library">
-    <div class="library-heading"><h2>Drawing library</h2><span class="muted tiny">${activeSheets().length}</span></div>
+    <div class="library-heading"><h2>Drawing library</h2><span class="muted tiny">${app.data.sheets.length}</span></div>
     <input class="search-input" id="sheet-search" type="search" value="${dataValue(app.search)}" placeholder="Find a drawing or equipment tag" aria-label="Find a drawing or equipment tag">
-    <div class="sheet-list">${sheets.length ? sheets.map(sheet => `<button class="sheet-row${sheet.id === app.sheetId ? " active" : ""}" data-action="open-sheet" data-id="${dataValue(sheet.id)}" title="${dataValue(`${sheetName(sheet)} · ${sheet.title || sheet.filename || ""}`)}"><div class="sheet-title"><span>${esc(sheetName(sheet))}</span><small>${sheet.active===false?"Archived · ":""}${sheet.revision ? `Rev ${esc(sheet.revision)}` : ""}</small></div><div class="sheet-caption">${esc(sheet.title || sheet.filename || "")}</div><div class="sheet-count">${esc(libraryCount(sheet))} · Sheet ${esc(sheet.sheet_number || sheet.page || 1)}</div></button>`).join("") : `<p class="section-note" style="padding:10px">${app.search ? "No matching drawings." : "Import a drawing set or load a demonstration."}</p>`}</div>
+    <div class="sheet-list">${groupedLibraryMarkup()}</div>
     ${jobs.length ? `<div class="jobs">${jobs.map(job => `<div class="job-row${["failed", "error"].includes(job.status) ? " error" : ""}"><strong>${esc(job.title || job.name || job.type || "Import")}</strong><br>${esc(job.error || job.message || job.status)}${typeof job.progress === "number" ? ` · ${Math.round(job.progress)}%` : ""}${job.messages?.length?`<div class="tiny">${job.messages.map(esc).join("<br>")}</div>`:""}</div>`).join("")}${pendingJobs().length ? '<div class="busy-progress"></div>' : ""}</div>` : ""}
     <div class="library-footer"><a href="/reference" target="_blank" rel="noopener">Symbol reference library ↗</a></div>
   </aside>`;
 }
 
+function replaceWorkspace(markup) {
+  const previous = $(".sheet-list");
+  const top = previous?.scrollTop || 0;
+  const left = previous?.scrollLeft || 0;
+  $("#main").innerHTML = markup;
+  const list = $(".sheet-list");
+  list.scrollTop = top;
+  list.scrollLeft = left;
+}
+
 function renderDrawings() {
   const sheet = selectedSheet(), gridMode = app.view === "grid";
   const aiView = window.aipV3?.isCandidate() && !gridMode;
-  $("#main").innerHTML = `<div class="drawing-layout">${libraryMarkup()}<section class="viewer">
+  const previousInspector = $(".inspector[data-grid-sheet]");
+  const previousScroll = gridMode && sheet?.id === previousInspector?.dataset.gridSheet ? previousInspector?.scrollTop || 0 : 0;
+  replaceWorkspace(`<div class="drawing-layout">${libraryMarkup()}<section class="viewer">
     ${sheet ? `<div class="viewer-heading"><div><h2>${esc(sheetName(sheet))}</h2><div class="muted">${esc(sheet.title || sheet.filename || "")} ${sheet.revision ? `· Revision ${esc(sheet.revision)}` : ""}</div></div><button class="button small sheet-menu" data-action="sheet-settings">Drawing details</button></div>
     ${!gridMode ? `<div class="drawing-actions">${aiView ? "" : '<button class="button primary" data-action="reanalyze">Analyze drawing</button>'}${window.aipV3?.drawingControls() || ""}<button class="button" data-action="matrix-view">View matrix</button><span>${sheet.components?.length||0} components · ${sheet.connections?.length||0} recorded connections</span></div>` : ""}
     <div class="viewer-toolbar">
-      ${gridMode ? `<span class="section-note">Spatial drawing grid</span>` : aiView ? '<span class="section-note">AI observations · Select to inspect</span>' : `<button class="tool-button${app.tool === "select" ? " active" : ""}" data-tool="select" title="Select equipment or pan">Select</button><button class="tool-button${app.tool === "component" ? " active" : ""}" data-tool="component" title="Drag a box around missing equipment">+ Component</button><button class="tool-button${app.tool === "pipe" ? " active" : ""}" data-tool="pipe" title="Connect immediate equipment endpoints">+ Connection</button><button class="tool-button${app.tool === "signal" ? " active" : ""}" data-tool="signal">+ Signal</button><button class="tool-button${app.tool === "move" ? " active" : ""}" data-tool="move">Move</button>`}
+      ${gridMode ? `<select class="grid-layout-select" id="grid-layout" aria-label="Grid layout"><option value="regular"${app.gridLayout === "regular" ? " selected" : ""}>Regular grid</option><option value="source"${app.gridLayout === "source" ? " selected" : ""}>Equipment centers</option></select>` : aiView ? '<span class="section-note">AI observations · Select to inspect</span>' : `<button class="tool-button${app.tool === "select" ? " active" : ""}" data-tool="select" title="Select equipment or pan">Select</button><button class="tool-button${app.tool === "component" ? " active" : ""}" data-tool="component" title="Drag a box around missing equipment">+ Component</button><button class="tool-button${app.tool === "pipe" ? " active" : ""}" data-tool="pipe" title="Connect immediate equipment endpoints">+ Connection</button><button class="tool-button${app.tool === "signal" ? " active" : ""}" data-tool="signal">+ Signal</button><button class="tool-button${app.tool === "move" ? " active" : ""}" data-tool="move">Move</button>`}
       <span class="toolbar-divider"></span><button class="tool-button" data-action="zoom-out" title="Zoom out">−</button><span class="zoom-label" id="zoom-label"></span><button class="tool-button" data-action="zoom-in" title="Zoom in">+</button><button class="tool-button" data-action="fit">Fit</button>
-      <label class="layer-toggle"><input type="checkbox" data-layer="${gridMode ? "gridLabels" : "labels"}"${(gridMode ? app.gridLabels : app.labels) ? " checked" : ""}>Labels</label>
-      ${!gridMode ? `<label class="layer-toggle"><input type="checkbox" data-layer="pipes"${app.pipes ? " checked" : ""}>Connections</label><label class="layer-toggle"><input type="checkbox" data-layer="signals"${app.signals ? " checked" : ""}>Signals</label>` : `<label class="layer-toggle"><input type="checkbox" data-layer="gridVisible"${app.gridVisible ? " checked" : ""}>Grid</label>`}
-    </div><div class="canvas-wrap"><canvas class="drawing-canvas" id="drawing-canvas" aria-label="Interactive drawing. Scroll to zoom, drag to pan and click components or connections to inspect." tabindex="0"></canvas><div class="canvas-caption" id="canvas-caption">${gridMode ? "Source drawing · grid intersections at component centers · Scroll to zoom" : toolHint()}</div></div>
-    <div class="viewer-legend">${gridMode ? `<span>Component centers are (column, row) intersections. Grid lines are coordinate guides.</span>` : `<span><i class="legend-line"></i>Equipment connection</span><span><i class="legend-line signal"></i>Signal</span><span><i class="legend-line unknown"></i>Unclassified</span>`}</div>` : `<div class="empty-workspace"><div class="eyebrow">Drawing → Components and connections → Matrix</div><h1>Build a connectivity matrix</h1><p>Open a PNG or JPEG, review detected components and direct connections, then view the labeled matrix. PDFs are converted to images before analysis.</p><div class="actions"><button class="button primary" data-action="import">Import drawings</button><button class="button" data-action="show-demo">Open example</button></div></div>`}
-    </section><aside class="inspector">${gridMode ? `<div class="inspector-content">${gridPanelMarkup()}</div>` : `<div class="inspector-tabs">${["components", "connections"].map(tab => `<button data-tab="${tab}" class="${app.tab === tab ? "active" : ""}">${tab === "components" ? "Components" : "Connections"}</button>`).join("")}</div><div class="inspector-content">${aiView ? window.aipV3.inspector(sheet) : app.tab === "connections" ? connectionsMarkup() : selectionMarkup()}</div>`}</aside></div>`;
+      <label class="layer-toggle"><input type="checkbox" data-layer="${gridMode ? "gridLabels" : "labels"}"${(gridMode ? app.gridLabels : app.labels) ? " checked" : ""}>${gridMode ? "Coordinates" : "Labels"}</label>
+      ${!gridMode ? `<label class="layer-toggle"><input type="checkbox" data-layer="pipes"${app.pipes ? " checked" : ""}>Connections</label><label class="layer-toggle"><input type="checkbox" data-layer="signals"${app.signals ? " checked" : ""}>Signals</label>` : `<label class="layer-toggle"><input type="checkbox" data-layer="gridVisible"${app.gridVisible ? " checked" : ""}>Grid lines</label>`}
+    </div><div class="canvas-wrap"><canvas class="drawing-canvas" id="drawing-canvas" aria-label="Interactive drawing. Scroll to zoom, drag to pan and click components or connections to inspect." tabindex="0"></canvas>${gridMode ? "" : `<div class="canvas-caption" id="canvas-caption">${toolHint()}</div>`}</div>
+    <div class="viewer-legend">${gridMode ? `<span><i class="grid-dot"></i>Equipment location</span><span>Column → &nbsp; Row ↓</span>` : `<span><i class="legend-line"></i>Equipment connection</span><span><i class="legend-line signal"></i>Signal</span><span><i class="legend-line unknown"></i>Unclassified</span>`}</div>` : `<div class="empty-workspace"><div class="eyebrow">Drawing → Components and connections → Matrix</div><h1>Build a connectivity matrix</h1><p>Open a PNG or JPEG, review detected components and direct connections, then view the labeled matrix. PDFs are converted to images before analysis.</p><div class="actions"><button class="button primary" data-action="import">Import drawings</button><button class="button" data-action="show-demo">Open example</button></div></div>`}
+    </section><aside class="inspector"${gridMode && sheet ? ` data-grid-sheet="${dataValue(sheet.id)}"` : ""}>${gridMode ? `<div class="inspector-content">${gridPanelMarkup()}</div>` : `<div class="inspector-tabs">${["components", "connections"].map(tab => `<button data-tab="${tab}" class="${app.tab === tab ? "active" : ""}">${tab === "components" ? "Components" : "Connections"}</button>`).join("")}</div><div class="inspector-content">${aiView ? window.aipV3.inspector(sheet) : app.tab === "connections" ? connectionsMarkup() : selectionMarkup()}</div>`}</aside></div>`);
+  if (previousScroll) $(".inspector").scrollTop = previousScroll;
   if (sheet) { setupCanvas(); if (gridMode) loadGrid(sheet); }
 }
 
@@ -155,46 +190,60 @@ function toolHint() {
 
 function gridMap(sheet = selectedSheet()) {
   const stored = app.gridData[sheet?.id];
-  return stored?.version === sheet?.version ? stored : null;
+  return stored && stored.version === sheet?.version && stored.layout === app.gridLayout ? stored : null;
 }
 
 function gridRecord(component, sheet = selectedSheet()) {
-  return gridMap(sheet)?.coordinates?.find(item => item.component_id === component.id) || null;
+  return gridMap(sheet)?.records?.get(component.id) || null;
 }
 
-function gridPosition(component, sheet = selectedSheet()) {
-  return gridRecord(component, sheet)?.coordinate || null;
+function gridQuery() {
+  return `${matrixQuery()}&layout=${app.gridLayout}`;
 }
 
 async function loadGrid(sheet) {
-  const key = `${sheet.id}/${sheet.version}`;
+  const layout = app.gridLayout;
+  const key = `${sheet.id}/${sheet.version}/${layout}`;
   if (app.gridPending.has(key) || gridMap(sheet)) return;
   app.gridPending.add(key);
+  const current = () => app.view === "grid" && app.sheetId === sheet.id &&
+    selectedSheet()?.version === sheet.version && app.gridLayout === layout;
   try {
-    const result = await api(`/api/grid?${matrixQuery()}`);
-    if (result.layout_kind !== "source-intersections" || !result.display || !Array.isArray(result.axes?.x) || !Array.isArray(result.axes?.y) || !Array.isArray(result.coordinates)) {
-      throw new Error("The aligned grid needs the updated local server. Restart the app, then retry.");
+    const result = await api(`/api/grid?${gridQuery()}`);
+    if (!current()) return;
+    const kind = layout === "regular" ? "regular-intersections" : "source-intersections";
+    if (result.layout_kind !== kind || !Array.isArray(result.axes?.x) ||
+        !Array.isArray(result.axes?.y) || !Array.isArray(result.coordinates)) {
+      throw new Error("Restart the updated workbench to load this grid.");
     }
-    if (selectedSheet()?.id === sheet.id && selectedSheet()?.version !== sheet.version) return;
-    app.gridData[sheet.id] = {...result,version:sheet.version};
-  } catch (error) { app.gridData[sheet.id] = {version:sheet.version,error:error.message}; }
-  finally {
+    const records = new Map(result.coordinates.map(record => [record.component_id, record]));
+    app.gridData[sheet.id] = {...result, version:sheet.version, layout, records};
+  } catch (error) {
+    if (current()) app.gridData[sheet.id] = {version:sheet.version, layout, error:error.message};
+  } finally {
     app.gridPending.delete(key);
-    if (app.view === "grid" && app.sheetId === sheet.id && selectedSheet()?.version === sheet.version) renderDrawings();
+    if (current()) renderDrawings();
   }
 }
 
 function gridPanelMarkup() {
   const sheet = selectedSheet();
-  if (!sheet) return '<p class="empty-selection">Open a drawing to align its grid.</p>';
+  if (!sheet) return '<p class="empty-selection">Open a drawing to view equipment locations.</p>';
   const map = gridMap(sheet);
-  return `<div class="eyebrow">Equipment coordinates</div><h2>Aligned grid</h2>${window.aipV3?.sourceSwitch() || ""}<p class="muted tiny">The grid follows the original drawing. Each marked symbol center sits exactly on an integer intersection such as (1,1).</p>
-    <p class="section-note">Columns count from left to right and rows from top to bottom. Lines are placed through the component centers, so their spacing can be unequal. These are location references, not physical distances or pipe connections.</p>
-    ${map?.grid ? `<p class="section-note">${Number(map.grid.columns)} vertical lines × ${Number(map.grid.rows)} horizontal lines. Zoom in or select a component to read closely spaced axis numbers.</p>` : ""}
-    <button class="button wide" data-action="refresh-grid">Align to components</button>
-    ${map?.error ? `<div class="report-note error-note">${esc(map.error)}</div>` : !map ? '<p class="section-note">Loading aligned coordinates…</p>' : ""}
-    ${map?.warnings?.length ? `<ul class="warning-list">${map.warnings.map(item=>`<li>${esc(typeof item==="string"?item:item.message||JSON.stringify(item))}</li>`).join("")}</ul>` : ""}
-    ${map && !map.error ? `<a class="button wide" style="margin-top:9px" href="/api/export?${matrixQuery()}&format=grid" download>Export equipment coordinates</a>` : ""}<hr class="section-divider"><h3>Equipment locations</h3><div class="result-list">${(sheet.components || []).map(component => { const coordinate = gridPosition(component,sheet); return `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(component.id)}">${esc(componentName(component))}</button><div class="result-detail">${esc(component.type)} · ${!map ? "Loading coordinates…" : map.error ? "Unavailable" : coordinate ? `(${coordinate[0]},${coordinate[1]})` : "Unplaced"}</div></div></div>`; }).join("") || '<p class="section-note">Run extraction or mark components to assign locations.</p>'}</div>`;
+  const rows = (sheet.components || []).map(component => {
+    const point = gridRecord(component, sheet)?.coordinate;
+    const location = point ? `(${point.join(", ")})` : !map ? "…" : map.error ? "Unavailable" : "Unplaced";
+    const selected = component.id === app.componentId;
+    return `<button type="button" class="grid-location" data-action="select-component" data-id="${dataValue(component.id)}" aria-pressed="${selected}">
+      <span>${esc(componentName(component))}</span><span class="grid-coordinate">${esc(location)}</span></button>`;
+  }).join("");
+  return `<h2>Equipment locations</h2>${window.aipV3?.sourceSwitch() || ""}
+    <p class="section-note">${app.gridLayout === "regular" ? "Each symbol uses the nearest numbered intersection. Select an item to see its position on the drawing." : "Grid lines pass through the center of every marked symbol."}</p>
+    ${map?.grid ? `<div class="grid-summary"><span>${Number(map.grid.columns)} columns × ${Number(map.grid.rows)} rows</span><a href="/api/export?${gridQuery()}&format=grid" download>Export JSON</a></div>` : ""}
+    ${map?.shared_cells ? '<p class="section-note">Some items share an intersection. Select a name to locate its symbol.</p>' : ""}
+    ${map?.error ? `<p class="report-note error-note">${esc(map.error)}</p><button class="button small" data-action="refresh-grid">Retry grid</button>` : !map ? '<p class="section-note">Loading coordinates…</p>' : ""}
+    <div class="grid-locations">${rows || '<p class="section-note">Analyze the drawing or mark a component to see its coordinates.</p>'}</div>
+    ${map?.warnings?.length ? `<details class="grid-notes"><summary>Coordinate notes (${map.warnings.length})</summary><ul>${map.warnings.map(item => `<li>${esc(item)}</li>`).join("")}</ul></details>` : ""}`;
 }
 
 function options(values, selected) {
@@ -295,7 +344,7 @@ function renderMatrix() {
   const sheet=selectedSheet(),cached=sheet?app.matrixData[sheet.id]:null;
   const key=sheet?matrixKey(sheet):"";
   const current=cached?.key===key?cached:null;
-  $("#main").innerHTML=`<div class="matrix-layout">${libraryMarkup()}<section class="matrix-page"><div class="page-heading"><div><div class="eyebrow">3 · Connectivity output</div><h1>Connectivity matrix</h1><p>${sheet?`${esc(sheetName(sheet))} · This drawing only. `:""}Immediate equipment adjacency. <strong>1</strong> means a direct connection is recorded; <strong>0</strong> means none is recorded. The matrix is symmetric with a zero diagonal.</p></div>${sheet?`<div class="toolbar-right"><button class="button" data-action="drawing-view">Back to drawing</button><a class="button primary" href="/api/export?${matrixQuery()}&format=matrix" download>Save matrix CSV</a><a class="button" href="/api/export?${matrixQuery()}&format=matrix-json" download>Save JSON</a></div>`:""}</div>${!sheet?'<div class="card"><p>Open an example or import a drawing to create its connectivity matrix.</p><button class="button primary" data-action="show-demo">Open example</button></div>':current?.error?`<div class="card"><h2>Matrix could not be loaded</h2><p class="inline-error">${esc(current.error)}</p><button class="button" data-action="refresh-matrix">Retry matrix</button></div>`:current?.result?matrixMarkup(current.result):'<div class="card matrix-loading"><div class="spinner"></div><p>Building the matrix from recorded components and connections…</p></div>'}</section></div>`;
+  replaceWorkspace(`<div class="matrix-layout">${libraryMarkup()}<section class="matrix-page"><div class="page-heading"><div><div class="eyebrow">3 · Connectivity output</div><h1>Connectivity matrix</h1><p>${sheet?`${esc(sheetName(sheet))} · This drawing only. `:""}Immediate equipment adjacency. <strong>1</strong> means a direct connection is recorded; <strong>0</strong> means none is recorded. The matrix is symmetric with a zero diagonal.</p></div>${sheet?`<div class="toolbar-right"><button class="button" data-action="drawing-view">Back to drawing</button><a class="button primary" href="/api/export?${matrixQuery()}&format=matrix" download>Save matrix CSV</a><a class="button" href="/api/export?${matrixQuery()}&format=matrix-json" download>Save JSON</a></div>`:""}</div>${!sheet?'<div class="card"><p>Open an example or import a drawing to create its connectivity matrix.</p><button class="button primary" data-action="show-demo">Open example</button></div>':current?.error?`<div class="card"><h2>Matrix could not be loaded</h2><p class="inline-error">${esc(current.error)}</p><button class="button" data-action="refresh-matrix">Retry matrix</button></div>`:current?.result?matrixMarkup(current.result):'<div class="card matrix-loading"><div class="spinner"></div><p>Building the matrix from recorded components and connections…</p></div>'}</section></div>`);
   if(sheet&&window.aipV3)window.aipV3.matrixControls();
   if(sheet&&!current)loadMatrix(sheet);
 }
@@ -343,15 +392,29 @@ function drawCanvas() {
   ctx.setTransform(ratio,0,0,ratio,0,0);const[w,h]=canvasSize();ctx.clearRect(0,0,w,h);ctx.fillStyle="#eef0eb";ctx.fillRect(0,0,w,h);
   ctx.save();ctx.translate(...app.offset);ctx.scale(app.scale,app.scale);ctx.fillStyle="white";ctx.shadowColor="#1734261a";ctx.shadowBlur=15/app.scale;ctx.fillRect(0,0,sheet.width,sheet.height);ctx.shadowBlur=0;
   if(app.image)ctx.drawImage(app.image,0,0,sheet.width,sheet.height);
-  const nodeKeys=new Set();
-  if(app.view!=="grid"){
-    for(const edge of sheet.connections||[])drawConnection(ctx,edge,sheet);
-    drawObservedArrows(ctx,sheet);
+  if (app.view === "grid") {
+    drawGrid(ctx, sheet);
+  } else {
+    for (const edge of sheet.connections || []) drawConnection(ctx, edge, sheet);
+    drawObservedArrows(ctx, sheet);
+    ctx.globalAlpha = 1;
+    for (const component of sheet.components || []) {
+      if (!component.bbox) continue;
+      const [x0,y0,x1,y1] = component.bbox;
+      const active = component.id === app.componentId;
+      if (active) {
+        ctx.fillStyle = "#19785f20"; ctx.fillRect(x0,y0,x1-x0,y1-y0);
+      }
+      ctx.strokeStyle = active ? "#19785f" : "#3890b2";
+      ctx.lineWidth = (active ? 2.5 : 1) / app.scale;
+      ctx.strokeRect(x0,y0,x1-x0,y1-y0);
+    }
+    if (app.labels) {
+      for (const component of sheet.components || []) {
+        if (component.bbox) drawEquipmentLabel(ctx, component);
+      }
+    }
   }
-  ctx.globalAlpha=1;
-  for(const component of sheet.components||[]){if(!component.bbox)continue;const[x0,y0,x1,y1]=component.bbox;const selected=component.id===app.componentId;ctx.fillStyle=selected?"#19785f20":nodeKeys.has(component.id)?"#19785f16":"transparent";ctx.fillRect(x0,y0,x1-x0,y1-y0);ctx.strokeStyle=selected?"#19785f":nodeKeys.has(component.id)?"#249b70":"#3890b2";ctx.lineWidth=(selected?2.5:1)/app.scale;ctx.strokeRect(x0,y0,x1-x0,y1-y0);}
-  if(app.view==="grid"&&app.gridVisible)drawGrid(ctx,sheet);
-  for(const component of sheet.components||[]){if(component.bbox&&(app.view==="grid"?app.gridLabels:app.labels))drawEquipmentLabel(ctx,component,sheet);}
   const selected=selectedComponent();
   if(app.view!=="grid" && selected?.tag && selected.tag_bbox){
     const [l,t,r,b]=selected.tag_bbox;
@@ -404,46 +467,130 @@ function drawObservedArrows(ctx,sheet){
   ctx.restore();
 }
 
-function drawGrid(ctx,sheet) {
-  const map=gridMap(sheet);
-  if(!map?.axes)return;
-  const xs=map.axes.x,ys=map.axes.y;
-  ctx.strokeStyle="#3c796b4d";ctx.lineWidth=.8/app.scale;ctx.beginPath();
-  for(const x of xs){ctx.moveTo(x,0);ctx.lineTo(x,sheet.height);}
-  for(const y of ys){ctx.moveTo(0,y);ctx.lineTo(sheet.width,y);}
-  ctx.stroke();
-  const selected=selectedComponent(),point=selected?gridRecord(selected,sheet):null;
-  if(point?.display_point){
-    const[x,y]=point.display_point;ctx.strokeStyle="#14654ea6";ctx.lineWidth=1.7/app.scale;ctx.beginPath();
-    ctx.moveTo(x,0);ctx.lineTo(x,sheet.height);ctx.moveTo(0,y);ctx.lineTo(sheet.width,y);ctx.stroke();
+function drawGrid(ctx, sheet) {
+  const map = gridMap(sheet);
+  if (!map?.axes) return;
+  const [width, height] = canvasSize();
+  const [left, top] = screenPoint([0, 0]);
+  const [right, bottom] = screenPoint([sheet.width, sheet.height]);
+  const bounds = {left:Math.max(0, left), top:Math.max(0, top), right:Math.min(width, right), bottom:Math.min(height, bottom)};
+  if (bounds.right <= bounds.left || bounds.bottom <= bounds.top) return;
+
+  ctx.save();
+  const ratio = window.devicePixelRatio || 1;
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.beginPath();
+  ctx.rect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
+  ctx.clip();
+  const selected = selectedComponent();
+  const record = selected && gridRecord(selected, sheet);
+  const xs = map.axes.x.map(x => left + x * app.scale);
+  const ys = map.axes.y.map(y => top + y * app.scale);
+  if (app.gridVisible) {
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(47, 93, 101, .22)";
+    ctx.beginPath();
+    for (const x of xs) { ctx.moveTo(x, bounds.top); ctx.lineTo(x, bounds.bottom); }
+    for (const y of ys) { ctx.moveTo(bounds.left, y); ctx.lineTo(bounds.right, y); }
+    ctx.stroke();
+    if (record?.display_point) {
+      const [x, y] = screenPoint(record.display_point);
+      ctx.strokeStyle = "rgba(14, 108, 81, .58)";
+      ctx.beginPath();
+      ctx.moveTo(x, bounds.top); ctx.lineTo(x, bounds.bottom);
+      ctx.moveTo(bounds.left, y); ctx.lineTo(bounds.right, y);
+      ctx.stroke();
+    }
+    drawGridRuler(ctx, xs, true, bounds, record?.coordinate?.[0]);
+    drawGridRuler(ctx, ys, false, bounds, record?.coordinate?.[1]);
   }
-  ctx.font=`${11/app.scale}px Segoe UI`;
-  function axisLabel(value,x,y,horizontal,active=false){
-    const text=String(value),pad=3/app.scale,width=ctx.measureText(text).width;
-    ctx.textAlign=horizontal?"center":"left";ctx.textBaseline=horizontal?"top":"middle";
-    const left=horizontal?x-width/2-pad:x-pad,top=horizontal?y-pad:y-7/app.scale;
-    ctx.fillStyle=active?"#e5f3eaff":"#ffffffed";ctx.fillRect(left,top,width+2*pad,15/app.scale);
-    ctx.fillStyle=active?"#104f3b":"#246554";ctx.fillText(text,x,y);
+
+  const occupied = new Map();
+  for (const item of map.coordinates) {
+    if (item.display_point) occupied.set(item.coordinate.join(","), item);
   }
-  const selectedColumn=point?.coordinate?.[0],selectedRow=point?.coordinate?.[1],gap=24/app.scale;
-  let last=-Infinity;
-  xs.forEach((x,index)=>{if(index+1===selectedColumn)return;if(selectedColumn&&Math.abs(x-xs[selectedColumn-1])<gap)return;if(x-last>=gap){axisLabel(index+1,x,6/app.scale,true);last=x;}});
-  last=-Infinity;
-  ys.forEach((y,index)=>{if(index+1===selectedRow)return;if(selectedRow&&Math.abs(y-ys[selectedRow-1])<gap)return;if(y-last>=gap){axisLabel(index+1,6/app.scale,y,false);last=y;}});
-  if(selectedColumn)axisLabel(selectedColumn,xs[selectedColumn-1],6/app.scale,true,true);
-  if(selectedRow)axisLabel(selectedRow,6/app.scale,ys[selectedRow-1],false,true);
-  for(const item of map.coordinates||[]){
-    if(!item.display_point)continue;
-    const[x,y]=item.display_point;ctx.beginPath();ctx.arc(x,y,(item.component_id===app.componentId?3.2:2.2)/app.scale,0,Math.PI*2);
-    ctx.fillStyle="#166b51";ctx.fill();ctx.strokeStyle="white";ctx.lineWidth=.8/app.scale;ctx.stroke();
+  for (const item of occupied.values()) {
+    const [x, y] = screenPoint(item.display_point);
+    ctx.beginPath();
+    ctx.arc(x, y, 2.8, 0, Math.PI * 2);
+    ctx.fillStyle = "#2b7869"; ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; ctx.stroke();
   }
+  if (record?.display_point) {
+    const [x, y] = screenPoint(record.display_point);
+    if (selected.bbox) {
+      const [l, t, r, b] = selected.bbox;
+      const [sx, sy] = screenPoint([l, t]);
+      ctx.strokeStyle = "#13624e"; ctx.lineWidth = 1.8;
+      ctx.strokeRect(sx, sy, (r - l) * app.scale, (b - t) * app.scale);
+    }
+    if (record.source_anchor) {
+      const [sx, sy] = screenPoint(record.source_anchor);
+      if (Math.hypot(sx - x, sy - y) > 5) {
+        ctx.setLineDash([3, 2]); ctx.strokeStyle = "#13624e"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(sx, sy); ctx.stroke(); ctx.setLineDash([]);
+      }
+    }
+    ctx.beginPath(); ctx.arc(x, y, 4.3, 0, Math.PI * 2);
+    ctx.fillStyle = "#125341"; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+
+  const labels = [];
+  if (record?.display_point) {
+    drawGridCoordinate(ctx, record, bounds, labels, true);
+  }
+  if (app.gridLabels) {
+    for (const item of occupied.values()) {
+      if (item.coordinate.join(",") !== record?.coordinate?.join(",")) {
+        drawGridCoordinate(ctx, item, bounds, labels, false);
+      }
+    }
+  }
+  ctx.restore();
 }
 
-function drawEquipmentLabel(ctx,component,sheet) {
+function drawGridRuler(ctx, positions, horizontal, bounds, selectedNumber) {
+  const start = horizontal ? bounds.left : bounds.top;
+  const end = horizontal ? bounds.right : bounds.bottom;
+  const selectedPosition = positions[selectedNumber - 1];
+  let previous = -Infinity;
+  ctx.font = "11px Segoe UI, sans-serif";
+  ctx.textBaseline = "middle"; ctx.textAlign = "center";
+  positions.forEach((position, index) => {
+    if (position < start + (horizontal ? 11 : 20) || position > end - 8) return;
+    const active = index + 1 === selectedNumber;
+    if (!active && (position - previous < 23 || Math.abs(position - selectedPosition) < 23)) return;
+    previous = position;
+    const text = String(index + 1), w = ctx.measureText(text).width + 6;
+    const x = horizontal ? position : bounds.left + w / 2 + 2;
+    const y = horizontal ? bounds.top + 8 : position;
+    ctx.fillStyle = active ? "#d9eee6" : "#fffffff2";
+    ctx.fillRect(x - w / 2, y - 7, w, 14);
+    ctx.fillStyle = active ? "#10543e" : "#4a6567"; ctx.fillText(text, x, y);
+  });
+}
+
+function drawGridCoordinate(ctx, item, bounds, labels, active) {
+  const [x, y] = screenPoint(item.display_point);
+  if (x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom) return;
+  const text = "(" + item.coordinate.join(", ") + ")";
+  ctx.font = (active ? "600 " : "") + "11px Segoe UI, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const w = ctx.measureText(text).width + 8, h = 16;
+  const left = Math.max(bounds.left, Math.min(x - w / 2, bounds.right - w));
+  const top = y + 6 + h <= bounds.bottom ? y + 6 : y - 6 - h;
+  const box = {left, top, right:left + w, bottom:top + h};
+  if (!active && labels.some(other => box.left <= other.right + 2 && other.left <= box.right + 2 &&
+      box.top <= other.bottom + 1 && other.top <= box.bottom + 1)) return;
+  labels.push(box);
+  ctx.fillStyle = active ? "#155845" : "#fffffff0"; ctx.fillRect(left, top, w, h);
+  ctx.fillStyle = active ? "#fff" : "#305d55"; ctx.fillText(text, left + w / 2, top + h / 2);
+}
+
+function drawEquipmentLabel(ctx,component) {
   if(isJunction(component) && !component.tag && component.id!==app.componentId)return;
-  if(app.view!=="grid" && component.id===app.componentId && component.tag_bbox && component.tag)return;
-  const[x0,,x1,y1]=component.bbox,coordinate=gridPosition(component,sheet);
-  const label=app.view==="grid"?`${componentName(component)} ${coordinate?`(${coordinate[0]},${coordinate[1]})`:gridMap(sheet)?.error?"(Unavailable)":gridMap(sheet)?"(Unplaced)":"(Loading…)"}`:componentName(component);
+  if(component.id===app.componentId && component.tag_bbox && component.tag)return;
+  const [x0,,x1,y1] = component.bbox, label = componentName(component);
   ctx.font=`${11/app.scale}px Segoe UI`;ctx.textAlign="center";ctx.textBaseline="top";
   const width=ctx.measureText(label).width+8/app.scale,x=(x0+x1)/2,y=y1+5/app.scale;
   ctx.fillStyle="#fffffff2";ctx.fillRect(x-width/2,y-1/app.scale,width,15/app.scale);
@@ -451,19 +598,50 @@ function drawEquipmentLabel(ctx,component,sheet) {
 }
 
 function eventPoint(event){const rect=$("#drawing-canvas").getBoundingClientRect();return[event.clientX-rect.left,event.clientY-rect.top];}
-function hitComponent(point){return [...(selectedSheet()?.components||[])].reverse().find(component=>component.bbox&&component.bbox[0]-4/app.scale<=point[0]&&point[0]<=component.bbox[2]+4/app.scale&&component.bbox[1]-4/app.scale<=point[1]&&point[1]<=component.bbox[3]+4/app.scale);}
+function hitComponent(point) {
+  const sheet = selectedSheet();
+  const components = [...(sheet?.components || [])].reverse();
+  const inside = (item, pad) => item.bbox && point[0] >= item.bbox[0] - pad && point[0] <= item.bbox[2] + pad &&
+    point[1] >= item.bbox[1] - pad && point[1] <= item.bbox[3] + pad;
+  if (app.view === "grid") {
+    const items = (gridMap(sheet)?.coordinates || []).filter(item => item.display_point);
+    const distance = item => Math.hypot(point[0] - item.display_point[0], point[1] - item.display_point[1]) * app.scale;
+    const nearest = items.filter(item => distance(item) <= 6).sort((a, b) => distance(a) - distance(b))[0];
+    if (nearest) {
+      const matches = items.filter(item => item.coordinate[0] === nearest.coordinate[0] && item.coordinate[1] === nearest.coordinate[1]);
+      const next = (matches.findIndex(item => item.component_id === app.componentId) + 1) % matches.length;
+      return components.find(item => item.id === matches[next].component_id);
+    }
+    const exact = components.find(item => inside(item, 0));
+    if (exact) return exact;
+  }
+  return components.find(item => inside(item, 4 / app.scale));
+}
 function distanceSegment(point,a,b){const dx=b[0]-a[0],dy=b[1]-a[1];const t=Math.min(1,Math.max(0,((point[0]-a[0])*dx+(point[1]-a[1])*dy)/(dx*dx+dy*dy||1)));return Math.hypot(point[0]-a[0]-t*dx,point[1]-a[1]-t*dy);}
 function hitConnection(point){const sheet=selectedSheet();return(sheet.connections||[]).find(edge=>{const a=sheet.components.find(item=>item.id===edge.source),b=sheet.components.find(item=>item.id===edge.target);if(!a||!b)return false;const pts=edge.path?.length>1?edge.path:[pointCenter(a),pointCenter(b)];return pts.some((p,index)=>index&&distanceSegment(point,pts[index-1],p)<5/app.scale);});}
 
 function pointerDown(event){if(event.button!==0)return;const canvas=event.currentTarget;canvas.setPointerCapture(event.pointerId);const screen=eventPoint(event),world=worldPoint(screen);const hit=hitComponent(world);app.pointer={screen,world,offset:[...app.offset],hit,moved:false,box:hit?.bbox?[...hit.bbox]:null};if(app.tool==="component"&&app.view!=="grid")app.draft={box:[...world,...world]};}
 function pointerMove(event){if(!app.pointer)return;const point=eventPoint(event),world=worldPoint(point);const dx=point[0]-app.pointer.screen[0],dy=point[1]-app.pointer.screen[1];if(Math.hypot(dx,dy)>4)app.pointer.moved=true;if(app.tool==="component"&&app.view!=="grid"){app.draft={box:[...app.pointer.world,...world]};}else if(app.tool==="move"&&app.pointer.hit&&app.view!=="grid"){const sheet=selectedSheet();const shift=[Math.max(-app.pointer.box[0],Math.min(sheet.width-app.pointer.box[2],dx/app.scale)),Math.max(-app.pointer.box[1],Math.min(sheet.height-app.pointer.box[3],dy/app.scale))];app.pointer.hit.bbox=app.pointer.box.map((value,index)=>value+shift[index%2]);}else if(["select","move"].includes(app.tool)||app.view==="grid")app.offset=[app.pointer.offset[0]+dx,app.pointer.offset[1]+dy];drawCanvas();}
-async function pointerUp(event){if(!app.pointer)return;const start=app.pointer;app.pointer=null;const point=worldPoint(eventPoint(event));try{if(app.tool==="component"&&app.view!=="grid"){const box=app.draft?.box;app.draft=null;if(start.moved&&box){const sheet=selectedSheet();const bbox=[Math.max(0,Math.min(box[0],box[2])),Math.max(0,Math.min(box[1],box[3])),Math.min(sheet.width,Math.max(box[0],box[2])),Math.min(sheet.height,Math.max(box[1],box[3]))].map(Math.round);if(bbox[2]-bbox[0]<3||bbox[3]-bbox[1]<3)return;const result=await action("save_component",{sheet_id:sheet.id,component:{type:"unknown",tag:"",bbox,normal_position:"unknown",review_status:"unreviewed",isolation_credit:"unverified"}});app.componentId=result.result?.item_id||result.result?.id||result.component?.id||selectedSheet().components.at(-1)?.id||"";app.tool="select";render();}}else if(app.tool==="move"&&start.hit&&start.moved&&app.view!=="grid"){await action("save_component",{sheet_id:app.sheetId,component:start.hit},{message:"Equipment position saved."});}else if(!start.moved){const hit=hitComponent(point);if((app.tool==="pipe"||app.tool==="signal")&&app.view!=="grid"){if(!app.draft){if(!hit)return toast("Choose the first equipment item.");app.draft={source:hit.id,points:[pointCenter(hit)]};}else if(hit){if(hit.id===app.draft.source)return toast("Choose a different endpoint.");const draft=app.draft;app.draft=null;await action("save_connection",{sheet_id:app.sheetId,connection:{source:draft.source,target:hit.id,kind:app.tool==="pipe"?"direct_undirected":"signal",path:[...draft.points,pointCenter(hit)],review_status:"confirmed"}},{message:"Connection saved."});}else app.draft.points.push(point.map(Math.round));drawCanvas();}else{app.componentId=hit?.id||"";app.connectionId=hit?"":hitConnection(point)?.id||"";app.tab=app.connectionId?"connections":"components";render();}}}catch(error){toast(error.message,true);app.draft=null;if(start.box&&start.hit)start.hit.bbox=start.box;drawCanvas();}drawCanvas();}
+async function pointerUp(event){if(!app.pointer)return;const start=app.pointer;app.pointer=null;const point=worldPoint(eventPoint(event));try{if(app.tool==="component"&&app.view!=="grid"){const box=app.draft?.box;app.draft=null;if(start.moved&&box){const sheet=selectedSheet();const bbox=[Math.max(0,Math.min(box[0],box[2])),Math.max(0,Math.min(box[1],box[3])),Math.min(sheet.width,Math.max(box[0],box[2])),Math.min(sheet.height,Math.max(box[1],box[3]))].map(Math.round);if(bbox[2]-bbox[0]<3||bbox[3]-bbox[1]<3)return;const result=await action("save_component",{sheet_id:sheet.id,component:{type:"unknown",tag:"",bbox,normal_position:"unknown",review_status:"unreviewed",isolation_credit:"unverified"}});app.componentId=result.result?.item_id||result.result?.id||result.component?.id||selectedSheet().components.at(-1)?.id||"";app.tool="select";render();}}else if(app.tool==="move"&&start.hit&&start.moved&&app.view!=="grid"){await action("save_component",{sheet_id:app.sheetId,component:start.hit},{message:"Equipment position saved."});}else if(!start.moved){const hit=hitComponent(point);if((app.tool==="pipe"||app.tool==="signal")&&app.view!=="grid"){if(!app.draft){if(!hit)return toast("Choose the first equipment item.");app.draft={source:hit.id,points:[pointCenter(hit)]};}else if(hit){if(hit.id===app.draft.source)return toast("Choose a different endpoint.");const draft=app.draft;app.draft=null;await action("save_connection",{sheet_id:app.sheetId,connection:{source:draft.source,target:hit.id,kind:app.tool==="pipe"?"direct_undirected":"signal",path:[...draft.points,pointCenter(hit)],review_status:"confirmed"}},{message:"Connection saved."});}else app.draft.points.push(point.map(Math.round));drawCanvas();}else{app.componentId=hit?.id||"";app.connectionId=hit||app.view==="grid"?"":hitConnection(point)?.id||"";app.tab=app.connectionId?"connections":"components";render();}}}catch(error){toast(error.message,true);app.draft=null;if(start.box&&start.hit)start.hit.bbox=start.box;drawCanvas();}drawCanvas();}
 
-function openSheet(id,componentId="",view=app.view==="grid"?"grid":app.view==="matrix"?"matrix":"drawings") {
-  app.sheetId=id;app.componentId=componentId;app.connectionId="";app.imageKey="";app.draft=null;app.view=view;app.tab="components";render();
+function openSheet(id, componentId = "", view = app.view, connectionId = "") {
+  const sheet = app.data.sheets.find(item => item.id === id);
+  if (!sheet) return;
+  app.sheetId = sheet.id;
+  app.facilityId = sheet.facility_id;
+  app.componentId = componentId;
+  app.connectionId = connectionId;
+  app.view = view;
+  app.tab = connectionId ? "connections" : "components";
+  app.tool = "select";
+  app.pointer = app.draft = null;
+  app.imageKey = "";
+  remember("sheet", app.sheetId);
+  remember("facility", app.facilityId);
+  render();
 }
 function openConnection(sheetId,connectionId) {
-  app.sheetId=sheetId;app.componentId="";app.connectionId=connectionId;app.imageKey="";app.draft=null;app.view="drawings";app.tab="connections";render();
+  openSheet(sheetId, "", "drawings", connectionId);
 }
 
 document.addEventListener("click",async event=>{
@@ -475,10 +653,16 @@ document.addEventListener("click",async event=>{
   try {
     if(name==="close-dialog")button.closest("dialog").close();
     else if(name==="retry")location.reload();
-    else if(name==="import"){if(!app.facilityId)return toast("Create a drawing set first.");$("#import-facility").innerHTML=facilitiesMarkup();$("#import-dialog").showModal();}
+    else if(name==="import"){$("#import-facility").innerHTML=facilitiesMarkup();$("#import-dialog").showModal();}
     else if(name==="show-demo")$("#demo-dialog").showModal();
     else if(name==="load-demo"){button.closest("dialog").close();const output=await action("demo",{kind:button.dataset.kind},{refresh:false});app.facilityId=output.facility_id||output.result?.facility_id||app.facilityId;app.sheetId=output.result?.target?.sheet_id||output.result?.sheet_ids?.[0]||"";app.componentId=output.result?.target?.component_id||"";app.view="drawings";app.tab="components";await loadState();toast(output.job?"Example queued for image analysis.":"Example opened.");}
-    else if(name==="new-facility"){const name=prompt("Drawing set name");if(name?.trim()){const result=await action("create_facility",{name:name.trim()});app.facilityId=result.result?.id||app.data.facilities.at(-1)?.id||app.facilityId;app.sheetId="";await loadState();}}
+    else if(name==="new-facility"){
+      const name=prompt("Drawing set name")?.trim();
+      if(name){
+        const result=await action("create_facility",{name});
+        $("#import-facility").innerHTML=facilitiesMarkup(result.result.id);
+      }
+    }
     else if(name==="open-sheet")openSheet(button.dataset.id);
     else if(name==="select-component"){app.componentId=button.dataset.id;app.connectionId="";app.tab="components";render();}
     else if(name==="all-components"){app.componentId="";app.connectionId="";app.tab="components";render();}
@@ -507,7 +691,7 @@ document.addEventListener("click",async event=>{
 });
 
 document.addEventListener("change",async event=>{
-  if(event.target.id==="facility"){app.facilityId=event.target.value;app.sheetId="";app.componentId="";app.connectionId="";try{await loadState();}catch(error){toast(error.message,true);}}
+  if(event.target.id==="grid-layout"){app.gridLayout=event.target.value;remember("grid-layout",app.gridLayout);renderDrawings();}
   if(event.target.dataset.layer){app[event.target.dataset.layer]=event.target.checked;drawCanvas();}
   if(event.target.id==="link-source-component"){app.linkSourceId=event.target.value;updateManualLinkPreview();}
   if(event.target.id==="link-target-sheet"){const sheet=app.data.sheets.find(item=>item.id===event.target.value);$("#link-target-component").innerHTML=(sheet?.components||[]).filter(isConnector).map(item=>`<option value="${dataValue(item.id)}">${esc(componentName(item))}</option>`).join("")||'<option value="">No connector observations</option>';updateManualLinkPreview();}

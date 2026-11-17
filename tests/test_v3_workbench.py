@@ -70,6 +70,21 @@ class V3Workbench(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.app.tool("drawing_connections", {"sheet_id": "drawing", "facility_id": "other", "method": "v3"})
 
+    def test_grid_export_and_questions_use_selected_layout_and_graph(self):
+        self.trace()
+        query = {"sheet_id": [self.sheet_id], "method": ["v3"]}
+        question = {"provider": "local-graph", "method": "v3", "sheet_id": self.sheet_id,
+                    "question": "Where is B on the grid?"}
+        for layout, coordinate in (("source", [2, 1]), ("regular", [7, 2])):
+            selected = {**query, "layout": [layout]}
+            grid = self.app.grid_query(selected)
+            self.assertEqual(grid["coordinates"][1]["coordinate"], coordinate)
+            self.assertEqual(grid, json.loads(self.app.export({**selected, "format": ["grid"]})[0]))
+            answer = self.app.ask_selected({**question, "grid_layout": layout})
+            self.assertIn(f"Grid ({coordinate[0]}, {coordinate[1]})", answer["answer"])
+            self.assertEqual(answer["citations"][0]["id"], "b")
+        self.assertEqual([], self.app.grid_query({**query, "method": ["v2"], "layout": ["regular"]})["coordinates"])
+
     def test_failed_retry_preserves_previous_successful_trace_and_v2(self):
         self.assertIsNone(self.app.latest("drawing"))
         expected = self.trace()

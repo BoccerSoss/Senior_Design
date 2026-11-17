@@ -1,4 +1,4 @@
-"""Source-symbol intersections, exact axes and source-evidence preservation."""
+"""Source-aligned and regular grids on the original drawing."""
 from copy import deepcopy
 import json
 import math
@@ -17,6 +17,55 @@ def sheet(items, columns=4, rows=3):
 
 
 class GridPointTests(unittest.TestCase):
+    def test_regular_grid_centers_square_spacing_and_snaps_each_source_independently(self):
+        drawing = {**sheet([component("a", 30, 40), component("b", 34, 41),
+                            component("edge", 115, 75)], 4, 4), "width": 120, "height": 80}
+        result = equipment_positions(drawing, "regular")
+        self.assertEqual(result["layout_kind"], "regular-intersections")
+        self.assertEqual(result["axes"], {"x": [15, 45, 75, 105], "y": [25, 55]})
+        self.assertEqual(result["grid"], {"columns": 4, "rows": 2, "origin": "top-left"})
+        self.assertEqual([r["source_anchor"] for r in result["coordinates"]], [[30, 40], [34, 41], [115, 75]])
+        self.assertEqual([r["coordinate"] for r in result["coordinates"]], [[2, 2], [2, 2], [4, 2]])
+        self.assertEqual([r["display_point"] for r in result["coordinates"]], [[45, 55], [45, 55], [105, 55]])
+        self.assertTrue(result["shared_cells"])
+        self.assertEqual([], result["warnings"])
+        self.assertEqual(result["axes"], equipment_positions({**drawing, "components": []}, "regular")["axes"])
+        self.assertEqual(equipment_positions(drawing), equipment_positions(drawing, "source"))
+
+    def test_regular_grid_invalid_and_repeated_observations_stay_unplaced(self):
+        drawing = sheet([component("a", 50, 100), component("a", 100, 100),
+                         {"id": "b", "bbox": [0, 0, 0, 5]}, {"bbox": [1, 1, 4, 4]}])
+        result = equipment_positions(drawing, "regular")
+        self.assertEqual([None] * 4, [r["coordinate"] for r in result["coordinates"]])
+        self.assertEqual([None] * 4, [r["display_point"] for r in result["coordinates"]])
+        self.assertEqual(3, len(result["warnings"]))
+        with self.assertRaisesRegex(ValueError, "layout"):
+            equipment_positions(drawing, "invalid")
+
+    def test_regular_grid_retains_fractional_pitch_counts_and_right_down_ties(self):
+        drawing = {**sheet([{"id": "p", "bbox": [0, 0, 2, 2]}], 6, 6), "width": 2, "height": 2}
+        result = equipment_positions(drawing, "regular")
+        self.assertEqual([4, 4], result["coordinates"][0]["coordinate"])
+        self.assertEqual([7 / 6, 7 / 6], result["coordinates"][0]["display_point"])
+        self.assertEqual(6, len(result["axes"]["x"]))
+
+    def test_regular_grid_bounds_each_axis_for_thin_and_extreme_sheets(self):
+        drawing = {**sheet([], 200, 200), "width": 1, "height": 5000}
+        axes = equipment_positions(drawing, "regular")["axes"]
+        self.assertEqual([0.5], axes["x"])
+        self.assertEqual(200, len(axes["y"]))
+        self.assertEqual([12.5, 4987.5], [axes["y"][0], axes["y"][-1]])
+        for size in (1e308, 5e-324):
+            result = equipment_positions({**drawing, "width": size, "height": size}, "regular")
+            for axis in result["axes"].values():
+                self.assertEqual(axis, sorted(set(axis)))
+                self.assertLessEqual(len(axis), 200)
+            json.dumps(result, allow_nan=False)
+        for size in (0, True, -1, math.nan, math.inf, 10**500):
+            invalid = equipment_positions({**drawing, "width": size}, "regular")
+            self.assertEqual({"x": [], "y": []}, invalid["axes"])
+            json.dumps(invalid, allow_nan=False)
+
     def assert_source_intersections(self, result):
         xs,ys=result["axes"]["x"],result["axes"]["y"]
         self.assertEqual(sorted(set(xs)),xs)

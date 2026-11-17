@@ -277,6 +277,16 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(first, live)
         self.assertEqual("source-intersections", first["layout_kind"])
+        for layout in ("regular", "source"):
+            selected = query + "&layout=" + layout
+            status, grid, _ = self.call("GET", "/api/grid?" + selected)
+            self.assertEqual(200, status)
+            self.assertEqual(layout + "-intersections", grid["layout_kind"])
+            status, exported, _ = self.call("GET", "/api/export?" + selected)
+            self.assertEqual(200, status)
+            self.assertEqual(grid, exported)
+        status, _, _ = self.call("GET", "/api/grid?" + query + "&layout=other")
+        self.assertEqual(400, status)
         for item in first["coordinates"]:
             col, row = item["coordinate"]
             self.assertEqual([first["axes"]["x"][col-1], first["axes"]["y"][row-1]], item["display_point"])

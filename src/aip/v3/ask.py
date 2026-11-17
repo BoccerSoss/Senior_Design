@@ -8,7 +8,7 @@ from ..v2.grid import equipment_positions
 from ..v2.providers import MAX_CONTEXT_CHARS, ProviderError, _config, _generate
 
 
-def _sheet_facts(sheet, matrix):
+def _sheet_facts(sheet, matrix, grid_layout):
     """Make a flat index of citable facts without sending images, audit logs or other sheets."""
     sheet_id = sheet["id"]
     if matrix["scope"]["sheet_id"] != sheet_id:
@@ -28,7 +28,7 @@ def _sheet_facts(sheet, matrix):
         f"{stats['unread_labels']} equipment names are unread. "
         f"{stats['unreviewed_connections']} included connection observations await review.")
 
-    grids = {item["component_id"]: item["coordinate"] for item in equipment_positions(sheet)["coordinates"]}
+    grids = {item["component_id"]: item["coordinate"] for item in equipment_positions(sheet, grid_layout)["coordinates"]}
     labels = {}
     for node in matrix["nodes"]:
         item_id, label = node["component_id"], node["label"]
@@ -105,11 +105,11 @@ def _local_lookup(question, facts, matrix):
     return []
 
 
-def ask_drawing(settings, question, sheet, matrix):
+def ask_drawing(settings, question, sheet, matrix, *, grid_layout="source"):
     """Let the model find relevant facts. Generate the displayed claims from local source records."""
     if not isinstance(question, str) or not 1 <= len(question.strip()) <= 4000:
         raise ProviderError("Enter a question of 1–4,000 characters.")
-    facts = _sheet_facts(sheet, matrix)
+    facts = _sheet_facts(sheet, matrix, grid_layout)
     if settings["provider"] == "local-graph":
         return _reply("local-graph", "Local graph lookup", _local_lookup(question, facts, matrix))
     config = _config(settings, require_ready=True)

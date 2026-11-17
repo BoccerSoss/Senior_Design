@@ -3,14 +3,20 @@
 ## Try it on a drawing
 
 1. On GitHub, select the `codex/aip-v3` branch and choose **Code → Download ZIP**. Extract the ZIP and double-click **Open AIP V3.cmd** inside the project folder. The first launch installs the pinned dependencies for Windows x64 and Python 3.12. Keep the launcher open while using the demo.
-2. Choose **Open example → Beginner ISLOCA drawings** to see all six full-page PNGs (pages 65–70) in the drawing library. The sheets are bundled with the demo. A fresh workspace opens on this collection. **Four-component example** opens the synthetic control, and **Import drawings** accepts additional files. Imported PDFs are rendered to PNG first.
+2. Choose **Open example → Beginner ISLOCA drawings** to see all six full-page PNGs (pages 65–70) in the drawing library. The left-hand **Drawing library** shows every saved collection together. Click a drawing under another collection to switch without leaving the current tab. The sheets are bundled with the demo. A fresh workspace opens on this collection. **Four-component example** opens the synthetic control, and **Import drawings** accepts additional files. Imported PDFs are rendered to PNG first.
 3. Choose **Find connections with AI**, select **Local connection model**, and click **Trace drawing**. Click a traced line to inspect its endpoints, evidence and recorded direction. The model uses image-derived equipment boxes, OCR and a learned classifier for pipe strokes. It checks straight runs and single elbows. Equipment missed by the detector can break a valid connection or allow a false shortcut.
-4. Under **Connectivity matrix**, use the method selector to compare the direct equipment pairs. The latest successful V3 trace for each sheet persists separately from V2 and its edits. The Grid tab assigns coordinates on the original drawing for the selected method. Choose **Benchmark results** to inspect the scored comparisons.
+4. Under **Connectivity matrix**, use the method selector to compare the direct equipment pairs. The latest successful V3 trace for each sheet persists separately from V2 and its edits. Choose **Benchmark results** to inspect the scored comparisons.
 5. Choose **Ask about drawing → Local graph lookup** and enter **What connects to V-101?** on the four-component example. Click the cited connection to see the evidence on the drawing. Answers describe the selected extraction and its review status.
 
 Select a detected component to see the orange dashed box around the printed name used by OCR when that location is available. In **Connections**, select a pair to see whether the arrowhead was found on the segment or elsewhere on its uninterrupted run. The highlighted tip marks the observed position. A branch, a break in the line, or conflicting tips can leave the direction unknown. Unnamed junctions can still bound a run.
 
 **View saved trace** reopens a previous result immediately. Repeating a local trace reuses the result when the PNG, model and workbench version match. Select **Recompute the local trace from the image** for a fresh timing. Hosted tracing sends one new request each time you choose **Trace drawing**. The demo runs at `http://127.0.0.1:8766` and stores your workspace in `runs/v3`.
+
+## Find equipment on the grid
+
+Open **Grid** and select the V2 or V3 extraction you want to inspect. **Regular grid** overlays the original drawing with evenly spaced lines. An equipment coordinate such as **(3, 2)** means the symbol center is nearest the third column and second row, counting from the upper left. Nearby symbols can share a coordinate. Select equipment under **Equipment locations** to find its symbol on the drawing.
+
+Choose **Equipment centers** to place lines through the exact centers of the detected equipment. The coordinate then gives the column and row among those lines. **Export JSON** saves the axes and equipment coordinates for the selected layout. To check a coordinate inside the demo, open **Ask about drawing**, select **Local graph lookup** and ask “Where is V-101 on the grid?” on the four-component example. [Grid conventions and exported fields](V2_WORKBENCH.md#use-the-separate-grid-tool)
 
 ## Update an existing copy
 

@@ -409,7 +409,8 @@ class Application:
     def grid_query(self, query):
         if query.get("method", ["v2"])[0] != "v2":
             raise ValueError("Unknown grid method.")
-        return equipment_positions(self.store.sheet(query.get("sheet_id", [None])[0]))
+        sheet = self.store.sheet(query.get("sheet_id", [None])[0])
+        return equipment_positions(sheet, query.get("layout", ["source"])[0])
 
     def export(self, query):
         state = self.state(query.get("facility_id", [None])[0])

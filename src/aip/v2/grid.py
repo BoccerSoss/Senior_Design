@@ -1,8 +1,10 @@
-"""A nonuniform source-image grid fitted through exact symbol centers."""
+"""Regular and equipment-aligned coordinate grids on the original drawing."""
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections import Counter
 from collections.abc import Mapping
+from fractions import Fraction
 from math import isfinite
 
 
@@ -40,13 +42,38 @@ def _anchor(box, width, height):
     return [box[0] + (box[2] - box[0]) / 2, box[1] + (box[3] - box[1]) / 2]
 
 
-def equipment_positions(sheet):
-    """Fit nonuniform grid axes through exact source-symbol centers.
+def _regular_axes(width, height, requested):
+    if not (_number(width) and _number(height) and width > 0 and height > 0):
+        return [], []
+    # Exact ratios keep a requested line from being lost to rounding in floor division.
+    width, height = Fraction(width), Fraction(height)
+    step = max(width / requested["columns"], height / requested["rows"])
 
-    Integer coordinates identify the ordered source axes. Every placed symbol is
-    already at its grid intersection; neither the image nor its marks are moved.
-    Nearby distinct centers remain distinct axes rather than being clustered.
-    """
+    def centers(span):
+        count = max(1, span // step)
+        first = (span - (count - 1) * step) / 2
+        marks = [first + i * step for i in range(count)]
+        rendered = dict.fromkeys(map(float, marks))
+        # For subnormal dimensions two distinct lines may have the same JSON number.
+        return marks if len(rendered) == count else list(map(Fraction, rendered))
+
+    return centers(width), centers(height)
+
+
+def _nearest_axis(axis, position):
+    """Return a one-based index, choosing the higher index on a midpoint tie."""
+    right = bisect_left(axis, position)
+    if right == len(axis):
+        return right
+    if right and axis[right] != position and 2 * Fraction(position) < axis[right - 1] + axis[right]:
+        return right
+    return right + 1
+
+
+def equipment_positions(sheet, layout="source"):
+    """Place equipment on a regular lattice or its exact center-aligned axes."""
+    if layout not in ("regular", "source"):
+        raise ValueError("Choose the regular or source grid layout.")
     requested = grid_settings(sheet.get("grid"))
     width, height = sheet.get("width"), sheet.get("height")
     components = sheet.get("components", [])
@@ -73,30 +100,36 @@ def equipment_positions(sheet):
         else:
             placed.append(record)
 
-    xs = sorted({record["source_anchor"][0] for record in placed})
-    ys = sorted({record["source_anchor"][1] for record in placed})
-    columns = {value: index + 1 for index, value in enumerate(xs)}
-    rows = {value: index + 1 for index, value in enumerate(ys)}
+    if layout == "regular":
+        xs, ys = _regular_axes(width, height, requested)
+        convention = ("One-based coordinates of the nearest regular grid intersection to each equipment center. "
+                      "Columns increase right and rows downward. Midpoint ties go right or down.")
+    else:
+        xs = sorted({record["source_anchor"][0] for record in placed})
+        ys = sorted({record["source_anchor"][1] for record in placed})
+        convention = ("One-based indices of nonuniform grid axes fitted through exact source-symbol centers. "
+                      "Columns increase right and rows downward. Axis spacing follows the source image; "
+                      "coordinates do not measure distance.")
     by_point = {}
     for record in placed:
         x, y = record["source_anchor"]
-        record["coordinate"] = [columns[x], rows[y]]
-        record["display_point"] = [x, y]
-        by_point.setdefault((x, y), []).append(record)
+        column, row = _nearest_axis(xs, x), _nearest_axis(ys, y)
+        record["coordinate"] = [column, row]
+        record["display_point"] = [float(xs[column - 1]), float(ys[row - 1])]
+        by_point.setdefault((column, row), []).append(record)
     shared = [records for records in by_point.values() if len(records) > 1]
-    for records in shared:
-        column, row = records[0]["coordinate"]
-        names = ", ".join(record["component_id"] for record in records)
-        warnings.append(f"Components {names} share the same source center and grid intersection ({column},{row}).")
+    if layout == "source":
+        for records in shared:
+            column, row = records[0]["coordinate"]
+            names = ", ".join(record["component_id"] for record in records)
+            warnings.append(f"Components {names} share the same source center and grid intersection ({column},{row}).")
 
     return {"sheet_id": sheet["id"],
             "grid": {"columns": len(xs), "rows": len(ys), "origin": "top-left"},
             "requested_grid": requested,
-            "layout_kind": "source-intersections", "axes": {"x": xs, "y": ys},
+            "layout_kind": layout + "-intersections", "axes": {"x": list(map(float, xs)), "y": list(map(float, ys))},
             "coordinates": positions,
             "display": {"width": width if _number(width) and width > 0 else 0,
                         "height": height if _number(height) and height > 0 else 0},
-            "convention": "One-based indices of nonuniform grid axes fitted through exact source-symbol centers. "
-                          "Columns increase right and rows downward. Axis spacing follows the source image; "
-                          "coordinates do not measure distance.",
+            "convention": convention,
             "shared_cells": bool(shared), "warnings": warnings}

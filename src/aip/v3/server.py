@@ -210,12 +210,12 @@ class Application(BaseApplication):
         if method == "v2":
             return super().grid_query(query)
         sheet, _ = self.selected_graph(query.get("sheet_id", [None])[0], method)
-        return equipment_positions(sheet)
+        return equipment_positions(sheet, query.get("layout", ["source"])[0])
 
     def ask_selected(self, body):
         settings = self.require_profile(body.get("provider"), "ask", body.get("model"))
         sheet, matrix = self.selected_graph(body.get("sheet_id"), body.get("method", "v2"))
-        return ask_drawing(settings, body.get("question"), sheet, matrix)
+        return ask_drawing(settings, body.get("question"), sheet, matrix, grid_layout=body.get("grid_layout", "source"))
 
     def tool(self, name, args):
         if name == "list_drawings":

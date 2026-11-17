@@ -6,6 +6,10 @@ Download the `codex/aip-v3` branch, extract the ZIP and double-click [Open AIP V
 
 **Open example → Beginner ISLOCA drawings** opens six bundled full-page PNGs. Select an item to see the text region used for its printed name. Select a connection to inspect its direction and the location of the arrowhead that supports it. Repeating a local trace of the same image reopens the saved result.
 
+The left-hand **Drawing library** lists all saved drawings by collection. Click a drawing to switch while staying on **Drawing**, **Connectivity matrix** or **Grid**. Search covers all collections.
+
+Open **Grid** for a square grid over the original drawing. An equipment coordinate such as **(3, 2)** identifies the nearest intersection in column 3, row 2, counting from the upper left. Select the equipment to inspect its position. Choose **Equipment centers** to draw lines through every marked center. **Export JSON** and drawing questions use the selected layout.
+
 **Connectivity matrix → Benchmark results** shows V3.2 local model scores of **0.207 F1 for localized direct connections** and **0.083 F1 for correctly named direct connections** across the six provisional beginner sheets. The four-component synthetic control scored **1.000** on both measures. The project target is **0.90**. The panel also retains the earlier independent OPEN100 benchmark.
 
 [V3 demo and model setup](docs/V3_WORKBENCH.md) · [Evaluation results and reproduction](docs/V3_EVALUATION.md) · [Independent annotation source](https://zenodo.org/records/14803338)
@@ -16,11 +20,11 @@ Download the `codex/aip-v3` branch, extract the ZIP and double-click [Open AIP V
 
 Extract the repository ZIP and double-click [Open AIP V2.cmd](Open%20AIP%20V2.cmd). It opens locally at `http://127.0.0.1:8765`. Choose **Open example → Four-component example** or import a drawing image. Review the marked **Components** and **Connections**, then choose **View matrix**.
 
-The three main tabs are **Drawing**, **Connectivity matrix** and **Grid**. The matrix displays labeled rows and columns, immediate undirected equipment connections, review diagnostics and CSV/JSON exports. Corrections to equipment or connections update the matrix. **Drawing → Connections** also supports reviewing and following links between documents. The separate **Grid** tab overlays the original drawing with lines through exact symbol centers, giving equipment integer column/row references without moving symbols or pipes. Its labels, coordinate list and JSON export use the same derived coordinates. PDFs are converted to PNG before extraction.
+The three main tabs are **Drawing**, **Connectivity matrix** and **Grid**. The matrix displays labeled rows and columns, immediate undirected equipment connections, review diagnostics and CSV/JSON exports. Corrections to equipment or connections update the matrix. **Drawing → Connections** also supports reviewing and following links between documents. The separate **Grid** tab has the same **Regular grid** and **Equipment centers** layouts as V3. PDFs are converted to PNG before extraction.
 
 This follows the original drawing-to-equipment-to-connectivity deliverable. [V2 instructions](docs/V2_WORKBENCH.md) · [Project scope](docs/V2_CAPABILITY_MAP.md) · [Verification record](docs/V2_VERIFICATION.md)
 
-The source-aligned grid revision passed **180 local tests**. All 125 marked equipment centers across the six beginner PNGs were checked against their exact grid intersections, and the original connection records and matrices stayed unchanged. Grid spacing follows the drawing and can vary.
+The earlier source-aligned grid revision passed **180 local tests**. All 125 marked equipment centers across the six beginner PNGs were checked against their exact grid intersections. That check applies to the **Equipment centers** layout.
 
 The earlier matrix-focused revision passed **166 local tests**. The four-component example ran through the actual image extractor and produced **4 equipment records, 3 direct connections and the labeled 4×4 matrix**, with its raw prediction preserved. This is a known development example, not a blind accuracy test. The [verification record](docs/V2_VERIFICATION.md) separates that result from the newer source-aligned grid revision.
 

@@ -159,11 +159,17 @@ window.aipV3 = (() => {
     let prompt;
     if (asking) {
       const query = new URLSearchParams({sheet_id:sheet.id, method:selectedMethod});
-      const matrix = await api("/api/matrix?" + query);
+      const [matrix, grid] = await Promise.all([
+        api("/api/matrix?" + query),
+        api("/api/grid?" + query + "&layout=" + app.gridLayout)
+      ]);
+      const coordinates = new Map(grid.coordinates.map(item => [item.component_id, item.coordinate]));
       const raw = new Map(graph.connections.map(item => [item.id, item]));
       const facts = {
         drawing:sheetName(sheet), method:selectedMethod,
-        equipment:matrix.nodes.map(({component_id,label,type,review_status}) => ({id:component_id,label,type,review_status})),
+        grid_layout:grid.layout_kind, grid_origin:grid.grid.origin, grid_axes:["column","row"],
+        equipment:matrix.nodes.map(({component_id,label,type,review_status}) =>
+          ({id:component_id,label,type,review_status,coordinate:coordinates.get(component_id) ?? null})),
         direct_equipment_pairs:matrix.direct_edges.map(pair => ({
           endpoints:[pair.source.component_id, pair.target.component_id],
           observations:pair.observations.map(observation => {
@@ -432,7 +438,7 @@ window.aipV3 = (() => {
           if (provider === chatgptWeb.id) {
             await copyChatPrompt(asking, form, sheet, selectedMethod, graph, status);
           } else if (asking) {
-            const reply = await post("/api/v3/ask", {sheet_id:sheet.id, provider, ...selectedModel, method:selectedMethod, question:form.elements.question.value});
+            const reply = await post("/api/v3/ask", {sheet_id:sheet.id, provider, ...selectedModel, method:selectedMethod, grid_layout:app.gridLayout, question:form.elements.question.value});
             status.innerHTML = `<h3>${esc(reply.model || reply.provider)}</h3>${factMarkup(reply)}`;
             status.dataset.method = selectedMethod;
             status.dataset.sheet = sheet.id;
