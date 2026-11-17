@@ -9,7 +9,7 @@ root = Path(__file__).resolve().parents[1]
 dist = root / "dist"
 dist.mkdir(exist_ok=True)
 selected = ["README.md", "Open AIP Demo.cmd", "Open AIP V2.cmd", "Open AIP V3.cmd", ".gitignore", ".gitattributes",
-            "requirements.lock", "requirements-v2.lock", "config.example.json",
+            "requirements.lock", "requirements-v2.lock", "requirements-v3.lock", "config.example.json",
             ".github", "src", "scripts", "tests", "schemas", "prompts", "data", "docs", "reports",
             "output/aip_four_component"]
 files = []
@@ -29,7 +29,7 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 files = sorted(set(files))
-manifest = {"version": "3.0.0", "scope": "Public prototype source, benchmark summaries and synthetic reference assets",
+manifest = {"version": "3.1.0", "scope": "Public prototype source, benchmark summaries and synthetic reference assets",
             "files": [{"path": p.relative_to(root).as_posix(), "sha256": sha(p), "bytes": p.stat().st_size} for p in files]}
 manifest_path = dist / "handoff_manifest.json"
 manifest_path.write_text(json.dumps(manifest,indent=2)+"\n",encoding="utf-8")

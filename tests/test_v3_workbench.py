@@ -9,15 +9,22 @@ import tempfile
 import threading
 import unittest
 from unittest.mock import patch
+from PIL import Image, ImageDraw
 
 from aip.io import ROOT
 from aip.v2.providers import _config
+from aip.v3 import VERSION
 from aip.v3.server import Application, Handler
 
 
 class V3Workbench(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        plan = patch("aip.v3.server.PlanClient", autospec=True)
+        self.plan = plan.start().return_value
+        self.addCleanup(plan.stop)
+        self.plan.status.return_value = {"supported": True, "signed_in": False, "ready": False, "error": "",
+                                         "pending": False, "model": "", "models": []}
         self.app = Application(self.temp.name)
         self.sheet_id = "drawing"
         self.sheet = {"id": self.sheet_id, "facility_id": "facility-local", "width": 50, "height": 50,
@@ -84,6 +91,33 @@ class V3Workbench(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.app.connect_profile({"provider": "openai", "model": "x", "api_key": "bad\nheader"})
 
+    def test_subscription_trace_and_question_share_the_selected_graph_without_an_api_key(self):
+        request = {"provider": "chatgpt-plan", "sheet_id": self.sheet_id, "model": "selected"}
+        self.app.connect_profile({"provider": "openai", "model": "api-model", "api_key": "test-key"})
+        with self.assertRaisesRegex(ValueError, "Continue with ChatGPT"):
+            self.app.trace(request)
+        self.plan.generate.assert_not_called()
+        self.plan.status.return_value.update(ready=True, signed_in=True, model="first", models=[
+            {"slug": slug, "display_name": slug} for slug in ("first", "selected")])
+        with self.assertRaisesRegex(ValueError, "Select a model"):
+            self.app.trace({**request, "model": "api-model"})
+        image = Image.new("RGB", (50, 50), "white")
+        ImageDraw.Draw(image).line([(10, 7), (22, 7)], fill="black")
+        image.save(Path(self.temp.name) / "images" / "drawing.png")
+        self.graph["connections"][0]["evidence"] = "Horizontal ink between both symbol boxes."
+        self.plan.generate.side_effect = [json.dumps(self.graph), '{"references":["S1"]}']
+        with patch("aip.v2.providers._post", side_effect=AssertionError("unexpected API-key request")):
+            trace = self.app.trace(request)
+            answer = self.app.ask_selected({**request, "question": "How many connections?", "method": "v3"})
+        self.assertEqual(("chatgpt-plan", "selected", 1), (trace["provider"], trace["model"], len(trace["connections"])))
+        self.assertEqual("selected", answer["model"])
+        self.assertEqual(self.sheet_id, answer["citations"][0]["sheet_id"])
+        self.assertIn("1 direct equipment connections", answer["answer"])
+        image_call, graph_call = self.plan.generate.call_args_list
+        self.assertTrue(image_call.args[2].startswith("data:image/png;base64,"))
+        self.assertIsNone(graph_call.args[2])
+        self.assertEqual("selected", graph_call.kwargs["model"])
+
     def test_external_client_stdio_negotiates_and_receives_candidate_edges(self):
         self.trace()
         with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
@@ -104,7 +138,7 @@ class V3Workbench(unittest.TestCase):
                 server.shutdown()
                 thread.join(timeout=2)
         replies = [json.loads(line)["result"] for line in result.stdout.splitlines()]
-        self.assertEqual("3.0.0", replies[0]["serverInfo"]["version"])
+        self.assertEqual(VERSION, replies[0]["serverInfo"]["version"])
         self.assertIn("drawing_connections", [tool["name"] for tool in replies[1]["tools"]])
         self.assertEqual("drawing", replies[2]["structuredContent"]["drawings"][0]["id"])
         self.assertEqual("edge-1", replies[3]["structuredContent"]["direct_edges"][0]["observations"][0]["connection_id"])

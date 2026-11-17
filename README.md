@@ -8,6 +8,8 @@ Download the `codex/aip-v3` branch, extract the ZIP and double-click [Open AIP V
 
 [V3 demo and model setup](docs/V3_WORKBENCH.md) · [Evaluation results and reproduction](docs/V3_EVALUATION.md) · [Independent annotation source](https://zenodo.org/records/14803338)
 
+**Have a ChatGPT subscription?** In V3.1, open **Ask about drawing → ChatGPT subscription → Continue with ChatGPT**. OpenAI lists the models your account can use. If your workspace does not offer plan sharing, select **ChatGPT in your browser** to copy the question and its matrix records. [Update an existing copy and connect ChatGPT](docs/V3_WORKBENCH.md#update-an-existing-copy)
+
 ## V2 P&ID Matrix Builder
 
 Extract the repository ZIP and double-click [Open AIP V2.cmd](Open%20AIP%20V2.cmd). It opens locally at `http://127.0.0.1:8765`. Choose **Open example → Four-component example** or import a drawing image. Review the marked **Components** and **Connections**, then choose **View matrix**.

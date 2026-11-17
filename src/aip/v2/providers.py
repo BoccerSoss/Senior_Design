@@ -97,6 +97,9 @@ def _base_url(value, provider):
 
 def _config(settings, require_ready=False):
     provider = _setting(settings, "provider") or "local"
+    if provider == "chatgpt-plan" and isinstance(settings, Mapping) and callable(settings.get("_plan_generate")):
+        # Only V3's server constructs this callable after checking the selected account and model.
+        return {"provider": provider, "model": settings["model"], "_plan_generate": settings["_plan_generate"]}
     if provider not in {choice["id"] for choice in CHOICES}:
         raise ProviderError("Choose local, compatible, openai, or anthropic.")
     model = _setting(settings, "model") or os.environ.get("AIP_AI_MODEL", "").strip()
@@ -309,6 +312,8 @@ def _response_text(config, response):
 
 def _generate(config, instructions, text, image=None):
     provider = config["provider"]
+    if provider == "chatgpt-plan":
+        return config["_plan_generate"](instructions, text, image["url"] if image else None)
     if provider == "openai":
         content = [{"type": "input_text", "text": text}]
         if image:

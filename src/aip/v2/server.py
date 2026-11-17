@@ -55,6 +55,9 @@ class Application:
         self.store = Store(directory)
         self.imports = Imports(self.store)
 
+    def close(self):
+        self.imports.executor.shutdown(wait=False, cancel_futures=True)
+
     def state(self, facility_id=None):
         state = self.store.snapshot()
         if facility_id:
@@ -763,7 +766,7 @@ def serve(directory, port=8765, open_browser=True, *, handler=Handler, applicati
         pass
     finally:
         server.server_close()
-        server.app.imports.executor.shutdown(wait=False, cancel_futures=True)
+        server.app.close()
 
 
 def main():

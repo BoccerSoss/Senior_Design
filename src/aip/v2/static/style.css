@@ -17,6 +17,9 @@
 .v3-source{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
 .v3-source select{font:inherit;font-weight:600;max-width:180px;padding:7px;border:1px solid var(--line);border-radius:4px;background:white;color:var(--ink)}
 .v3-dialog{max-height:88vh;overflow:auto}
+.v3-dialog [hidden]{display:none!important}
+.v3-plan-controls,.v3-web{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}
+.v3-plan .field{margin-top:10px}
 .v3-dialog summary,#setup-form details summary{cursor:pointer;color:#216985;padding:8px 0}
 .v3-form textarea{resize:vertical;min-height:64px}
 .v3-result:not(:empty){margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}

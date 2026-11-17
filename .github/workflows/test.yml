@@ -18,7 +18,7 @@ jobs:
           python-version: '3.12'
       - name: Install pinned binary dependencies
         run: |
-          python -m pip install --require-hashes --only-binary=:all: -r requirements-v2.lock
+          python -m pip install --require-hashes --only-binary=:all: -r requirements-v3.lock
       - name: Check environment
         run: python scripts/aip.py doctor
       - name: Run tests

@@ -8,13 +8,27 @@
 4. Under **Connectivity matrix**, use the method selector to compare the direct equipment pairs. The latest successful V3 trace for each sheet persists separately from V2 and its edits. The Grid tab assigns coordinates on the original drawing for the selected method. Choose **Benchmark results** to inspect the scored comparisons.
 5. Choose **Ask about drawing → Local graph lookup** and enter **What connects to V-101?** on the four-component example. Click the cited connection to see the evidence on the drawing. Answers describe the selected extraction and its review status.
 
-## Ask GPT or Claude in the workbench
+## Update an existing copy
 
-In **Ask about drawing**, choose **OpenAI (GPT)** or **Claude (Anthropic)**. Open the session connection form and enter the model ID and provider API key issued for your account. The server keeps this configuration in memory until it stops. Select an API model with image support if you also want to trace drawings with it.
+1. Close the old workbench using **Ctrl+C** in its launcher window. Saved drawings, corrections, matrices and traces live under `runs\v3`.
+2. If you installed from a ZIP, visit the [V3 branch](https://github.com/BoccerSoss/Senior_Design/tree/codex/aip-v3), choose **Code → Download ZIP**, then **Extract All** into a new folder. To keep your drawings, copy the old `runs\v3` folder to the same location inside the newly extracted project before you launch. If you use Git and already have the V3 branch checked out, run `git pull --ff-only` there.
+3. Double-click **Open AIP V3.cmd** in the updated folder. Refresh the workbench browser tab if it was already open.
+
+## Use your ChatGPT subscription
+
+Open the four-component example and choose **Ask about drawing → ChatGPT subscription → Continue with ChatGPT**. Click **Open OpenAI sign-in**, finish sign-in and consent, then return to AIP. Choose an available **Plan model**, enter **What connects to V-101?**, and click **Ask model**. Click a cited connection to inspect its source. For image analysis, choose **Find connections with AI → ChatGPT subscription → Trace drawing**, then open **View matrix**.
+
+Plan sharing depends on the account and workspace. OpenAI lists eligible Plus and Pro accounts. Review the allowance or credits you authorize in ChatGPT's usage settings. AIP relies on the model list returned for that account. Windows protects the saved connection for the current user under `%LOCALAPPDATA%\AIP\ChatGPT`. [OpenAI plan sign-in](https://developers.openai.com/siwc/quickstart) · [Manage plan usage](https://chatgpt.com/settings/usage)
+
+**If your workspace cannot connect**, choose **ChatGPT in your browser** in the model list. For questions, click **Copy question and matrix**, then **Open ChatGPT**, select the intended workspace, and paste. For a visual check, use **Download drawing PNG** and attach it to your chat. A response in that chat stays there. To create a matrix inside the workbench without API credentials, choose **Find connections with AI → Local connection model → Trace drawing**.
+
+## Use a provider API key
+
+In **Ask about drawing**, choose **OpenAI (API key)** or **Claude (Anthropic)**. Open the session connection form and enter the model ID and provider API key issued for your account. The server keeps this configuration in memory until it stops. Select an API model with image support if you also want to trace drawings with it.
 
 When you submit a question, the selected provider receives the question and the drawing's recorded facts. A model selects supporting facts and the workbench renders the answer from those records, with clickable citations. When you choose a hosted provider under **Find connections with AI**, that action sends the selected sheet image. A hosted vision result must pass endpoint and evidence checks before it appears in the candidate matrix.
 
-For the ORNL environment, use a model endpoint and credentials provided for the project. A browser sign-in alone does not configure the connector. These startup environment variables are an alternative to session entry.
+For an ORNL-provided gateway, use the project endpoint and its credentials. These startup environment variables are an alternative to entering API credentials in the workbench.
 
 | Provider | Model ID | Credential | API base |
 | --- | --- | --- | --- |
@@ -34,6 +48,6 @@ The local demo remains available under **Ask about drawing → Local graph looku
 
 **Claude Desktop.** Start V3 and open **Setup → Connect an external AI client → View Claude Desktop configuration**. In Claude Desktop, open **Settings → Developer → Edit Config**. Add the displayed `aip-drawings` entry to the existing `mcpServers` object, save, and restart Claude Desktop. The entry launches a local Python bridge. Keep the workbench running and ask Claude to list the drawings and read the V3 direct connections on a selected sheet. The bridge obtains its local access token from the running workbench. [Local MCP client setup](https://modelcontextprotocol.io/docs/develop/connect-local-servers)
 
-**Hosted ChatGPT.** For questions on this computer, the in-app OpenAI option calls the Responses API. Connecting the hosted ChatGPT interface itself requires workspace support and a reachable MCP service with compatible authentication. This release runs on loopback. [ChatGPT connector setup](https://developers.openai.com/plugins/deploy/connect-chatgpt)
+**Hosted ChatGPT.** Use the browser-copy workflow above for an ordinary ChatGPT conversation. Connecting ChatGPT through MCP requires workspace support and a reachable MCP service with compatible authentication. This release runs on loopback. [ChatGPT connector setup](https://developers.openai.com/plugins/deploy/connect-chatgpt)
 
 The read-only tools `list_drawings` and `drawing_connections` expose saved V2 or V3 equipment pairs, evidence paths, review flags and known directions. External clients decide which returned facts to present. Clearance status and approved procedures require separate sources.

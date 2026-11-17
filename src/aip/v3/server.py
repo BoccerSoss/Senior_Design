@@ -1,5 +1,6 @@
 """Serve the V3 drawing workbench and its isolated AI predictions on loopback."""
 import argparse
+from functools import partial
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,7 @@ from ..v2.server import Application as BaseApplication, Handler as BaseHandler, 
 from ..v2.store import Conflict, now
 from . import VERSION
 from .ask import ask_drawing
+from .plan import PlanClient
 from .vision import MODEL_ID, extract_connections
 
 
@@ -65,6 +67,7 @@ class Application(BaseApplication):
         self._in_flight = set()
         self._lock = threading.Lock()
         self._profiles = {}
+        self.plan = PlanClient()
         with self.store.db:
             self.store.db.execute("CREATE TABLE IF NOT EXISTS v3_traces "
                                   "(sheet_id TEXT PRIMARY KEY, result TEXT NOT NULL)")
@@ -76,7 +79,14 @@ class Application(BaseApplication):
 
     def list_profiles(self):
         with self._lock:
-            return available_profiles(self._profiles)
+            profiles = available_profiles(self._profiles)
+        profiles.insert(2, {"id": "chatgpt-plan", "label": "ChatGPT subscription",
+                            "trace": True, "ask": True, "external": True, **self.plan.status()})
+        return profiles
+
+    def close(self):
+        self.plan.close()
+        super().close()
 
     def connect_profile(self, body):
         key, model, secret = body.get("provider"), body.get("model"), body.get("api_key")
@@ -91,7 +101,15 @@ class Application(BaseApplication):
             self._profiles[key] = {"model": model.strip(), "_session_key": secret}
         return {"configured": True}
 
-    def require_profile(self, key, capability):
+    def require_profile(self, key, capability, model=None):
+        if key == "chatgpt-plan":
+            status = self.plan.status()
+            if not status["ready"]:
+                raise ValueError(status["error"] or "Continue with ChatGPT to use your subscription.")
+            model = status["model"] if model is None else model
+            if not isinstance(model, str) or model not in [item["slug"] for item in status["models"]]:
+                raise ValueError("Select a model available to this ChatGPT account.")
+            return {"provider": key, "model": model, "_plan_generate": partial(self.plan.generate, model=model)}
         with self._lock:
             for info in available_profiles(self._profiles):
                 if key == info["id"]:
@@ -111,7 +129,7 @@ class Application(BaseApplication):
     def trace(self, body):
         sheet = self.store.sheet(body.get("sheet_id"))
         sheet_id = sheet["id"]
-        settings = self.require_profile(body.get("provider"), "trace")
+        settings = self.require_profile(body.get("provider"), "trace", body.get("model"))
         with self._lock:
             if sheet_id in self._in_flight:
                 raise Conflict("A connection trace is already running for this drawing.")
@@ -159,7 +177,7 @@ class Application(BaseApplication):
         return equipment_positions(sheet)
 
     def ask_selected(self, body):
-        settings = self.require_profile(body.get("provider"), "ask")
+        settings = self.require_profile(body.get("provider"), "ask", body.get("model"))
         sheet, matrix = self.selected_graph(body.get("sheet_id"), body.get("method", "v2"))
         return ask_drawing(settings, body.get("question"), sheet, matrix)
 
@@ -209,7 +227,11 @@ class Handler(BaseHandler):
         return True
 
     def extra_post(self, path, body):
-        if path == "/api/v3/connect":
+        if path == "/api/v3/plan/sign-in":
+            self.send(self.app.plan.sign_in(account=body.get("account")))
+        elif path == "/api/v3/plan/sign-out":
+            self.send(self.app.plan.sign_out())
+        elif path == "/api/v3/connect":
             self.send(self.app.connect_profile(body))
         elif path == "/api/v3/trace":
             self.send({"trace": self.app.trace(body)})
