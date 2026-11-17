@@ -1,0 +1,4 @@
+# Supported platform: CPython 3.12 on Windows x64.
+# Keep V1's locked image/OCR runtime and add the PDF-to-PNG renderer for V2.
+-r requirements.lock
+pypdfium2==5.4.0 --hash=sha256:f9d9ce3c6901294d6984004d4a797dea110f8248b1bde33a823d25b45d3c2685

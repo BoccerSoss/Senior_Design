@@ -1,8 +1,24 @@
 # AIP drawing extraction prototype
 
+## V2 P&ID Matrix Builder
+
+Extract the repository ZIP and double-click [Open AIP V2.cmd](Open%20AIP%20V2.cmd). It opens locally at `http://127.0.0.1:8765`. Choose **Open example → Four-component example** or import a drawing image. Review the marked **Components** and **Connections**, then choose **View matrix**.
+
+The three main tabs are **Drawing**, **Connectivity matrix** and **Grid**. The matrix displays labeled rows and columns, immediate undirected equipment connections, review diagnostics and CSV/JSON exports. Corrections to equipment or connections update the matrix. **Drawing → Connections** also supports reviewing and following links between documents. The separate **Grid** tab overlays the original drawing with lines through exact symbol centers, giving equipment integer column/row references without moving symbols or pipes. Its labels, coordinate list and JSON export use the same derived coordinates. PDFs are converted to PNG before extraction.
+
+This follows the original drawing-to-equipment-to-connectivity deliverable. [V2 instructions](docs/V2_WORKBENCH.md) · [Project scope](docs/V2_CAPABILITY_MAP.md) · [Verification record](docs/V2_VERIFICATION.md)
+
+The source-aligned grid revision passed **180 local tests**. All 125 marked equipment centers across the six beginner PNGs were checked against their exact grid intersections, and the original connection records and matrices stayed unchanged. Grid spacing follows the drawing and can vary.
+
+The earlier matrix-focused revision passed **166 local tests**. The four-component example ran through the actual image extractor and produced **4 equipment records, 3 direct connections and the labeled 4×4 matrix**, with its raw prediction preserved. This is a known development example, not a blind accuracy test. The [verification record](docs/V2_VERIFICATION.md) separates that result from the newer source-aligned grid revision.
+
+The earlier six-beginner-PNG import check produced coordinates for all 125 equipment observations and 104 nonempty OCR names; 21 names remained unread. These are completeness counts, not independently scored accuracy. Optional external AI remains separately configured and untested with live requests.
+
+## Original desktop prototype (V1)
+
 The P&ID Matrix Builder desktop demo and command-line tools interpret simplified raster process symbols and tags and export a direct connection matrix. The default local method combines Windows OCR with pixel-based shape rules. A geometry-only baseline and an assisted ChatGPT response importer are also available.
 
-## Desktop demo
+### Desktop demo
 
 1. On GitHub, select the `codex/aip-prototype` branch and choose **Code → Download ZIP**. In File Explorer, choose **Extract All**, then open the project folder inside the extracted folder. You can also use a Git checkout.
 2. Double-click `Open AIP Demo.cmd`. The app opens with the synthetic drawing loaded.
