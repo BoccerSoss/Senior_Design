@@ -24,6 +24,12 @@ For the ORNL environment, use a model endpoint and credentials provided for the 
 
 The gateway must support OpenAI-compatible chat completions. The local tracing model and local graph lookup are available without credentials. A listed hosted profile indicates that configuration is present. The first request checks actual access to the provider and model.
 
+### If a model request returns HTTP 429
+
+V3 displays the provider's recognized error code. For a temporary rate limit, wait for the displayed interval before trying again. For insufficient quota, an exhausted credit balance, or an enforced spending or usage limit, ask the administrator of the API project attached to the key to check the specified limit. For ORNL work, confirm the key belongs to the intended lab project. An unspecified 429 leaves the cause undetermined. [OpenAI's 429 troubleshooting guide](https://help.openai.com/en/articles/5955604-troubleshooting-api-rate-limits-and-429-errors)
+
+The local demo remains available under **Ask about drawing → Local graph lookup** or **Find connections with AI → Local connection model**.
+
 ## Ask from an external client
 
 **Claude Desktop.** Start V3 and open **Setup → Connect an external AI client → View Claude Desktop configuration**. In Claude Desktop, open **Settings → Developer → Edit Config**. Add the displayed `aip-drawings` entry to the existing `mcpServers` object, save, and restart Claude Desktop. The entry launches a local Python bridge. Keep the workbench running and ask Claude to list the drawings and read the V3 direct connections on a selected sheet. The bridge obtains its local access token from the running workbench. [Local MCP client setup](https://modelcontextprotocol.io/docs/develop/connect-local-servers)

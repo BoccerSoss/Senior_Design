@@ -14,6 +14,9 @@ import math
 import os
 import socket
 from collections.abc import Mapping
+from email.utils import parsedate_to_datetime
+from http.client import HTTPException
+from time import time
 from urllib import error, parse, request
 
 
@@ -157,6 +160,57 @@ def _endpoint(base, suffix):
     return base if base.endswith("/" + suffix) else base + "/" + suffix
 
 
+_QUOTA_DETAILS = {
+    "credit_balance_exhausted": "The API organization has exhausted its credit balance. Ask its administrator to check billing.",
+    "organization_spend_limit_exceeded": "The API organization reached its spending limit. Ask its administrator to check that limit.",
+    "project_spend_limit_exceeded": "The API project reached its spending limit. Ask the project administrator to check that limit.",
+    "organization_usage_limit_exceeded": "The API organization reached its approved usage limit. Ask its administrator to review the usage allowance.",
+    "insufficient_quota": "The API reports insufficient quota. Ask the API project administrator to check the available credits and enforced spending limits.",
+}
+_RATE_CODES = {"rate_limit_exceeded", "rate_limit_error", "slow_down"}
+
+
+def _retry_seconds(header):
+    if not isinstance(header, str) or len(header) > 80:
+        return None
+    value = header.strip()
+    if value.isascii() and value.isdigit() and len(value) <= 10:
+        return int(value)
+    try:
+        when = parsedate_to_datetime(value)
+        if when.tzinfo is not None:
+            return max(0, math.ceil(when.timestamp() - time()))
+    except (ValueError, TypeError, OverflowError, OSError):
+        pass
+    return None
+
+
+def _limit_detail(exc):
+    # Only recognized codes and a parsed delay can enter a message shown to users.
+    # Provider text, IDs and headers can contain project or drawing information.
+    details = {}
+    try:
+        data = exc.read(8193)
+        if len(data) <= 8192:
+            payload = json.loads(data)
+            if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
+                details = payload["error"]
+    except (ValueError, OSError, HTTPException, RecursionError):
+        pass
+    for field in ("code", "type"):
+        code = details.get(field)
+        if not isinstance(code, str):
+            continue
+        if code in _QUOTA_DETAILS:
+            return f"{_QUOTA_DETAILS[code]} ({code})"
+        if code in _RATE_CODES:
+            delay = _retry_seconds((exc.headers or {}).get("Retry-After"))
+            retry = f"Wait at least {delay} seconds before retrying." if delay else "Pause briefly before retrying."
+            return f"The provider reported a temporary rate limit. {retry} ({code})"
+    return ("The provider did not identify which limit was reached. Check the API project's rate limits "
+            "and available quota before retrying.")
+
+
 def _post(config, payload):
     provider = config["provider"]
     suffix = "responses" if provider == "openai" else "messages" if provider == "anthropic" else "chat/completions"
@@ -173,17 +227,17 @@ def _post(config, payload):
             body = response.read(MAX_RESPONSE_BYTES + 1)
     except error.HTTPError as exc:
         code = exc.code
-        exc.close()
-        if code in {401, 403}:
-            detail = "Check the environment credential and the model/server permissions."
-        elif code == 429:
-            detail = "The server is rate-limited or its quota is exhausted; retry later."
-        elif 300 <= code < 400:
-            detail = "Redirects are disabled; configure the server's final API base URL."
-        elif code in {400, 404, 422}:
-            detail = "Check the model ID, API base URL, and image support."
-        else:
-            detail = "The server could not complete the request; retry later."
+        with exc:
+            if code == 429:
+                detail = _limit_detail(exc)
+            elif code in {401, 403}:
+                detail = "Check the environment credential and the model/server permissions."
+            elif 300 <= code < 400:
+                detail = "Redirects are disabled; configure the server's final API base URL."
+            elif code in {400, 404, 422}:
+                detail = "Check the model ID, API base URL, and image support."
+            else:
+                detail = "The server could not complete the request; retry later."
         # Error bodies may contain credentials or drawing data. Never relay them.
         raise ProviderError(f"AI request failed (HTTP {code}). {detail}") from None
     except (TimeoutError, socket.timeout):
