@@ -47,15 +47,18 @@ def analysis_objects(result):
         observed_direction = item.get("direction") or {}
         direction = observed_direction.get("status", "unknown") if isinstance(observed_direction, dict) else observed_direction
         observed_kind = item.get("kind", "unknown")
-        # Reviewed source geometry records explicitly traced process pipes. The
-        # generic extractor's undifferentiated linework still requires classification.
-        kind = observed_kind if observed_kind in {"pipe", "signal"} else (
-            "pipe" if observed_kind == "direct_undirected" and document["run"]["method"] == "drawing-reference" else "unknown")
+        # Preserve the original equipment-adjacency relation without claiming a
+        # pipe/signal classification the generic extractor did not establish.
+        kind = observed_kind if observed_kind in {"pipe", "signal", "direct_undirected"} else "unknown"
+        if kind == "direct_undirected" and document["run"]["method"] == "drawing-reference":
+            kind = "pipe"
         connections.append({"id": f"edge-{i:04d}", "source": item["source"], "target": item["target"],
                             "kind": kind, "observed_kind": observed_kind, "path": item.get("path"), "direction": direction,
                             "observed_arrow": observed_direction if isinstance(observed_direction, dict) else None,
                             "review_status": "unreviewed", "evidence": item.get("evidence"),
-                            "uncertainty": item.get("uncertainty") or "Review whether this line is pipe or signal."})
+                            "uncertainty": item.get("uncertainty") or (
+                                "Equipment adjacency under the simplified drawing convention; line classification is unconfirmed."
+                                if kind == "direct_undirected" else "Review the connection against the source drawing.")})
     provenance = {"method": document["run"]["method"], "run_id": document["run"]["run_id"],
                   "citation": result.reference_citation, "source_url": result.reference_url,
                   "uncertainties": document.get("uncertainties", []),

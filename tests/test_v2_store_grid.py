@@ -76,6 +76,14 @@ class StoreGridTests(unittest.TestCase):
         outcome = self.store.replace_analysis("sheet", self.items, self.edges, {})
         self.assertIn("manual", [c["id"] for c in outcome["sheet"]["components"]])
 
+    def test_reviewed_line_classification_survives_machine_kind_change(self):
+        self.store.edit_item("sheet", "connections", {"id":"e", "kind":"pipe", "review_status":"confirmed"})
+        changed = [{**self.edges[0],"kind":"direct_undirected"}]
+        outcome = self.store.replace_analysis("sheet", self.items, changed, {})
+        self.assertEqual([], outcome["pending"])
+        self.assertEqual("pipe", outcome["sheet"]["connections"][0]["kind"])
+        self.assertEqual("confirmed", outcome["sheet"]["connections"][0]["review_status"])
+
     def test_connection_replay_waits_for_manually_added_components(self):
         self.store.edit_item("sheet", "components", component("manual", 40, "Added"))
         self.store.edit_item("sheet", "connections", {"id":"manual-edge", "source":"a", "target":"manual", "kind":"pipe"})

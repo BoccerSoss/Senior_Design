@@ -25,6 +25,7 @@ from PIL import Image
 from ..io import ROOT
 from . import VERSION
 from .grid import equipment_positions
+from .matrix import build_matrix, matrix_csv
 from .ingest import Imports, MAX_UPLOAD
 from .network import scope_isolation, search, trace_network
 from .providers import ask_provider, extract_provider, provider_status
@@ -362,7 +363,19 @@ class Application:
         if action == "extract_ai":
             return {"job": self.ai_extract(body)}
         if action == "demo":
-            if body.get("kind", "two-sheet") == "beginner":
+            kind = body.get("kind", "four-component")
+            if kind == "four-component":
+                drawing = ROOT / "data/input/four_component.png"
+                if not drawing.is_file():
+                    raise ValueError("The four-component input PNG is missing. Download the complete project folder.")
+                facility = next((f for f in self.store.snapshot()["facilities"] if f["name"] == "Four-component example"), None)
+                facility = facility or self.store.add_facility("Four-component example")
+                index = b"file,title,drawing,sheet\nfour_component.png,Synthetic P&ID test,Four-component example,1\n"
+                # The demo runs the same image extractor as an ordinary upload.
+                # No reference components, tags or edges are supplied here.
+                job = self.imports.submit([(drawing.name, drawing.read_bytes()), ("index.csv", index)], facility["id"])
+                return {"job": job, "facility_id": facility["id"]}
+            if kind == "beginner":
                 files = []
                 candidates = [ROOT.parent.parent / "outputs/diagram-pages-png/01_Beginner",
                               ROOT / "data/input/beginner"]
@@ -375,8 +388,15 @@ class Application:
                 facility = facility or self.store.add_facility("ISLOCA beginner collection")
                 return {"job": self.imports.submit(files, facility["id"]), "facility_id": facility["id"]}
             from .demo import create_demo
-            return {"result": create_demo(self.store)}
+            return {"result": create_demo(self.store, kind=kind)}
         raise ValueError("Unknown application action.")
+
+    def matrix(self, facility_id=None, sheet_id=None):
+        if sheet_id and not facility_id:
+            facility_id = self.store.sheet(sheet_id)["facility_id"]
+        if not facility_id:
+            raise ValueError("Choose a drawing or facility for the connectivity matrix.")
+        return build_matrix(self.store.snapshot(), facility_id, sheet_id)
 
     def export(self, query):
         state = self.state(query.get("facility_id", [None])[0])
@@ -385,25 +405,22 @@ class Application:
         if kind == "grid":
             sheet = self.store.sheet(sheet_id)
             return json.dumps(equipment_positions(sheet), indent=2).encode(), "application/json", "equipment-grid.json"
-        if kind == "matrix":
+        if kind in {"matrix", "matrix-json", "connections", "connections-json"}:
+            result = self.matrix(query.get("facility_id", [None])[0], sheet_id)
+            if kind == "matrix":
+                return matrix_csv(result).encode("utf-8-sig"), "text/csv", "connectivity-matrix.csv"
+            if kind == "matrix-json":
+                return json.dumps(result, indent=2).encode(), "application/json", "connectivity-matrix.json"
+            if kind == "connections-json":
+                value = {"scope": result["scope"], "connections": result["direct_edges"], "diagnostics": result["diagnostics"]}
+                return json.dumps(value, indent=2).encode(), "application/json", "direct-connections.json"
             stream = io.StringIO(newline="")
             writer = csv.writer(stream)
-            sheets = [s for s in state["sheets"] if s.get("active", True) and (not sheet_id or s["id"] == sheet_id)]
-            refs = [(s["id"], c["id"]) for s in sheets for c in s["components"]]
-            labels = [f"{s['drawing_number']}:{c.get('tag') or c['id']} [{s['id']}/{c['id']}]"
-                      for s in sheets for c in s["components"]]
-            connected = set()
-            for sheet in sheets:
-                for edge in sheet["connections"]:
-                    if edge.get("kind") == "pipe" and edge.get("review_status") != "rejected":
-                        connected.add(frozenset(((sheet["id"], edge["source"]), (sheet["id"], edge["target"]))))
-            for link in state["links"]:
-                if link.get("status") == "confirmed" and link.get("kind", "pipe") == "pipe":
-                    connected.add(frozenset((ref["sheet_id"], ref["component_id"]) for ref in (link["from"], link["to"])))
-            writer.writerow(["Process adjacency (undirected; review source evidence)", *labels])
-            for ref, label in zip(refs, labels):
-                writer.writerow([label, *[int(ref != target and frozenset((ref,target)) in connected) for target in refs]])
-            return stream.getvalue().encode("utf-8-sig"), "text/csv", "process-adjacency.csv"
+            writer.writerow(["source", "target", "source_sheet_id", "source_component_id", "target_sheet_id", "target_component_id", "review_status"])
+            for edge in result["direct_edges"]:
+                writer.writerow([edge["source_label"], edge["target_label"], edge["source"]["sheet_id"], edge["source"]["component_id"],
+                                 edge["target"]["sheet_id"], edge["target"]["component_id"], edge["review_status"]])
+            return stream.getvalue().encode("utf-8-sig"), "text/csv", "direct-connections.csv"
         if kind == "csv":
             stream = io.StringIO(newline="")
             writer = csv.writer(stream)
@@ -494,6 +511,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(self.app.state(query.get("facility_id", [None])[0]))
             if path == "/api/providers":
                 return self.send(self.app.providers())
+            if path == "/api/matrix":
+                return self.send(self.app.matrix(query.get("facility_id", [None])[0], query.get("sheet_id", [None])[0]))
             if path == "/api/grid":
                 return self.send(equipment_positions(self.app.store.sheet(query["sheet_id"][0])))
             if path.startswith("/api/jobs/"):

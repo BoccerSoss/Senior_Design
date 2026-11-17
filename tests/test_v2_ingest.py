@@ -21,14 +21,14 @@ def png():
 
 
 class ImportTests(unittest.TestCase):
-    def test_legacy_relation_is_unclassified_and_observed_arrow_is_preserved(self):
+    def test_legacy_equipment_adjacency_and_observed_arrow_are_preserved(self):
         with tempfile.TemporaryDirectory() as folder:
             document = {"components": [], "run": {"method": "test", "run_id": "r"},
                 "connections": [{"source":"a", "target":"b", "kind":"direct_undirected",
                     "path":[[1,1],[2,2]], "direction":{"status":"source_to_target", "arrow_tip":[2,2]}}]}
             (Path(folder)/"prediction.json").write_text(json.dumps(document))
             _, edges, _ = analysis_objects(SimpleNamespace(directory=Path(folder),reference_citation=None,reference_url=None))
-            self.assertEqual("unknown", edges[0]["kind"])
+            self.assertEqual("direct_undirected", edges[0]["kind"])
             self.assertEqual("direct_undirected", edges[0]["observed_kind"])
             self.assertEqual("source_to_target", edges[0]["direction"])
             self.assertEqual([2,2], edges[0]["observed_arrow"]["arrow_tip"])

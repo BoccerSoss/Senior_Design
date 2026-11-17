@@ -1,14 +1,16 @@
 # AIP drawing extraction prototype
 
-## V2 drawing workbench
+## V2 P&ID Matrix Builder
 
-For the connected browser demo, extract the repository ZIP and double-click [Open AIP V2.cmd](Open%20AIP%20V2.cmd). It opens locally at `http://127.0.0.1:8765`. Choose **Load demonstration → Connected two-sheet system** to inspect the pump, branches and cross-sheet candidate isolation results.
+Extract the repository ZIP and double-click [Open AIP V2.cmd](Open%20AIP%20V2.cmd). It opens locally at `http://127.0.0.1:8765`. Choose **Open example → Four-component example** or import a drawing image. Review the marked **Components** and **Connections**, then choose **View matrix**.
 
-Use the separate **Grid** tab for visible equipment coordinates such as **P-101 (6,5)**. Set its rows/columns and see coordinates below each equipment mark; grid settings do not change pipe connections or isolation behavior. PDFs are converted to PNG before extraction. [Complete V2 instructions](docs/V2_WORKBENCH.md) · [Capabilities and remaining work](docs/V2_CAPABILITY_MAP.md)
+The three main tabs are **Drawing**, **Connectivity matrix** and **Grid**. The matrix displays labeled rows and columns, immediate undirected equipment connections, review diagnostics and CSV/JSON exports. Corrections to equipment or connections update the matrix. **Drawing → Connections** also supports reviewing and following links between documents. The separate Grid tab controls equipment coordinate labels and its coordinate JSON export. PDFs are converted to PNG before extraction.
 
-V2 is a local research prototype requiring engineering review. It has no SSO/RBAC or multiuser hosting. Optional AI endpoints require separately configured approved API access; external providers have not been tested with live requests.
+This follows the original drawing-to-equipment-to-connectivity deliverable. [V2 instructions](docs/V2_WORKBENCH.md) · [Project scope](docs/V2_CAPABILITY_MAP.md) · [Verification record](docs/V2_VERIFICATION.md)
 
-[V2 verification results](docs/V2_VERIFICATION.md): 149 tests passed; all six beginner PNGs imported with grid coordinates. Twenty-one OCR names remain unread and require review or assisted reading.
+The matrix-focused revision passed **166 local tests**. The four-component example ran through the actual image extractor and produced **4 equipment records, 3 direct connections and the labeled 4×4 matrix**, with its raw prediction preserved. This is a known development example, not a blind accuracy test.
+
+The earlier six-beginner-PNG import check produced coordinates for all 125 equipment observations and 104 nonempty OCR names; 21 names remained unread. These are completeness counts, not independently scored accuracy. Optional external AI remains separately configured and untested with live requests.
 
 ## Original desktop prototype (V1)
 

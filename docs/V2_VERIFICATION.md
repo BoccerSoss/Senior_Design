@@ -1,6 +1,28 @@
 # V2 verification record
 
-Verified locally on 17 November 2026 with Windows and the locked CPython 3.12 runtime.
+## Matrix-focused revision — 17 November 2026
+
+The revised interface restores the drawing-to-equipment-to-matrix workflow. Its primary tabs are **Drawing**, **Connectivity matrix** and **Grid**. The four-component image is the introductory example; the matrix is displayed directly with labeled rows/columns and direct-edge diagnostics. Linked-document review and navigation remain supporting features inside **Drawing → Connections**. Earlier assistant, audit and facility-graph pages are outside this primary workflow. The original extraction/evaluation convention remains immediate undirected adjacency.
+
+Validation for this revision is recorded separately from the earlier build below:
+
+- `python scripts/test.py`: **166 local tests passed**, including 11 new matrix tests, five new HTTP regressions and classification-correction continuity.
+- The introductory four-component demo used the actual classical image pipeline and produced **4 equipment observations, 3 direct connections, no unread names and 4 grid coordinates**. Raw prediction evidence was preserved in the ignored `runs/matrix-focus-check` workspace.
+- The matrix used the observed order **T-101, V-101, P-101, T-102** and matched the table below. The example is a known development drawing; this check does not establish blind or held-out recognition accuracy.
+- A separate read-only check of all six beginner results confirmed **125 equipment rows, 133 direct edges and 104 nonempty names**. The matrix CSV matched the matrix records, symmetry and zero-diagonal checks passed, and **21 unread names remained explicit**.
+
+| Equipment | T-101 | V-101 | P-101 | T-102 |
+| --- | ---: | ---: | ---: | ---: |
+| T-101 | 0 | 1 | 0 | 0 |
+| V-101 | 1 | 0 | 1 | 0 |
+| P-101 | 0 | 1 | 0 | 1 |
+| T-102 | 0 | 0 | 1 | 0 |
+
+Browser review verified the three primary tabs, the visible Figure A.1 matrix (20 equipment rows and 18 direct edges), matrix-to-source connection inspection, and linked-document navigation from RL-001 to RL-002. In the four-component example, setting Grid to four columns and one row displayed T-101 (1,1), V-101 (2,1), P-101 (3,1) and T-102 (4,1); its matrix retained the three direct connections. The earlier browser observations below belong to the earlier build.
+
+## Earlier V2 build — 17 November 2026
+
+The following checks were completed locally with Windows and the locked CPython 3.12 runtime before the matrix-focused interface revision.
 
 - `python scripts/test.py`: **149 tests passed**. This includes real loopback HTTP/MCP requests, correction identity changes, parallel routes, missing/rejected connections, facility boundaries, provider response validation and grid independence.
 - `node --check src/aip/v2/static/app.js`: passed.

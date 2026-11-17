@@ -232,8 +232,8 @@ class Store:
             ids = {component["id"] for component in sheet["components"]}
             if item.get("source") not in ids or item.get("target") not in ids or item["source"] == item["target"]:
                 raise ValueError("A connection must join two different equipment items on this sheet.")
-            if item.get("kind") not in {"pipe", "signal", "unknown"}:
-                raise ValueError("Choose pipe, signal or unknown for the connection.")
+            if item.get("kind") not in {"pipe", "direct_undirected", "signal", "unknown"}:
+                raise ValueError("Choose an equipment connection, pipe, signal or unknown line.")
             path = item.get("path")
             if path is not None and (not isinstance(path, list) or len(path) < 2 or any(
                 not isinstance(p, list) or len(p) != 2 or
@@ -287,8 +287,7 @@ class Store:
         for edge in connections:
             edge["source"], edge["target"] = remap.get(edge["source"], edge["source"]), remap.get(edge["target"], edge["target"])
         edge_matches = {edge["id"]: [prior["id"] for prior in old_edges
-            if prior.get("kind") == edge.get("kind") and
-            {prior["source"], prior["target"]} == {edge["source"], edge["target"]} and
+            if {prior["source"], prior["target"]} == {edge["source"], edge["target"]} and
             self._same_route(prior.get("path"), edge.get("path"), sheet)] for edge in connections}
         edge_remap = {}
         for edge in connections:
