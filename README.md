@@ -1,8 +1,20 @@
 # AIP drawing extraction prototype
 
+## V2 drawing workbench
+
+For the connected browser demo, extract the repository ZIP and double-click [Open AIP V2.cmd](Open%20AIP%20V2.cmd). It opens locally at `http://127.0.0.1:8765`. Choose **Load demonstration → Connected two-sheet system** to inspect the pump, branches and cross-sheet candidate isolation results.
+
+Use the separate **Grid** tab for visible equipment coordinates such as **P-101 (6,5)**. Set its rows/columns and see coordinates below each equipment mark; grid settings do not change pipe connections or isolation behavior. PDFs are converted to PNG before extraction. [Complete V2 instructions](docs/V2_WORKBENCH.md) · [Capabilities and remaining work](docs/V2_CAPABILITY_MAP.md)
+
+V2 is a local research prototype requiring engineering review. It has no SSO/RBAC or multiuser hosting. Optional AI endpoints require separately configured approved API access; external providers have not been tested with live requests.
+
+[V2 verification results](docs/V2_VERIFICATION.md): 149 tests passed; all six beginner PNGs imported with grid coordinates. Twenty-one OCR names remain unread and require review or assisted reading.
+
+## Original desktop prototype (V1)
+
 The P&ID Matrix Builder desktop demo and command-line tools interpret simplified raster process symbols and tags and export a direct connection matrix. The default local method combines Windows OCR with pixel-based shape rules. A geometry-only baseline and an assisted ChatGPT response importer are also available.
 
-## Desktop demo
+### Desktop demo
 
 1. On GitHub, select the `codex/aip-prototype` branch and choose **Code → Download ZIP**. In File Explorer, choose **Extract All**, then open the project folder inside the extracted folder. You can also use a Git checkout.
 2. Double-click `Open AIP Demo.cmd`. The app opens with the synthetic drawing loaded.

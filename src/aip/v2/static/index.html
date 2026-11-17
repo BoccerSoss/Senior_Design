@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIP V2 · Drawing Workbench</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="AIP drawing workbench home"><span class="brand-mark">AIP</span><span>Drawing Workbench <small>V2</small></span></a>
+    <nav aria-label="Main navigation">
+      <button class="nav-button active" data-view="drawings">Drawings</button>
+      <button class="nav-button" data-view="grid">Grid</button>
+      <button class="nav-button" data-view="graph">Facility graph</button>
+      <button class="nav-button" data-view="assistant">AI assistant</button>
+      <button class="nav-button" data-view="audit">Audit</button>
+      <button class="nav-button" data-view="settings">Settings</button>
+    </nav>
+    <span class="local-status"><i></i> Local workspace</span>
+  </header>
+  <div class="workspace-bar">
+    <div class="facility-control"><label for="facility">Facility</label><select id="facility" aria-label="Facility"></select><button class="icon-button" data-action="new-facility" title="Create a facility" aria-label="Create facility">+</button></div>
+    <div id="workspace-description" class="workspace-description">Connecting to the local workspace…</div>
+    <button class="button" data-action="show-demo">Load demonstration</button>
+    <button class="button primary" data-action="import">Import drawings</button>
+  </div>
+  <main id="main"></main>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="import-dialog">
+    <form id="import-form">
+      <div class="dialog-heading"><h2>Import drawings</h2><button type="button" class="icon-button" data-action="close-dialog" aria-label="Close">×</button></div>
+      <p>Each PDF page or image becomes a drawing sheet. Add an index CSV with file, page, drawing, sheet, revision and title fields when available.</p>
+      <label class="dropzone" for="import-files"><strong>Choose files</strong><span>PDF, PNG, JPEG, TIFF, WebP, ZIP or index CSV</span><input id="import-files" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.zip,.csv,.dgn" required></label>
+      <p id="import-file-summary" class="muted"></p>
+      <label class="field">Import into facility<select id="import-facility"></select></label>
+      <div class="dialog-actions"><button type="button" class="button" data-action="close-dialog">Cancel</button><button class="button primary" type="submit">Start import</button></div>
+    </form>
+  </dialog>
+  <dialog id="demo-dialog">
+    <div class="dialog-heading"><h2>Choose a demonstration</h2><button class="icon-button" data-action="close-dialog" aria-label="Close">×</button></div>
+    <button class="demo-choice" data-action="load-demo" data-kind="two-sheet"><strong>Connected two-sheet system</strong><span>A synthetic pump system with branches, connectors, instruments and isolation review.</span></button>
+    <button class="demo-choice" data-action="load-demo" data-kind="beginner"><strong>Beginner ISLOCA drawings</strong><span>Use locally available beginner PNGs and source geometry. Printed names are read from the images.</span></button>
+  </dialog>
+  <script src="/app.js" defer></script>
+</body>
+</html>
