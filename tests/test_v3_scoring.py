@@ -72,11 +72,13 @@ class V3ScoringTests(unittest.TestCase):
         actual = graph(["1", "2"], [None, "V-11"], [(0, 1)])
         result, _ = score_graph(actual, ref)
         self.assertEqual(result["named_edges"]["f1"], 1)
+        self.assertEqual(result["printed_names"], {"expected": 1, "located": 1, "correct": 1})
         actual["components"][0]["tag"] = "invented name"
         self.assertEqual(score_graph(actual, ref)[0]["named_edges"]["f1"], 0)
         del ref["components"][0]["tag"]
         result, _ = score_graph(actual, ref)
         self.assertIsNone(result["named_edges"])
+        self.assertIsNone(result["printed_names"])
         self.assertEqual(result["localized_edges"]["f1"], 1)
 
     def test_false_edge_sharing_one_localized_symbol_and_duplicated_symbol(self):

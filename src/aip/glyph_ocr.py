@@ -47,8 +47,15 @@ def _shapes():
 @lru_cache(maxsize=1024)
 def _template_bits(chars, width, height):
     shapes = _shapes()
-    return [(char, ratio, _bits(template.resize((width, height), Image.Resampling.BILINEAR)))
-            for char in chars for ratio, template in shapes[char]]
+    aspect = width / height
+    per_character = []
+    for char in chars:
+        templates = []
+        for ratio, template in shapes[char]:
+            size_penalty = abs(width - 24) * 0.005 if char == "-" else 0.28 * abs(aspect - ratio)
+            templates.append((_bits(template.resize((width, height), Image.Resampling.BILINEAR)), size_penalty))
+        per_character.append((char, templates))
+    return per_character
 
 
 def _segments(image, start, mode, projection, letter=None):
@@ -73,16 +80,12 @@ def _segments(image, start, mode, projection, letter=None):
             continue
         observed = _bits(patch.crop((0, top, span, bottom)))
         pixel_count = span * glyph_height
-        ratio = span / glyph_height
         cut = min(projection[end - 1], projection[end]) * 0.125 if end < width else 0
-        scores = {}
-        for char, expected, template in _template_bits(chars, span, glyph_height):
-            mismatch = (observed ^ template).bit_count() / pixel_count
-            penalty = abs(span - 24) * 0.005 if mode == "separator" else 0.28 * abs(ratio - expected)
-            score = mismatch + penalty
-            if score < scores.get(char, float("inf")):
-                scores[char] = score
-        choices.extend((score + cut, end, char) for char, score in sorted(scores.items(), key=lambda item: item[1])[:4])
+        scores = []
+        for char, templates in _template_bits(chars, span, glyph_height):
+            score = min((observed ^ shape).bit_count() / pixel_count + penalty for shape, penalty in templates)
+            scores.append((score, char))
+        choices.extend((score + cut, end, char) for score, char in sorted(scores)[:4])
     return sorted(choices)[:24]
 
 
@@ -123,12 +126,19 @@ def rank_tag_glyphs(crop, ocr_suffixes=(), *, prefix=None):
         return _segments(image, start, mode, projection, letter)
 
     results = {}
+    # Numeric tag patterns share their initial character classes. The same
+    # glyphs and search costs give the same beam at that shared prefix.
+    beams = {(): [(0, 0, "")]}
     for pattern, complexity in _tag_shapes(width):
         prefix_length = pattern.index("separator")
         if prefix is not None and prefix_length != len(prefix):
             continue
-        beam = [(0, 0, "")]
+        beam = beams[()]
         for character_index, mode in enumerate(pattern):
+            partial = pattern[:character_index + 1]
+            if partial in beams:
+                beam = beams[partial]
+                continue
             letter = prefix[character_index] if prefix is not None and character_index < prefix_length else None
             best = {}
             for cost, position, text in beam:
@@ -142,6 +152,7 @@ def rank_tag_glyphs(crop, ocr_suffixes=(), *, prefix=None):
                         if total < best.get(key, float("inf")):
                             best[key] = total
             beam = sorted((cost, end, text) for (end, text), cost in best.items())[:12]
+            beams[partial] = beam
             if not beam:
                 break
         for cost, end, text in beam:

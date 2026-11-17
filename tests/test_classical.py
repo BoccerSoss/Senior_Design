@@ -84,7 +84,7 @@ class ClassicalCompositionTests(unittest.TestCase):
         # Mocked OCR/geometry test orchestration only. The actual classifier sees
         # the drawn rectangular outline, not the selected label or a reference.
         with patch("aip.classical.geometry_extract",return_value=copy.deepcopy(self.raw)), \
-             patch("aip.classical.recognize_tag_crops",return_value=self.ocr_fixture("P-825")):
+             patch("aip.classical.recognize_equipment_labels",return_value=self.ocr_fixture("P-825")):
             result = extract_image(self.path,self.root/"scratch")
         self.assertEqual(result["components"][0]["observed_tag"],"P-825")
         self.assertEqual(result["components"][0]["type"],"tank")
@@ -101,7 +101,7 @@ class ClassicalCompositionTests(unittest.TestCase):
         fixture = self.ocr_fixture(tags[0])
         fixture["tag_crop_passes"] = [text_record(tag, box) for tag, box in zip(tags, boxes)]
         with patch("aip.classical.geometry_extract", return_value=raw), \
-             patch("aip.classical.recognize_tag_crops", return_value=fixture):
+             patch("aip.classical.recognize_equipment_labels", return_value=fixture):
             result = extract_image(self.path, self.root / "scratch")
         components = result["components"]
         self.assertEqual([item["observed_tag"] for item in components], [None, None, "QX-836"])
@@ -114,7 +114,7 @@ class ClassicalCompositionTests(unittest.TestCase):
     def test_unavailable_ocr_fails_without_inventing_labels(self):
         raw = copy.deepcopy(self.raw)
         with patch("aip.classical.geometry_extract",return_value=raw), \
-             patch("aip.classical.recognize_tag_crops",side_effect=OCRUnavailable("unit fixture: OCR unavailable")):
+             patch("aip.classical.recognize_equipment_labels",side_effect=OCRUnavailable("unit fixture: OCR unavailable")):
             with self.assertRaisesRegex(OCRUnavailable,"unavailable"):
                 extract_image(self.path,self.root/"scratch")
         self.assertIsNone(raw["components"][0]["observed_tag"])
@@ -122,7 +122,7 @@ class ClassicalCompositionTests(unittest.TestCase):
     def test_empty_image_does_not_invoke_or_replace_unavailable_ocr(self):
         raw = {"image":{"width":320,"height":280},"components":[],"connections":[],"uncertainties":[]}
         with patch("aip.classical.geometry_extract",return_value=raw), \
-             patch("aip.classical.recognize_tag_crops",side_effect=AssertionError("OCR should not be called")):
+             patch("aip.classical.recognize_equipment_labels",side_effect=AssertionError("OCR should not be called")):
             result = extract_image(self.path,self.root/"scratch")
         self.assertEqual(result["components"],[])
         self.assertEqual(result["connections"],[])
@@ -131,7 +131,7 @@ class ClassicalCompositionTests(unittest.TestCase):
         fixture = self.ocr_fixture("ZZ-742")
         fixture["native"]["image"]["width"] = 999
         with patch("aip.classical.geometry_extract",return_value=copy.deepcopy(self.raw)), \
-             patch("aip.classical.recognize_tag_crops",return_value=fixture):
+             patch("aip.classical.recognize_equipment_labels",return_value=fixture):
             with self.assertRaisesRegex(ValueError,"dimensions disagree"):
                 extract_image(self.path,self.root/"scratch")
 

@@ -1,11 +1,13 @@
 """Serve the V3 drawing workbench and its isolated AI predictions on loopback."""
 import argparse
 from functools import partial
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import sys
 import threading
+from time import perf_counter
 
 from ..io import ROOT
 from ..v2.grid import equipment_positions
@@ -15,6 +17,7 @@ from ..v2.server import Application as BaseApplication, Handler as BaseHandler, 
 from ..v2.store import Conflict, now
 from . import VERSION
 from .ask import ask_drawing
+from .beginner import preload_beginner
 from .plan import PlanClient
 from .vision import MODEL_ID, extract_connections
 
@@ -71,10 +74,26 @@ class Application(BaseApplication):
         with self.store.db:
             self.store.db.execute("CREATE TABLE IF NOT EXISTS v3_traces "
                                   "(sheet_id TEXT PRIMARY KEY, result TEXT NOT NULL)")
+        self.beginner_collection = preload_beginner(self.store)
+
+    def action(self, body):
+        if body.get("action") == "demo" and body.get("kind") == "beginner":
+            return {"result": self.beginner_collection}
+        return super().action(body)
 
     def state(self, facility_id=None):
         state = super().state(facility_id)
         state["capabilities"] = {"ai_connections": True}
+        sheets = {sheet["id"]: sheet for sheet in state["sheets"]}
+        with self.store.lock:
+            # The library can search the saved names without loading every detailed trace into the browser.
+            for sheet_id, count, names in self.store.db.execute("""
+                SELECT sheet_id, json_array_length(result, '$.components'),
+                       (SELECT json_group_array(json_extract(value, '$.tag')) FROM json_each(result, '$.components')
+                        WHERE json_extract(value, '$.tag') <> '')
+                FROM v3_traces WHERE sheet_id IN (SELECT value FROM json_each(?))
+            """, (json.dumps(list(sheets)),)):
+                sheets[sheet_id]["v3_summary"] = {"components": count, "names": json.loads(names)}
         return state
 
     def list_profiles(self):
@@ -122,6 +141,9 @@ class Application(BaseApplication):
 
     def latest(self, sheet_id):
         self.store.sheet(sheet_id)
+        return self._stored_trace(sheet_id)
+
+    def _stored_trace(self, sheet_id):
         with self.store.lock:
             row = self.store.db.execute("SELECT result FROM v3_traces WHERE sheet_id=?", (sheet_id,)).fetchone()
         return json.loads(row[0]) if row else None
@@ -130,14 +152,27 @@ class Application(BaseApplication):
         sheet = self.store.sheet(body.get("sheet_id"))
         sheet_id = sheet["id"]
         settings = self.require_profile(body.get("provider"), "trace", body.get("model"))
+        refresh = body.get("refresh", False)
+        if not isinstance(refresh, bool):
+            raise ValueError("The refresh flag must be true or false.")
         with self._lock:
             if sheet_id in self._in_flight:
                 raise Conflict("A connection trace is already running for this drawing.")
             self._in_flight.add(sheet_id)
         try:
             image = (self.store.directory / "images" / f"{sheet_id}.png").read_bytes()
+            local = settings["provider"] == "local-ml"
+            if local:
+                signature = {"sha256": sha256(image).hexdigest(), "model": settings["model"], "version": VERSION}
+                if not refresh:
+                    previous = self._stored_trace(sheet_id)
+                    if previous and previous.get("local_input") == signature:
+                        return {**previous, "reused": True}
+            start = perf_counter()
             trace = extract_connections(settings, image, "image/png", sheet["width"], sheet["height"])
-            trace.update(sheet_id=sheet_id, created_at=now())
+            trace.update(sheet_id=sheet_id, created_at=now(), duration_seconds=round(perf_counter() - start, 3))
+            if local:
+                trace["local_input"] = signature
             encoded = json.dumps(trace, allow_nan=False)
             with self.store.lock, self.store.db:
                 self.store.db.execute("INSERT OR REPLACE INTO v3_traces VALUES (?,?)", (sheet_id, encoded))
@@ -161,6 +196,7 @@ class Application(BaseApplication):
         state = {"facilities": [{"id": sheet["facility_id"]}], "sheets": [sheet]}
         matrix = build_matrix(state, sheet["facility_id"], sheet_id)
         matrix["scope"].update(method="v3", model=trace["model"], provider=trace["provider"])
+        matrix["arrows"] = trace.get("arrows", [])
         return sheet, matrix
 
     def matrix_query(self, query):

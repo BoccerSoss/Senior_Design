@@ -57,13 +57,16 @@ class V3Workbench(unittest.TestCase):
         self.assertEqual([[0, 1], [1, 0]], candidate["matrix"])
         self.assertEqual([], self.app.matrix_query({"sheet_id": ["drawing"]})["matrix"])
         self.assertEqual(candidate, json.loads(self.app.export({**query, "format": ["matrix-json"]})[0]))
+        listed = next(s for s in self.app.state("facility-local")["sheets"] if s["id"] == "drawing")
+        self.assertEqual(listed["v3_summary"], {"components": 2, "names": ["A", "B"]})
         grid = self.app.grid_query(query)
         self.assertEqual([[1, 1], [2, 1]], [item["coordinate"] for item in grid["coordinates"]])
         self.assertEqual(grid, json.loads(self.app.export({**query, "format": ["grid"]})[0]))
         answer = self.app.ask_selected({"provider": "local-graph", "method": "v3", "sheet_id": "drawing",
                                         "question": "What connects to A?"})
         self.assertEqual(["edge-1"], [item["id"] for item in answer["citations"]])
-        self.assertEqual(["v2", "v3"], self.app.tool("list_drawings", {})["drawings"][0]["methods"])
+        drawings = {item["id"]: item for item in self.app.tool("list_drawings", {})["drawings"]}
+        self.assertEqual(["v2", "v3"], drawings[self.sheet_id]["methods"])
         with self.assertRaises(ValueError):
             self.app.tool("drawing_connections", {"sheet_id": "drawing", "facility_id": "other", "method": "v3"})
 
@@ -72,10 +75,23 @@ class V3Workbench(unittest.TestCase):
         expected = self.trace()
         with patch("aip.v3.server.extract_connections", side_effect=ValueError("Invalid response")):
             with self.assertRaisesRegex(ValueError, "Invalid response"):
-                self.app.trace({"sheet_id": "drawing", "provider": "local-ml"})
+                self.app.trace({"sheet_id": "drawing", "provider": "local-ml", "refresh": True})
         self.assertEqual(expected, self.app.latest("drawing"))
         self.assertEqual([], self.app.store.sheet("drawing")["components"])
-        self.assertEqual(self.trace(), self.app.latest("drawing"))
+        self.assertTrue(self.trace()["reused"])
+        self.assertEqual(expected, self.app.latest("drawing"))
+
+    def test_local_trace_cache_is_bound_to_source_and_pipeline(self):
+        self.trace()
+        request = {"sheet_id": self.sheet_id, "provider": "local-ml"}
+        with patch("aip.v3.server.extract_connections", side_effect=lambda *args: dict(self.graph)) as extract:
+            self.assertTrue(self.app.trace(request)["reused"])
+            extract.assert_not_called()
+            (Path(self.temp.name) / "images" / "drawing.png").write_bytes(b"updated-raster")
+            self.assertNotIn("reused", self.app.trace(request))
+            with patch("aip.v3.server.VERSION", "test-revision"):
+                self.assertNotIn("reused", self.app.trace(request))
+            self.assertEqual(2, extract.call_count)
 
     def test_session_key_is_private_and_gateway_cannot_receive_provider_key(self):
         fake = "session-key-for-test"
@@ -140,5 +156,5 @@ class V3Workbench(unittest.TestCase):
         replies = [json.loads(line)["result"] for line in result.stdout.splitlines()]
         self.assertEqual(VERSION, replies[0]["serverInfo"]["version"])
         self.assertIn("drawing_connections", [tool["name"] for tool in replies[1]["tools"]])
-        self.assertEqual("drawing", replies[2]["structuredContent"]["drawings"][0]["id"])
+        self.assertIn("drawing", [item["id"] for item in replies[2]["structuredContent"]["drawings"]])
         self.assertEqual("edge-1", replies[3]["structuredContent"]["direct_edges"][0]["observations"][0]["connection_id"])

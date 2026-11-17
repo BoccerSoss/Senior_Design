@@ -128,11 +128,10 @@ def _wings(mask, width, stroke, vertical_sign):
     return wings
 
 
-def flow_direction(mask, width, stroke):
-    """Record arrow landmarks only for paired, consistent wings on this pipe."""
-    unknown = {"status": "unknown", "arrow_tip": None, "arrow_wings": None}
+def arrowheads_on_stroke(mask, width, stroke):
+    """Return individually supported heads, including opposing or repeated marks."""
     if stroke.end - stroke.start < 20:
-        return unknown
+        return []
     candidates = []
     upper_wings = _wings(mask, width, stroke, -1)
     lower_wings = _wings(mask, width, stroke, 1)
@@ -153,14 +152,17 @@ def flow_direction(mask, width, stroke):
                 continue
             candidates.append((upper.sign, tip_difference, tip_x, upper.end, lower.end))
 
-    if len({item[0] for item in candidates}) != 1:
-        return unknown
-    sign, _, tip_x, upper, lower = min(candidates)
-    return {
-        "status": "source_to_target" if sign > 0 else "target_to_source",
-        "arrow_tip": [tip_x, stroke.center],
-        "arrow_wings": [list(upper), list(lower)],
-    }
+    return [{"status": "source_to_target" if sign > 0 else "target_to_source",
+             "arrow_tip": [tip_x, stroke.center], "arrow_wings": [list(upper), list(lower)]}
+            for sign, _, tip_x, upper, lower in sorted(candidates)]
+
+
+def flow_direction(mask, width, stroke):
+    """Record arrow landmarks only for paired, consistent wings on this pipe."""
+    heads = arrowheads_on_stroke(mask, width, stroke)
+    if len({head["status"] for head in heads}) == 1:
+        return heads[0]
+    return {"status": "unknown", "arrow_tip": None, "arrow_wings": None}
 
 
 def is_pipe_arrow_box(mask, width, box):
@@ -190,12 +192,10 @@ _MAX_HEAD_HALF_WIDTH = 30
 
 def _cross_section(mask, width, height, x, y):
     """Count ink on both sides of an already-dark point on the shaft."""
-    above = below = 0
-    while above < min(_MAX_HEAD_HALF_WIDTH, y) and mask[(y - above - 1) * width + x]:
-        above += 1
-    while below < min(_MAX_HEAD_HALF_WIDTH, height - y - 1) and mask[(y + below + 1) * width + x]:
-        below += 1
-    return above, below
+    above = mask[max(0, y - _MAX_HEAD_HALF_WIDTH) * width + x:y * width + x:width]
+    below = mask[(y + 1) * width + x:min(height, y + 1 + _MAX_HEAD_HALF_WIDTH) * width + x:width]
+    stop = below.find(b"\x00")
+    return len(above) - 1 - above.rfind(b"\x00"), len(below) if stop < 0 else stop
 
 
 def _filled_heads(profile):

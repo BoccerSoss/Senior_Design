@@ -17,7 +17,8 @@ window.aipV3 = (() => {
   function displaySheet(sheet) {
     if (!sheet || !isCandidate()) return sheet;
     const trace = traces.get(sheet.id);
-    return {...sheet, version:`v3/${sheet.version}/${trace.created_at || ""}`, components: trace.components, connections: trace.connections};
+    return {...sheet, version:`v3/${sheet.version}/${trace.created_at || ""}`, components: trace.components, connections: trace.connections,
+      arrows:(trace.arrows || []).filter(arrow => arrow.verified ?? (trace.provider === "local-ml" || !!arrow.connection_id))};
   }
 
   function changeSource(value) {
@@ -35,6 +36,9 @@ window.aipV3 = (() => {
     api(`/api/v3/trace?sheet_id=${encodeURIComponent(id)}`).then(({trace}) => {
       if (traces.has(id)) return;
       traces.set(id, trace || null);
+      const sheet = app.data.sheets.find(item => item.id === id);
+      if (trace && !sources.has(id) && sheet && !sheet.source_metadata?.analysis &&
+          !sheet.components?.length && !sheet.connections?.length) sources.set(id, "v3");
       if (trace && app.sheetId === id) render();
     }).catch(error => {
       if (app.sheetId === id) toast(error.message, true);
@@ -55,8 +59,10 @@ window.aipV3 = (() => {
     const edge = sheet.connections.find(item => item.id === app.connectionId);
     const boxes = sheet.components.filter(item => edge
       ? item.id === edge.source || item.id === edge.target : item.id === app.componentId)
-      .filter(item => Array.isArray(item.bbox)).map(item => item.bbox);
-    const points = [...(edge?.path || []), ...boxes.flatMap(([left,top,right,bottom]) => [[left,top],[right,bottom]])];
+      .flatMap(item => [item.bbox, ...(!edge ? [item.tag_bbox] : [])]).filter(box => Array.isArray(box));
+    const arrowIds = edge?.direction_evidence?.arrow_ids || [];
+    const tips = (sheet.arrows || []).filter(arrow => arrowIds.includes(arrow.id)).map(arrow => arrow.tip);
+    const points = [...(edge?.path || []), ...tips, ...boxes.flatMap(([left,top,right,bottom]) => [[left,top],[right,bottom]])];
     if (!points.length) return;
     let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
     for (const [x,y] of points) {
@@ -88,7 +94,9 @@ window.aipV3 = (() => {
     const trace = traces.get(sheet.id);
     const edge = sheet.connections.find(item => item.id === app.connectionId);
     const component = sheet.components.find(item => item.id === app.componentId);
-    const heading = `<p class="section-note">AI observations from ${esc(trace.model || trace.provider)}.</p>`;
+    const priorLocal = trace.provider === "local-ml" && !trace.local_input;
+    const heading = `<p class="section-note">AI observations from ${esc(trace.model || trace.provider)}.</p>` +
+      (priorLocal ? '<p class="section-note">This saved trace predates the name and arrow updates. Choose Find connections with AI → Local connection model to trace this drawing again.</p>' : "");
     if (app.tab === "connections") {
       if (!edge) {
         const excluded = trace.excluded_connections || [];
@@ -99,13 +107,17 @@ window.aipV3 = (() => {
       const label = id => componentName(sheet.components.find(item => item.id === id));
       const from = label(edge.source), to = label(edge.target);
       const direction = {source_to_target: `${from} → ${to}`, target_to_source: `${to} → ${from}`, bidirectional: "Bidirectional"};
+      const arrowSource = {run:"Arrowhead on the same uninterrupted run", on_edge:"Arrowhead on this segment",
+        conflict:"Conflicting arrow observations"}[edge.direction_evidence?.basis];
       return `<button class="result-title back-link" data-action="all-connections">← All AI connections</button>
         <h2>${esc(from)} ↔ ${esc(to)}</h2>${heading}<dl class="fact-list"><dt>Line type</dt><dd>${esc(lineKind(edge.kind))}</dd>
-        <dt>Flow direction</dt><dd>${esc(direction[edge.direction] || "Unknown")}</dd></dl>
+        <dt>Flow direction</dt><dd>${esc(direction[edge.direction] || "Unknown")}</dd>
+        ${arrowSource ? `<dt>Direction evidence</dt><dd>${esc(arrowSource)}</dd>` : ""}</dl>
         <p>${esc(evidenceText(edge.evidence) || "Review the traced route on the drawing.")}</p>`;
     }
     if (component) return `<button class="result-title back-link" data-action="all-components">← All AI components</button>
       <h2>${esc(componentName(component))}</h2>${heading}<p>${esc(component.type || "Unknown type")} · Awaiting review</p>
+      ${component.tag_bbox && component.tag ? '<p class="section-note">The dashed orange box marks the printed name on the drawing.</p>' : ""}
       <p class="section-note">${esc(evidenceText(component.evidence))}</p><h3>Connections</h3>${connectionRows(sheet, component.id)}`;
     return `<h2>AI components</h2>${heading}<div class="result-list">${sheet.components.map(item =>
       `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(item.id)}">${esc(componentName(item))}</button>
@@ -157,7 +169,8 @@ window.aipV3 = (() => {
           observations:pair.observations.map(observation => {
             const edge = raw.get(observation.connection_id);
             return {id:observation.connection_id, source:edge?.source, target:edge?.target,
-              direction:edge?.direction || "unknown", review_status:observation.review_status};
+              direction:edge?.direction || "unknown", direction_evidence:edge?.direction_evidence,
+              review_status:observation.review_status};
           })
         })),
         warnings:matrix.warnings
@@ -169,7 +182,8 @@ window.aipV3 = (() => {
       prompt = "Read the attached P&ID image. Identify the equipment symbols and transcribe their visible tags. " +
         "List each direct equipment pair joined by a continuous process line. Stop at the next equipment symbol. " +
         "Distinguish junctions from crossings, mark unreadable labels and unclear links as uncertain, and cite visible evidence for each pair. " +
-        "Record flow direction only where an arrow is visible.";
+        "Leave junctions unnamed. Report each real arrowhead once at its visible tip. If it governs several inline items, " +
+        "list the adjacent pairs separately and identify which directions follow that tip along an unbranched run.";
     }
     try {
       await navigator.clipboard.writeText(prompt);
@@ -210,6 +224,7 @@ window.aipV3 = (() => {
       let choices = modelChoices(task);
       const choice = choices.find(item => item.id === preferences[task]) || choices.find(item => item.ready) || choices[0];
       const graph = selectedSheet();
+      const saved = traces.get(sheet.id);
       const tagged = selectedComponent()?.tag || graph?.components.find(item => item.tag && String(item.type).includes("pump"))?.tag
         || graph?.components.find(item => item.tag)?.tag;
       const example = tagged ? `What connects directly to ${tagged}?` : "How many direct equipment connections are recorded?";
@@ -217,6 +232,8 @@ window.aipV3 = (() => {
         <form class="v3-form"><label class="field">Model connection<select name="provider">${choices.map(item =>
           `<option value="${dataValue(item.id)}"${item.id === choice.id ? " selected" : ""}>${esc(choiceLabel(item))}</option>`).join("")}</select></label>
         <p class="v3-profile section-note"></p>
+        ${!asking && saved ? `<button type="button" class="button small" data-view-saved>View saved trace · ${esc(saved.model || saved.provider)}</button>` : ""}
+        ${!asking && saved?.local_input ? '<label data-refresh-trace hidden><input type="checkbox" name="refresh_trace"> Recompute the local trace from the image</label>' : ""}
         <section class="v3-plan" hidden>
           <label class="field" data-plan-account hidden>ChatGPT connection<select name="plan_account"></select></label>
           <div class="v3-plan-controls">
@@ -246,6 +263,13 @@ window.aipV3 = (() => {
       const login = $("[data-plan-login]", form), logout = $("[data-plan-logout]", form);
       const authLink = $("[data-plan-auth]", form), submit = $("button[type=submit]", form);
       let busy = false, pollTimer = 0, activeAccount;
+      const savedButton = $("[data-view-saved]", form);
+      if (savedButton) savedButton.onclick = () => {
+        if (sheet.id !== app.sheetId || busy) return;
+        app.tab = "connections";
+        changeSource("v3");
+        modal.close();
+      };
 
       async function refreshChoices() {
         await loadProfiles();
@@ -263,6 +287,8 @@ window.aipV3 = (() => {
         const data = asking ? "the question and this sheet’s recorded observations" : "the selected sheet image";
         const destination = profile.external === false || ["local-ml","local-graph"].includes(profile.id) ? "locally" : "at the configured endpoint";
         const note = $(".v3-profile", form), isPlan = profile.id === "chatgpt-plan", isWeb = profile.id === chatgptWeb.id;
+        const refreshOption = $("[data-refresh-trace]", form);
+        if (refreshOption) refreshOption.hidden = profile.id !== "local-ml";
         plan.hidden = !isPlan;
         web.hidden = !isWeb;
         if (isWeb) {
@@ -392,6 +418,14 @@ window.aipV3 = (() => {
         form.elements.plan_account.disabled = form.elements.plan_model.disabled = true;
         status.textContent = provider === chatgptWeb.id ? "Preparing text to copy…"
           : asking ? "Finding supporting observations…" : "Tracing equipment connections…";
+        const started = performance.now();
+        let elapsedTimer;
+        if (!asking && provider !== chatgptWeb.id) {
+          elapsedTimer = setInterval(() => {
+            if (modal.open) status.textContent = `Tracing equipment connections… ${Math.floor((performance.now() - started)/1000)} s`;
+            else clearInterval(elapsedTimer);
+          }, 1000);
+        }
         try {
           const selectedModel = provider === "chatgpt-plan" && form.elements.plan_model.value
             ? {model:form.elements.plan_model.value} : {};
@@ -403,8 +437,10 @@ window.aipV3 = (() => {
             status.dataset.method = selectedMethod;
             status.dataset.sheet = sheet.id;
           } else {
-            const {trace} = await post("/api/v3/trace", {sheet_id:sheet.id, provider, ...selectedModel});
+            const refresh = provider === "local-ml" && !!form.elements.refresh_trace?.checked;
+            const {trace} = await post("/api/v3/trace", {sheet_id:sheet.id, provider, refresh, ...selectedModel});
             traces.set(sheet.id, trace);
+            sheet.v3_summary = {components:trace.components.length, names:trace.components.map(item => item.tag).filter(Boolean)};
             delete app.matrixData[sheet.id];
             delete app.gridData[sheet.id];
             if (app.sheetId === sheet.id && modal.open) {
@@ -412,11 +448,13 @@ window.aipV3 = (() => {
               app.tab = "connections";
               render();
               modal.close();
-              toast(`AI found ${trace.connections.length} connection observations. Select a route to inspect it.`);
+              const timing = trace.reused ? "Opened saved local trace" : `Trace completed in ${((performance.now()-started)/1000).toFixed(1)} s`;
+              toast(`${timing} · ${trace.connections.length} connection observations.`);
             } else if (app.sheetId === sheet.id) render();
           }
         } catch (error) { status.textContent = error.message; }
         finally {
+          clearInterval(elapsedTimer);
           busy = false;
           form.elements.provider.disabled = form.elements.plan_model.disabled = $("[data-plan-web]", form).disabled = false;
           updateProfile();
@@ -437,13 +475,15 @@ window.aipV3 = (() => {
   function cohortMarkup(report) {
     const named = !!report.methods?.baseline?.named_edges;
     const coverage = report.methods?.ai?.endpoint_coverage;
+    const names = report.methods?.ai?.printed_names;
     return `<section><h3>${esc(report.cohort)}</h3><p class="section-note">${esc(report.review_status)}</p>
-        <p class="section-note">${esc(report.completed_pairs)} of ${esc(report.drawing_count)} drawings compared · ${esc(report.model || report.ai_method)}</p>
+        <p class="section-note">${esc(report.completed_pairs)} of ${esc(report.drawing_count)} drawings compared · ${esc(report.workbench_version ? "V" + report.workbench_version : "Earlier V3 evaluation")} · ${esc(report.model || report.ai_method)}</p>
         <strong>${named ? "Direct connections with named endpoints" : "Direct connections by endpoint location"}</strong>
         ${reportTable(report,named ? "named_edges" : "localized_edges")}
         ${named ? `<details><summary>Score using endpoint locations only</summary>${reportTable(report,"localized_edges")}</details>` :
           '<p class="section-note">Endpoint name accuracy requires reference equipment tags. This cohort has no named-edge score.</p>'}
         ${coverage ? `<p class="section-note">V3 located both endpoints on ${esc(coverage.both_endpoints_located)} of ${esc(coverage.reference_pairs)} reference connections.</p>` : ""}
+        ${names ? `<p class="section-note">Of ${esc(names.expected)} items with printed names, V3 located ${esc(names.located)} and correctly named ${esc(names.correct)}.</p>` : ""}
         ${(report.warnings || []).map(item => `<p class="section-note">${esc(item)}</p>`).join("")}</section>`;
   }
 

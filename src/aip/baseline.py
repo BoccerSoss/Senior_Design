@@ -1,14 +1,15 @@
 """Conservative, image-only linework baseline using Pillow.
 
-This method detects large connected linework, separates symbol-like x-regions
-after suppressing long horizontal strokes, and reports uninterrupted horizontal
-contacts. It neither recognizes text nor assigns semantic equipment types.
+This method detects large connected linework, separates symbol-like regions
+after suppressing long pipe strokes, and reports uninterrupted horizontal
+contacts. Ambiguous stacked regions are separated using both image axes.
+It neither recognizes text nor assigns semantic equipment types.
 Nothing in this module reads answer files, source drawings, or expected tags.
 """
 from __future__ import annotations
 
-from collections import deque
 from pathlib import Path
+import re
 
 from PIL import Image, ImageOps, __version__ as pillow_version
 
@@ -19,7 +20,7 @@ from .flow_routes import trace_arrow_routes
 def baseline_info():
     """Describe actual capabilities without implying OCR or VLM inference."""
     return {
-        "method": "pillow-linework-baseline-v1",
+        "method": "pillow-linework-baseline-v2",
         "provider": "local",
         "model": None,
         "access_route": "local deterministic raster processing",
@@ -37,35 +38,47 @@ def baseline_info():
 
 
 def _ink_components(mask, width, height):
-    """Find 8-connected foreground groups from an image-derived binary mask."""
+    """Flood connected row spans. Diagonal pixel contacts count as connected."""
     remaining = bytearray(mask)
-    groups = []
-    for seed, value in enumerate(remaining):
-        if not value:
-            continue
-        remaining[seed] = 0
-        queue = deque([seed])
-        points = []
-        xmin, ymin, xmax, ymax = width, height, 0, 0
-        while queue:
-            p = queue.popleft()
-            y, x = divmod(p, width)
-            points.append((x, y))
-            xmin, ymin = min(xmin, x), min(ymin, y)
-            xmax, ymax = max(xmax, x), max(ymax, y)
-            for ny in range(max(0, y-1), min(height, y+2)):
-                offset = ny * width
-                for nx in range(max(0, x-1), min(width, x+2)):
-                    nxt = offset + nx
-                    if remaining[nxt]:
-                        remaining[nxt] = 0
-                        queue.append(nxt)
-        if xmax-xmin+1 >= max(36, round(width * 0.02)) and ymax-ymin+1 >= max(36, round(height * 0.045)):
-            groups.append((points, (xmin, ymin, xmax+1, ymax+1)))
-    return groups
+    ink = re.compile(rb"[^\x00]")
+
+    def take_span(seed):
+        row = seed // width
+        start = row * width
+        stop = start + width
+        left = remaining.rfind(b"\x00", start, seed)
+        left = start if left == -1 else left + 1
+        right = remaining.find(b"\x00", seed, stop)
+        right = stop if right == -1 else right
+        remaining[left:right] = bytes(right - left)
+        return row, left - start, right - start
+
+    minimum_w = max(36, round(width * 0.02))
+    minimum_h = max(36, round(height * 0.045))
+    cursor = 0
+    while first := ink.search(remaining, cursor):
+        cursor = first.start() + 1
+        spans = [take_span(first.start())]
+        # Each span is removed when queued, so adjacent rows cannot queue it twice.
+        for row, left, right in spans:
+            for adjacent in (row - 1, row + 1):
+                if 0 <= adjacent < height:
+                    offset = adjacent * width
+                    start = offset + max(0, left - 1)
+                    stop = offset + min(width, right + 1)
+                    while found := ink.search(remaining, start, stop):
+                        span = take_span(found.start())
+                        spans.append(span)
+                        start = offset + span[2]
+        xmin = min(left for _, left, _ in spans)
+        xmax = max(right for _, _, right in spans)
+        ymin = min(row for row, _, _ in spans)
+        ymax = max(row for row, _, _ in spans) + 1
+        if xmax - xmin >= minimum_w and ymax - ymin >= minimum_h:
+            yield [(x, row) for row, left, right in spans for x in range(left, right)], (xmin, ymin, xmax, ymax)
 
 
-def _suppress_horizontal(points, width):
+def _suppress_horizontal(points, width, preserve_rectangles=True):
     """Remove long horizontal runs, which include pipe and some symbol strokes."""
     rows = {}
     for x, y in points:
@@ -80,7 +93,7 @@ def _suppress_horizontal(points, width):
             if end == len(xs) or xs[end] != xs[end-1]+1:
                 if end-start < minimum:
                     retained.extend((x, y) for x in xs[start:end])
-                else:
+                elif preserve_rectangles:
                     suppressed.setdefault((xs[start], xs[end-1]), []).append(y)
                 start = end
     # Equal-span horizontal edges separated vertically are evidence of a closed
@@ -91,7 +104,7 @@ def _suppress_horizontal(points, width):
     return retained
 
 
-def _candidate_boxes(points, width):
+def _column_boxes(points, width):
     kept = _suppress_horizontal(points, width)
     columns = {}
     for x, y in kept:
@@ -115,6 +128,67 @@ def _candidate_boxes(points, width):
             continue
         boxes.append([left, min(ys), right+1, max(ys)+1])
     return boxes
+
+
+def _candidate_boxes(points, width):
+    boxes = _column_boxes(points, width)
+    # Separate rows only when projection has collapsed a large portion of the
+    # network into one column. Ordinary single-row tank and valve outlines stay intact.
+    ambiguous = any(max(right - left, bottom - top) > width * 0.25
+                    or bottom - top > max(3 * (right - left), width * 0.09)
+                    for left, top, right, bottom in boxes)
+    if not ambiguous:
+        return boxes
+    horizontal = _suppress_horizontal(points, width, preserve_rectangles=False)
+    transposed = [(y, x) for x, y in points]
+    vertical = {(x, y) for y, x in _suppress_horizontal(transposed, width, preserve_rectangles=False)}
+    # Neighboring occupied cells bridge the small gaps cut through valve bodies
+    # by shaft removal, while disconnected rows in the same column stay separate.
+    cell_size = max(5, round(width * 0.002))
+    cells = {}
+    for x, y in horizontal:
+        if (x, y) in vertical:
+            cells.setdefault((x // cell_size, y // cell_size), []).append((x, y))
+    local = []
+    while cells:
+        seed, pixels = cells.popitem()
+        pending = [seed]
+        for col, row in pending:
+            for xx in range(col - 1, col + 2):
+                for yy in range(row - 1, row + 2):
+                    neighbor = (xx, yy)
+                    group = cells.pop(neighbor, None)
+                    if group:
+                        pending.append(neighbor)
+                        pixels.extend(group)
+        xs, ys = zip(*pixels)
+        left, top, right, bottom = min(xs), min(ys), max(xs) + 1, max(ys) + 1
+        side, span = sorted((right - left, bottom - top))
+        if (side >= max(18, width * 0.008) and span <= min(4 * side, width * 0.2)
+                and len(pixels) >= side * 2.3):
+            local.append([left, top, right, bottom])
+    # Axis suppression can remove the straight sides of an enclosed vessel or
+    # valve body. Retain a compact column box with no or one near-identical local box.
+    for box in boxes:
+        left, top, right, bottom = box
+        w, h = right - left, bottom - top
+        # A standalone rectangle can lose all four sides during axis suppression.
+        # Preserve an isolated original enclosure unless its extents are frame-sized.
+        width_limit = 0.55 if len(boxes) == 1 and not local else 0.12
+        if max(w, h) > min(width * width_limit, 4 * min(w, h)):
+            continue
+        contained = []
+        for candidate in local:
+            x0, y0, x1, y1 = candidate
+            overlap = max(0, min(x1, right) - max(x0, left)) * max(0, min(y1, bottom) - max(y0, top))
+            area = (x1 - x0) * (y1 - y0)
+            if overlap > area / 2:
+                contained.append((candidate, overlap / (w * h + area - overlap)))
+        if not contained:
+            local.append(box)
+        elif len(contained) == 1 and contained[0][1] > 0.7:
+            local[local.index(contained[0][0])] = box
+    return local
 
 
 def _horizontal_contact(mask, width, left, right):
@@ -172,7 +246,7 @@ def extract_image(image_path):
             "observed_tag": None,
             "type": "unknown",
             "bbox": box,
-            "evidence": "Image-derived symbol-like region after long horizontal stroke suppression; box is approximate.",
+            "evidence": "Image-derived symbol-like region after suppression of long pipe strokes; box is approximate.",
             "uncertainty": "Unverified geometric candidate. OCR and semantic classification unavailable; tag and type unresolved.",
         })
     connections = []

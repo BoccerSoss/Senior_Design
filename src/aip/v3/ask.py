@@ -51,7 +51,9 @@ def _sheet_facts(sheet, matrix):
             add("connection", item_id, f"{source} ↔ {target}",
                 f"The matrix records a direct connection between {source} and {target} "
                 f"({observation['review_status']}). "
-                + direction.get(observation.get("direction"), "Flow direction is unknown."))
+                + direction.get(observation.get("direction"), "Flow direction is unknown.")
+                + (" Direction follows an arrow on the same uninterrupted run."
+                   if (edge.get("direction_evidence") or {}).get("basis") == "run" else ""))
 
     for diagnostic in matrix["diagnostics"]:
         kind = "sheet"

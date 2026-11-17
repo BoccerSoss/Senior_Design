@@ -17,7 +17,8 @@ const sourceSheet = () => app.data.sheets.find(sheet => sheet.id === app.sheetId
 const selectedSheet = () => window.aipV3?.displaySheet(sourceSheet()) || sourceSheet();
 const selectedComponent = () => selectedSheet()?.components?.find(component => component.id === app.componentId);
 const activeSheets = () => app.data.sheets.filter(sheet => sheet.facility_id === app.facilityId);
-const componentName = component => component?.tag || component?.label || component?.observed_tag || component?.normalized_tag || `Unnamed ${component?.type || "component"}`;
+const isJunction = component => ["junction","pipe junction","junction point","tee"].includes(String(component?.type || "").toLowerCase());
+const componentName = component => component?.tag || component?.label || component?.observed_tag || component?.normalized_tag || (isJunction(component) ? "Junction" : `Unnamed ${component?.type || "component"}`);
 const sheetName = sheet => sheet?.drawing_number || sheet?.title || sheet?.filename || "Untitled drawing";
 const norm = value => String(value ?? "").toLowerCase();
 const pointCenter = component => component.bbox ? [(component.bbox[0] + component.bbox[2]) / 2, (component.bbox[1] + component.bbox[3]) / 2] : [0, 0];
@@ -74,7 +75,9 @@ function setState(data) {
   }
   if (app.componentId && !selectedComponent()) app.componentId = "";
   $("#facility").innerHTML = facilitiesMarkup();
-  $("#workspace-description").textContent = `${sheets.length} drawing${sheets.length === 1 ? "" : "s"} · ${sheets.reduce((count, sheet) => count + (sheet.components?.length || 0), 0)} components`;
+  const drawings = `${sheets.length} drawing${sheets.length === 1 ? "" : "s"}`;
+  $("#workspace-description").textContent = data.capabilities?.ai_connections ? drawings
+    : `${drawings} · ${sheets.reduce((count, sheet) => count + (sheet.components?.length || 0), 0)} components`;
   render();
   schedulePoll();
 }
@@ -108,7 +111,13 @@ function render() {
 
 function filteredSheets() {
   const query = norm(app.search).trim();
-  return activeSheets().filter(sheet => !query || norm(`${sheetName(sheet)} ${sheet.title} ${sheet.filename} ${sheet.revision} ${(sheet.components || []).map(componentName).join(" ")}`).includes(query));
+  return activeSheets().filter(sheet => !query || norm(`${sheetName(sheet)} ${sheet.title} ${sheet.filename} ${sheet.revision} ${(sheet.components || []).map(componentName).join(" ")} ${(sheet.v3_summary?.names || []).join(" ")}`).includes(query));
+}
+
+function libraryCount(sheet) {
+  if (sheet.v3_summary) return `${sheet.v3_summary.components} V3 components`;
+  if (sheet.source_metadata?.figure && !sheet.source_metadata.analysis && !sheet.components?.length) return "Ready to trace";
+  return `${sheet.components?.length || 0} components`;
 }
 
 function libraryMarkup() {
@@ -117,7 +126,7 @@ function libraryMarkup() {
   return `<aside class="library">
     <div class="library-heading"><h2>Drawing library</h2><span class="muted tiny">${activeSheets().length}</span></div>
     <input class="search-input" id="sheet-search" type="search" value="${dataValue(app.search)}" placeholder="Find a drawing or equipment tag" aria-label="Find a drawing or equipment tag">
-    <div class="sheet-list">${sheets.length ? sheets.map(sheet => `<button class="sheet-row${sheet.id === app.sheetId ? " active" : ""}" data-action="open-sheet" data-id="${dataValue(sheet.id)}" title="${dataValue(`${sheetName(sheet)} · ${sheet.title || sheet.filename || ""}`)}"><div class="sheet-title"><span>${esc(sheetName(sheet))}</span><small>${sheet.active===false?"Archived · ":""}${sheet.revision ? `Rev ${esc(sheet.revision)}` : ""}</small></div><div class="sheet-caption">${esc(sheet.title || sheet.filename || "")}</div><div class="sheet-count">${sheet.components?.length || 0} components · Sheet ${esc(sheet.sheet_number || sheet.page || 1)}</div></button>`).join("") : `<p class="section-note" style="padding:10px">${app.search ? "No matching drawings." : "Import a drawing set or load a demonstration."}</p>`}</div>
+    <div class="sheet-list">${sheets.length ? sheets.map(sheet => `<button class="sheet-row${sheet.id === app.sheetId ? " active" : ""}" data-action="open-sheet" data-id="${dataValue(sheet.id)}" title="${dataValue(`${sheetName(sheet)} · ${sheet.title || sheet.filename || ""}`)}"><div class="sheet-title"><span>${esc(sheetName(sheet))}</span><small>${sheet.active===false?"Archived · ":""}${sheet.revision ? `Rev ${esc(sheet.revision)}` : ""}</small></div><div class="sheet-caption">${esc(sheet.title || sheet.filename || "")}</div><div class="sheet-count">${esc(libraryCount(sheet))} · Sheet ${esc(sheet.sheet_number || sheet.page || 1)}</div></button>`).join("") : `<p class="section-note" style="padding:10px">${app.search ? "No matching drawings." : "Import a drawing set or load a demonstration."}</p>`}</div>
     ${jobs.length ? `<div class="jobs">${jobs.map(job => `<div class="job-row${["failed", "error"].includes(job.status) ? " error" : ""}"><strong>${esc(job.title || job.name || job.type || "Import")}</strong><br>${esc(job.error || job.message || job.status)}${typeof job.progress === "number" ? ` · ${Math.round(job.progress)}%` : ""}${job.messages?.length?`<div class="tiny">${job.messages.map(esc).join("<br>")}</div>`:""}</div>`).join("")}${pendingJobs().length ? '<div class="busy-progress"></div>' : ""}</div>` : ""}
     <div class="library-footer"><a href="/reference" target="_blank" rel="noopener">Symbol reference library ↗</a></div>
   </aside>`;
@@ -199,7 +208,7 @@ function extractionNotes(sheet) {
 function selectionMarkup() {
   const sheet = selectedSheet(), component = selectedComponent();
   if (!sheet) return '<h2>Components</h2><p class="empty-selection">Open an example or import a drawing to begin.</p>';
-  if (!component) return `<div class="eyebrow">1 · Review components</div><h2>Components <span class="muted tiny">${sheet.components.length}</span></h2><p class="section-note">Select a symbol or a name below to review its type and printed label. Unread names remain explicit.</p>${extractionNotes(sheet)}<div class="result-list">${sheet.components.map(item => `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(item.id)}">${esc(componentName(item))}</button><div class="result-detail">${esc(item.type || "unknown")} · ${!item.tag ? "Name unread" : item.review_status === "confirmed" ? "Reviewed" : "Awaiting review"}</div></div></div>`).join("") || '<p class="empty-selection">No components recorded yet. Choose Analyze drawing, or mark a missed symbol with + Component.</p>'}</div>`;
+  if (!component) return `<div class="eyebrow">1 · Review components</div><h2>Components <span class="muted tiny">${sheet.components.length}</span></h2><p class="section-note">Select a symbol or a name below to review its type and printed label. Unread names remain explicit.</p>${extractionNotes(sheet)}<div class="result-list">${sheet.components.map(item => `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(item.id)}">${esc(componentName(item))}</button><div class="result-detail">${esc(item.type || "unknown")} · ${!item.tag && !isJunction(item) ? "Name unread" : item.review_status === "confirmed" ? "Reviewed" : "Awaiting review"}</div></div></div>`).join("") || '<p class="empty-selection">No components recorded yet. Choose Analyze drawing, or mark a missed symbol with + Component.</p>'}</div>`;
   const warning = !component.tag || norm(component.type) === "unknown" || component.review_status !== "confirmed";
   return `<button class="result-title back-link" data-action="all-components">← All components</button><div class="eyebrow">Selected component</div><div class="selected-tag">${esc(componentName(component))}</div><div class="selection-meta"><span>${esc(component.type || "unknown")}</span><span class="pill${warning ? " warn" : " good"}">${warning ? "Review needed" : "Reviewed"}</span></div>
     <form id="component-form"><label class="field">Equipment tag or printed name<input name="tag" value="${dataValue(component.tag || "")}" placeholder="Unread label"></label><label class="field">Type<input name="type" list="component-types" value="${dataValue(component.type || "unknown")}" required></label><datalist id="component-types">${["pump","valve","tank","vessel","instrument","junction","connector","unknown"].map(type => `<option value="${type}">`).join("")}</datalist><label class="field">Review state<select name="review_status">${options(["unreviewed","confirmed"],component.review_status || "unreviewed")}</select></label><div class="form-actions"><button type="submit" class="button primary">Save correction</button><button type="button" class="button danger" data-action="delete-component">Remove</button></div></form>
@@ -335,11 +344,20 @@ function drawCanvas() {
   ctx.save();ctx.translate(...app.offset);ctx.scale(app.scale,app.scale);ctx.fillStyle="white";ctx.shadowColor="#1734261a";ctx.shadowBlur=15/app.scale;ctx.fillRect(0,0,sheet.width,sheet.height);ctx.shadowBlur=0;
   if(app.image)ctx.drawImage(app.image,0,0,sheet.width,sheet.height);
   const nodeKeys=new Set();
-  if(app.view!=="grid")for(const edge of sheet.connections||[])drawConnection(ctx,edge,sheet);
+  if(app.view!=="grid"){
+    for(const edge of sheet.connections||[])drawConnection(ctx,edge,sheet);
+    drawObservedArrows(ctx,sheet);
+  }
   ctx.globalAlpha=1;
   for(const component of sheet.components||[]){if(!component.bbox)continue;const[x0,y0,x1,y1]=component.bbox;const selected=component.id===app.componentId;ctx.fillStyle=selected?"#19785f20":nodeKeys.has(component.id)?"#19785f16":"transparent";ctx.fillRect(x0,y0,x1-x0,y1-y0);ctx.strokeStyle=selected?"#19785f":nodeKeys.has(component.id)?"#249b70":"#3890b2";ctx.lineWidth=(selected?2.5:1)/app.scale;ctx.strokeRect(x0,y0,x1-x0,y1-y0);}
   if(app.view==="grid"&&app.gridVisible)drawGrid(ctx,sheet);
   for(const component of sheet.components||[]){if(component.bbox&&(app.view==="grid"?app.gridLabels:app.labels))drawEquipmentLabel(ctx,component,sheet);}
+  const selected=selectedComponent();
+  if(app.view!=="grid" && selected?.tag && selected.tag_bbox){
+    const [l,t,r,b]=selected.tag_bbox;
+    ctx.save();ctx.strokeStyle="#c46116";ctx.lineWidth=2/app.scale;
+    ctx.setLineDash([4/app.scale,3/app.scale]);ctx.strokeRect(l,t,r-l,b-t);ctx.restore();
+  }
   if(app.draft){ctx.strokeStyle="#19785f";ctx.lineWidth=2/app.scale;ctx.setLineDash([5/app.scale,3/app.scale]);if(app.draft.box){const[x0,y0,x1,y1]=app.draft.box;ctx.strokeRect(x0,y0,x1-x0,y1-y0);}else if(app.draft.points?.length){ctx.beginPath();app.draft.points.forEach((p,index)=>index?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke();}ctx.setLineDash([]);}
   ctx.restore();const zoom=$("#zoom-label");if(zoom)zoom.textContent=`${Math.round(app.scale*100)}%`;
 }
@@ -354,14 +372,36 @@ function drawConnection(ctx,edge,sheet){
   ctx.lineWidth=(selected?3:1.5)/app.scale;ctx.globalAlpha=.8;
   ctx.setLineDash(edge.kind==="signal"?[6/app.scale,4/app.scale]:unknown?[3/app.scale,3/app.scale]:[]);
   ctx.beginPath();points.forEach((point,index)=>index?ctx.lineTo(...point):ctx.moveTo(...point));ctx.stroke();ctx.setLineDash([]);
-  let segment=null,longest=0;
-  points.slice(1).forEach((point,index)=>{const a=points[index],length=Math.hypot(point[0]-a[0],point[1]-a[1]);if(length>longest){longest=length;segment=[a,point];}});
-  if(segment&&longest*app.scale>22&&["source_to_target","target_to_source","bidirectional"].includes(edge.direction)){
-    const[a,b]=segment,angle=Math.atan2(b[1]-a[1],b[0]-a[0]),x=(a[0]+b[0])/2,y=(a[1]+b[1])/2;
-    const arrow=(rotation,offset=0)=>{ctx.save();ctx.translate(x+Math.cos(angle)*offset/app.scale,y+Math.sin(angle)*offset/app.scale);ctx.rotate(rotation);ctx.beginPath();ctx.moveTo(-6/app.scale,-4/app.scale);ctx.lineTo(0,0);ctx.lineTo(-6/app.scale,4/app.scale);ctx.stroke();ctx.restore();};
-    if(edge.direction!=="target_to_source")arrow(angle,edge.direction==="bidirectional"?7:0);
-    if(edge.direction!=="source_to_target")arrow(angle+Math.PI,edge.direction==="bidirectional"?-7:0);
+}
+
+function drawObservedArrows(ctx,sheet){
+  const selected=sheet.connections.find(edge=>edge.id===app.connectionId);
+  const arrows=sheet.arrows ?? sheet.source_metadata?.analysis?.arrows ?? [];
+  if(!arrows.length)return;
+  const edges=new Map(sheet.connections.map(edge=>[edge.id,edge]));
+  ctx.save();
+  ctx.globalAlpha=1;
+  for(const arrow of arrows){
+    const tip=arrow.tip || arrow.arrow_tip;
+    if(!Array.isArray(tip))continue;
+    const edge=edges.get(arrow.connection_id);
+    if(edge?.kind==="signal" ? !app.signals : !app.pipes)continue;
+    const highlighted=selected && (selected.id===arrow.connection_id || selected.direction_evidence?.arrow_ids?.includes(arrow.id));
+    const wings=arrow.wings || arrow.arrow_wings;
+    ctx.strokeStyle=highlighted?"#dc7435":"#17694e";
+    ctx.lineWidth=(highlighted?2.5:1.4)/app.scale;
+    ctx.beginPath();
+    if(Array.isArray(wings)&&wings.length===2){
+      ctx.moveTo(...wings[0]);ctx.lineTo(...tip);ctx.lineTo(...wings[1]);
+    }else{
+      ctx.arc(...tip,3/app.scale,0,Math.PI*2);
+    }
+    ctx.stroke();
+    if(highlighted){
+      ctx.beginPath();ctx.arc(...tip,7/app.scale,0,Math.PI*2);ctx.stroke();
+    }
   }
+  ctx.restore();
 }
 
 function drawGrid(ctx,sheet) {
@@ -400,6 +440,8 @@ function drawGrid(ctx,sheet) {
 }
 
 function drawEquipmentLabel(ctx,component,sheet) {
+  if(isJunction(component) && !component.tag && component.id!==app.componentId)return;
+  if(app.view!=="grid" && component.id===app.componentId && component.tag_bbox && component.tag)return;
   const[x0,,x1,y1]=component.bbox,coordinate=gridPosition(component,sheet);
   const label=app.view==="grid"?`${componentName(component)} ${coordinate?`(${coordinate[0]},${coordinate[1]})`:gridMap(sheet)?.error?"(Unavailable)":gridMap(sheet)?"(Unplaced)":"(Loading…)"}`:componentName(component);
   ctx.font=`${11/app.scale}px Segoe UI`;ctx.textAlign="center";ctx.textBaseline="top";

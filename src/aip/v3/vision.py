@@ -11,8 +11,8 @@ from tempfile import TemporaryDirectory
 from PIL import Image, ImageChops
 
 from ..classical import extract_image
-from ..connection_geometry import HorizontalStroke, flow_direction
 from ..v2.providers import MAX_IMAGE_BYTES, ProviderError, extract_provider
+from .direction import arrow_direction, assign_directions, raster_arrows
 from .line_model import CLASSES, CONTINUOUS, EXAMPLES_PER_CLASS, MODEL_ID, TRAINING_SEED, classify_stroke
 
 
@@ -114,60 +114,11 @@ def _stroke_fit(path, ink):
     return total_distance, total_coverage / count
 
 
-def _arrows_on_edges(ink, connections):
-    """Reuse raster arrowhead geometry on the accepted pipe legs in either axis."""
-    masks = {}
-    arrows = []
-    for edge in connections:
-        directions = set()
-        for a, b in zip(edge["path"], edge["path"][1:]):
-            vertical = a[0] == b[0]
-            if not vertical and a[1] != b[1]:
-                continue
-            first, last = (a[::-1], b[::-1]) if vertical else (a, b)
-            low, high = sorted((first[0], last[0]))
-            if high - low < 20:
-                continue
-            if vertical not in masks:
-                raster = ink.transpose(Image.Transpose.TRANSPOSE) if vertical else ink
-                masks[vertical] = raster.tobytes(), raster.width
-            mask, width = masks[vertical]
-            y = first[1]
-            # The previously fitted line can include tiny scan dropouts. Use
-            # the midpoint to measure shaft thickness for the local arrow test.
-            x = (low + high) // 2
-            if not mask[y * width + x]:
-                continue
-            top, bottom = y, y
-            while top > 0 and mask[(top - 1) * width + x]:
-                top -= 1
-            while bottom + 1 < len(mask) // width and mask[(bottom + 1) * width + x]:
-                bottom += 1
-            observation = flow_direction(mask, width, HorizontalStroke(low, high, top, bottom))
-            if observation["status"] == "unknown":
-                continue
-            tip, wings = observation["arrow_tip"], observation["arrow_wings"]
-            if vertical:
-                tip, wings = tip[::-1], [point[::-1] for point in wings]
-            points = [tip, *wings]
-            tail = [sum(p[axis] for p in wings) / len(wings) for axis in (0, 1)]
-            bbox = [min(p[0] for p in points), min(p[1] for p in points),
-                    max(p[0] for p in points) + 1, max(p[1] for p in points) + 1]
-            same_direction = (observation["status"] == "source_to_target") == (first[0] < last[0])
-            directions.add("source_to_target" if same_direction else "target_to_source")
-            arrows.append({"id": f"ml-arrow-{len(arrows) + 1}", "connection_id": edge["id"],
-                           "bbox": bbox, "tip": tip, "tail": tail, "wings": wings,
-                           "review_status": "unreviewed"})
-        if len(directions) == 1:
-            edge["direction"] = directions.pop()
-    return arrows
-
-
-def extract_local_connections(image_path, classical_components=None):
+def extract_local_connections(image_path, classical_components=None, classical_arrows=None):
     """Run Windows OCR/geometry followed by a separate, learned route classifier.
 
     For paired experiments, callers may pass the image-only baseline's component
-    observations to reuse its OCR pass. No baseline edge, reference file, tag
+    observations and raw arrow landmarks to reuse its raster/OCR pass. No baseline edge, reference file, tag
     dictionary, image-specific model, or source geometry is used to trace lines.
     """
     source = Path(image_path)
@@ -175,7 +126,9 @@ def extract_local_connections(image_path, classical_components=None):
         ink = image.convert("L").point(lambda value: 255 if value < 160 else 0)
     if classical_components is None:
         with TemporaryDirectory(prefix="aip-v3-ocr-") as scratch:
-            classical_components = extract_image(source, Path(scratch))["components"]
+            observed = extract_image(source, Path(scratch))
+            classical_components = observed["components"]
+            classical_arrows = observed.get("arrows", [])
     components = []
     for item in classical_components:
         component = {key: item[key] for key in ("id", "bbox", "type", "tag_bbox", "evidence", "uncertainty")
@@ -205,7 +158,9 @@ def extract_local_connections(image_path, classical_components=None):
                 "path": [list(point) for point in path], "review_status": "unreviewed",
                 "evidence": f"Stroke model accepted each leg between visible symbol contacts ({coverage:.0%} sampled ink).",
                 "uncertainty": "Process-line type and any observed flow direction require drawing review."})
-    arrows = _arrows_on_edges(ink, connections)
+    arrows = raster_arrows(ink, components, connections, ports, classical_arrows or [])
+    slack = max(2, min(8, round(min(ink.size) * 0.002)))
+    assign_directions(ink, components, connections, arrows, ports, slack)
     return {"components": components, "connections": connections, "arrows": arrows, "connectors": [],
             "excluded_connections": [], "review_required": True, "provider": "local-ml", "model": MODEL_ID,
             "image": {"width": ink.width, "height": ink.height, "sha256": sha256(source.read_bytes()).hexdigest()},
@@ -238,14 +193,16 @@ def _dilate(ink, radius):
 
 
 def _has_arrow_wings(arrow, ink):
-    """Require ink on both flanks of the indicated head; a bare line is insufficient."""
+    """Require ink at the tip and two flanks that widen toward the back of the head."""
     tx, ty = arrow["tip"]
     ex, ey = arrow["tail"]
     length = hypot(tx - ex, ty - ey)
     if length < 2:
         return False
     dx, dy = (tx - ex) / length, (ty - ey) / length
-    sides = set()
+    near = [0.0, 0.0]
+    far = [0.0, 0.0]
+    tip_ink = False
     pixels = ink.load()
     l, t, r, b = arrow["bbox"]
     # Keep the probe on the reported head, bounded even for a bad model box.
@@ -256,32 +213,15 @@ def _has_arrow_wings(arrow, ink):
         for x in range(l, r, step):
             if not pixels[x, y]:
                 continue
+            if hypot(tx - x, ty - y) <= max(2, step):
+                tip_ink = True
             behind = (tx - x) * dx + (ty - y) * dy
             side = (x - tx) * (-dy) + (y - ty) * dx
-            if 0.15 * length <= behind <= 1.25 * length and abs(side) >= max(1.5, 0.18 * length):
-                sides.add(side > 0)
-                if len(sides) == 2:
-                    return True
-    return False
-
-
-def _arrow_direction(arrow, path, slack, ink):
-    tip, tail = arrow["tip"], arrow["tail"]
-    vx, vy = tip[0] - tail[0], tip[1] - tail[1]
-    if not all(_near_box(p, arrow["bbox"], slack) for p in (tail, tip)) or not _has_arrow_wings(arrow, ink):
-        return None
-    nearest = None
-    for a, b in zip(path, path[1:]):
-        dx, dy = b[0] - a[0], b[1] - a[1]
-        length = hypot(dx, dy)
-        if not length:
-            continue
-        t = max(0, min(1, ((tip[0] - a[0]) * dx + (tip[1] - a[1]) * dy) / length**2))
-        distance = hypot(tip[0] - (a[0] + t * dx), tip[1] - (a[1] + t * dy))
-        cosine = (vx * dx + vy * dy) / (length * hypot(vx, vy))
-        if distance <= slack + 1 and abs(cosine) >= 0.7 and (nearest is None or distance < nearest[0]):
-            nearest = (distance, "source_to_target" if cosine > 0 else "target_to_source")
-    return nearest[1] if nearest else None
+            if 0.15 * length <= behind <= 1.2 * length:
+                band = near if behind < 0.55 * length else far
+                sign = int(side > 0)
+                band[sign] = max(band[sign], abs(side))
+    return tip_ink and all(n >= 1 and f >= max(2, n + 1, 0.12 * length) for n, f in zip(near, far))
 
 
 def _check_vision_routes(result, ink):
@@ -314,25 +254,23 @@ def _check_vision_routes(result, ink):
         else:
             accepted.append(edge)
     by_edge = {edge["id"]: edge for edge in accepted}
-    directions = {}
     for arrow in result["arrows"]:
         edge_id = arrow.get("connection_id")
-        if edge_id is None:
-            continue
-        actual = _arrow_direction(arrow, by_edge[edge_id]["path"], slack, ink) if edge_id in by_edge else None
-        if actual:
-            directions.setdefault(edge_id, set()).add(actual)
-        else:
-            arrow["proposed_connection_id"] = arrow.pop("connection_id")
-            result["uncertainties"].append(f"{arrow['id']}: Arrow could not be aligned with its proposed line.")
+        arrow["verified"] = (all(_near_box(p, arrow["bbox"], slack) for p in (arrow["tail"], arrow["tip"]))
+                             and _has_arrow_wings(arrow, ink))
+        if edge_id is not None:
+            if (edge_id not in by_edge or not arrow["verified"] or
+                    not arrow_direction(arrow, by_edge[edge_id]["path"], slack)):
+                arrow["proposed_connection_id"] = arrow.pop("connection_id")
+                arrow["verified"] = False
+                result["uncertainties"].append(f"{arrow['id']}: Arrow could not be aligned with its proposed line.")
+    ports = {c["id"]: _ports(c["bbox"], ink) for c in result["components"]} if any(
+        a["verified"] for a in result["arrows"]) else {}
+    claimed = {edge["id"]: edge["direction"] for edge in accepted}
+    assign_directions(ink, result["components"], accepted, result["arrows"], ports, slack)
     for edge in accepted:
-        observed = directions.get(edge["id"], set())
-        if edge["direction"] == "unknown":
-            continue
-        expected = {"source_to_target", "target_to_source"} if edge["direction"] == "bidirectional" else {edge["direction"]}
-        if observed != expected:
-            edge["direction"] = "unknown"
-            result["uncertainties"].append(f"{edge['id']}: Flow direction lacked matching arrow geometry.")
+        if claimed[edge["id"]] != "unknown" and claimed[edge["id"]] != edge["direction"]:
+            result["uncertainties"].append(f"{edge['id']}: The proposed direction lacked matching arrow evidence.")
     result.update(connections=accepted, excluded_connections=excluded)
     return result
 

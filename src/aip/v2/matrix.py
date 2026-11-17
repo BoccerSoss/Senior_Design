@@ -192,8 +192,9 @@ def build_matrix(state, facility_id, sheet_id=None):
             pair = first["index"], second["index"]
             review = connection.get("review_status", "unreviewed")
             observation = {"sheet_id": sheet["id"], "connection_id": str(connection_id),
+                           "source_component_id": source, "target_component_id": target,
                            "review_status": review, "kind": connection["kind"]}
-            for field in ("path", "direction", "evidence", "uncertainty"):
+            for field in ("path", "direction", "direction_evidence", "evidence", "uncertainty"):
                 if field in connection:
                     observation[field] = deepcopy(connection[field])
             if pair in pairs:

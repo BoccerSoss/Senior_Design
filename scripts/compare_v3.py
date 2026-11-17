@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from aip.desktop_analysis import analyze_drawing
 from aip.io import digest, image_info, load_json, write_json
 from aip.v2.ingest import analysis_objects
+from aip.v3 import VERSION
 from aip.v3.scoring import IOU_THRESHOLD, TARGET, micro_average, score_graph
 
 
@@ -70,13 +71,13 @@ def _baseline(image, output):
     components, edges, provenance = analysis_objects(result)
     if provenance["method"] != "classical" or result.reference_citation:
         raise ValueError("Source-assisted extraction cannot be used for this comparison.")
-    return {"components": components, "connections": edges, "model": "V2 classical OCR and geometry"}
+    return {"components": components, "connections": edges, "arrows": provenance.get("arrows", []), "model": "V2 classical OCR and geometry"}
 
 
-def _ai(image, components, settings, mode, size):
+def _ai(image, baseline, settings, mode, size):
     if mode == "local-ml":
         from aip.v3.vision import extract_local_connections
-        return extract_local_connections(image, components)
+        return extract_local_connections(image, baseline.get("components"), baseline.get("arrows"))
     from aip.v3.vision import extract_connections
     return extract_connections(settings, image.read_bytes(), "image/png", *size)
 
@@ -118,8 +119,7 @@ def run(args):
             row["failures"]["baseline"] = type(exc).__name__
             (folder / "baseline_error.txt").write_text(str(exc), encoding="utf-8")
         try:
-            classical_nodes = graphs["baseline"]["components"] if "baseline" in graphs else None
-            graphs["ai"] = _ai(image, classical_nodes, settings, args.method, size)
+            graphs["ai"] = _ai(image, graphs.get("baseline", {}), settings, args.method, size)
             if graphs["ai"].get("model"):
                 models.add(graphs["ai"]["model"])
         except (ValueError, OSError, RuntimeError) as exc:
@@ -145,7 +145,7 @@ def run(args):
         warnings.append("Equipment-name scoring requires complete reference transcriptions and a completed inference run.")
     report = {
         "schema_version": 1, "created_utc": datetime.now(timezone.utc).isoformat(), "cohort": manifest["cohort"],
-        "source_url": manifest.get("source_url"), "review_status": manifest["review_status"],
+        "source_url": manifest.get("source_url"), "review_status": manifest["review_status"], "workbench_version": VERSION,
         "manifest_sha256": json_hash(manifest), "ai_method": args.method, "model": ", ".join(sorted(models)) or None,
         "baseline_method": "V2 Windows OCR and geometry with source-specific lookup disabled",
         "target_f1": TARGET, "drawing_count": len(sheets), "completed_pairs": pairs,
