@@ -5,15 +5,16 @@ import json
 from pathlib import Path
 from PIL import Image
 from .baseline import extract_image as geometry_extract
-from .classification import classify_symbol, refine_symbol_boxes
+from .classification import classify_symbol
+from .symbol_proposals import recover_symbol_boxes
 from .core import normalize_tag
-from .equipment_ocr import ink_label_regions, read_damaged_tags, read_ink_labels, recognize_equipment_labels
+from .equipment_ocr import fill_missing_regions, ink_label_regions, read_damaged_tags, read_ink_labels, recognize_equipment_labels
 
 
 def classical_info():
     return {"method": "windows-ocr-and-outline-rules-v2", "provider": "local Windows/Pillow",
             "model": None, "access_route": "local raster pixels, Windows.Media.Ocr and deterministic shape rules",
-            "tag_method": "native OCR plus batched label and suffix crops; labels can sit on any side of a symbol",
+            "tag_method": "page and crop OCR with spatial word association, linework-filtered text regions, and cross-checked glyph readings",
             "direction_method": "visible arrowheads and connected raster paths through symbol candidates",
             "supported_symbols": ["simplified tank", "rounded vessel", "opposed-triangle, diagonal and angle valve bodies",
                                   "circular pump with entry/tangent strokes", "scroll pump housing"],
@@ -84,7 +85,7 @@ def associate_tags(components, crop_records, image_height):
 
 def extract_image(image_path, scratch_dir):
     """Consume the image, then combine geometric, text and outline observations."""
-    raw = geometry_extract(image_path, refine_boxes=refine_symbol_boxes)
+    raw = geometry_extract(image_path, refine_boxes=recover_symbol_boxes)
     with Image.open(image_path) as source:
         image = source.convert("RGB")
     if raw["components"]:
@@ -103,7 +104,11 @@ def extract_image(image_path, scratch_dir):
         if any(not a["observed_tag"] for a in associations):
             regions = ink_label_regions(image, ocr["native"].get("words", []))
             nearby = _associate_regions(raw["components"], regions, image.height)
-            ocr["ink_label_readings"] = read_ink_labels(image, nearby, associations, records, scratch_dir)
+            if any(not region and not a["observed_tag"] for region, a in zip(nearby, associations)):
+                cleaned = ink_label_regions(image, ocr["native"].get("words", []), remove_linework=True)
+                alternatives = _associate_regions(raw["components"], cleaned, image.height)
+                nearby = fill_missing_regions(nearby, alternatives)
+            ocr["ink_label_readings"] = read_ink_labels(image, nearby, associations, scratch_dir)
     else:
         ocr = {"method":"OCR not invoked because no supported geometric candidates were detected", "native":None,
                "tag_crop_passes":[],"crop_artifacts_retained":False}

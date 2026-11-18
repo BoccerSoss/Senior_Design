@@ -187,6 +187,12 @@ def build_matrix(state, facility_id, sheet_id=None, *, include_unreviewed_warnin
                 diagnose(code, reason, severity=severity, sheet=sheet, source=source, target=target, **metadata)
                 continue
             first, second = by_ref[(sheet["id"], source)], by_ref[(sheet["id"], target)]
+            if (connection.get("require_identified_endpoints") and connection.get("review_status") != "confirmed"
+                    and any(node["type"] == "unknown" and node["normalized_tag"] is None for node in (first, second))):
+                stats["excluded_connections"] += 1
+                diagnose("unidentified_equipment", "A traced line is held for review until both ends are identified as equipment.",
+                         sheet=sheet, source=source, target=target, **metadata)
+                continue
             if first["index"] > second["index"]:
                 first, second = second, first
             pair = first["index"], second["index"]

@@ -11,7 +11,7 @@ GRID = 128
 _STROKE = re.compile(b"\xff+")
 
 
-def _valve_bodies(mask, *, surrounding=False):
+def _valve_bodies(mask, *, surrounding=False, whole_sheet=False):
     """Find paired bars joined by a slanted member or two opposing triangles."""
     width, height = mask.size
     vertical = mask.transpose(Image.Transpose.TRANSPOSE).tobytes()
@@ -20,13 +20,15 @@ def _valve_bodies(mask, *, surrounding=False):
     # A tapered triangle also has shorter interior columns; only its full-height
     # outer bar can supply the two endpoints of the matching diagonal.
     previous = []
-    minimum_fraction = .032 if surrounding else .24
-    minimum = max(9, round(height * min(.23, minimum_fraction)))
+    minimum_fraction = .00004 if whole_sheet else (.032 if surrounding else .24)
+    short_axis = min(width, height)
+    minimum = max(12, round(short_axis * .0045)) if whole_sheet else max(9, round(height * min(.23, minimum_fraction)))
+    maximum = short_axis * .045 if whole_sheet else height
     for x in range(width):
         current = []
         for match in _STROKE.finditer(vertical, x * height, (x + 1) * height):
             y0, y1 = match.start() - x * height, match.end() - x * height - 1
-            if y1 - y0 < minimum:
+            if not minimum <= y1 - y0 <= maximum:
                 continue
             bar = next((b for b in previous if abs(b[2] - y0) <= 2 and abs(b[3] - y1) <= 2), None)
             if bar is None:
@@ -41,7 +43,10 @@ def _valve_bodies(mask, *, surrounding=False):
     near = mask.filter(ImageFilter.MaxFilter(5)).load()
     pixels = mask.load()
     for i, left in enumerate(bars):
-        for right in bars[i + 1:]:
+        for j in range(i + 1, len(bars)):
+            right = bars[j]
+            if right[0] - left[1] > 3.4 * (left[3] - left[2]):
+                break
             x0, x1 = (left[0] + left[1]) / 2, (right[0] + right[1]) / 2
             h = min(left[3] - left[2], right[3] - right[2])
             w = x1 - x0

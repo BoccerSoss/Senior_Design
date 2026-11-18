@@ -12,7 +12,7 @@ On matching beginner PNGs, **Read with symbol reference** uses source-checked sy
 
 Open **Grid** for a square grid over the original drawing. Coordinates display automatically there and in the Drawing tab’s component list. An equipment coordinate such as **(3, 2)** identifies the nearest intersection in column 3, row 2, counting from the upper left. Select the equipment to inspect its position. Choose **Equipment centers** to draw lines through every marked center. **Export JSON** and drawing questions use the selected layout.
 
-**Connectivity matrix → Benchmark results** shows V3.3 image-only scores of **0.296 F1 for localized direct connections** and **0.143 F1 for correctly named direct connections** across the six provisional beginner sheets. The four-component synthetic control scored **1.000** on both measures. The project target is **0.90**. The panel also retains the earlier independent OPEN100 benchmark.
+**Connectivity matrix → Benchmark results** shows V3.5 image-only scores of **0.729 F1 for localized direct connections** and **0.500 F1 for correctly named direct connections** across the six provisional beginner sheets. The four-component synthetic control scored **1.000** on both measures. The project target is **0.90**. The panel also retains the earlier independent OPEN100 benchmark.
 
 [V3 demo and model setup](docs/V3_WORKBENCH.md) · [Evaluation results and reproduction](docs/V3_EVALUATION.md) · [Independent annotation source](https://zenodo.org/records/14803338)
 

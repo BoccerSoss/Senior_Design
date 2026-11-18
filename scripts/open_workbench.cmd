@@ -14,7 +14,7 @@ if errorlevel 1 (
     call :check_runtime
     if errorlevel 1 goto setup_failed
 )
-if "%aip_version%"=="3" call :setup_plan
+if "%aip_version%"=="3" call :setup_v3
 echo.
 echo AIP V%aip_version% opens in your browser at http://127.0.0.1:%aip_port%
 echo Keep this window open while using the workbench. Press Ctrl+C here to stop it.
@@ -35,12 +35,12 @@ exit /b %aip_exit_code%
 ".venv\Scripts\python.exe" -c "import sys, PIL, pypdfium2; from importlib.metadata import version; import winrt.windows.foundation, winrt.windows.foundation.collections, winrt.windows.globalization, winrt.windows.graphics.imaging, winrt.windows.media.ocr, winrt.windows.storage.streams; sys.exit(sys.version_info[:2] != (3, 12) or sys.maxsize <= 2**32 or PIL.__version__ != '12.0.0' or version('pypdfium2') != '5.4.0')"
 exit /b %errorlevel%
 
-:setup_plan
-".venv\Scripts\python.exe" -c "import jwt, cryptography, win32crypt; from importlib.metadata import version; assert all(version(k)==v for k,v in [('PyJWT','2.15.1'),('cryptography','50.0.2'),('pywin32','312')])" >nul 2>&1
+:setup_v3
+".venv\Scripts\python.exe" -c "import jwt, cryptography, win32crypt, numpy; from importlib.metadata import version; assert all(version(k)==v for k,v in [('PyJWT','2.15.1'),('cryptography','50.0.2'),('pywin32','312'),('numpy','2.5.5')])" >nul 2>&1
 if not errorlevel 1 exit /b 0
-echo Setting up ChatGPT subscription sign-in...
+echo Setting up V3 raster routing and ChatGPT subscription sign-in...
 ".venv\Scripts\python.exe" -m pip --disable-pip-version-check install --require-hashes --only-binary=:all: -r requirements-v3.lock
-if errorlevel 1 echo Subscription sign-in setup failed. You can still use local tools or ChatGPT in your browser.
+if errorlevel 1 echo V3 dependency setup failed. The basic local tracer is still available.
 exit /b 0
 
 :setup_failed

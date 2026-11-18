@@ -1,9 +1,11 @@
 """Geometry variation and ambiguity tests; not general drawing-accuracy tests."""
 import unittest
+from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
 from aip.classification import classify_symbol, refine_symbol_boxes
+from aip.symbol_proposals import _straight_member, recover_symbol_boxes
 
 
 class SimplifiedShapeTests(unittest.TestCase):
@@ -130,6 +132,47 @@ class SimplifiedShapeTests(unittest.TestCase):
         self.assertEqual(len(repaired),2)
         self.assertLess(repaired[0][2],repaired[1][0])
         self.assertEqual([classify_symbol(image,b)["type"] for b in repaired], ["valve","valve"])
+
+    def test_sheet_search_recovers_valve_operator_and_rejects_a_disconnected_glyph(self):
+        image = Image.new("L", (1000, 900), "white")
+        draw = ImageDraw.Draw(image)
+        for x in (150, 530):
+            for side in (x, x + 66):
+                draw.line([(side, 410), (x+33, 426), (side, 442), (side, 410)], fill=0, width=3)
+            draw.line((x+33, 426, x+33, 404), fill=0, width=3)
+            draw.rectangle((x+20, 390, x+46, 404), outline=0, width=3)
+        # Only the left glyph has incoming and outgoing strokes.
+        draw.line((85, 426, 150, 426), fill=0, width=3)
+        draw.line((216, 426, 278, 426), fill=0, width=3)
+        for view in (image, image.transpose(Image.Transpose.TRANSPOSE)):
+            boxes = recover_symbol_boxes(view, [], [])
+            self.assertEqual(len(boxes), 1)
+            box = boxes[0] if view is image else [boxes[0][1], boxes[0][0], boxes[0][3], boxes[0][2]]
+            self.assertTrue(all(abs(a-b) <= 5 for a,b in zip(box, (150,390,217,443))), box)
+
+    def test_sheet_search_recovers_closed_scroll_housing_from_a_partial_box(self):
+        image = Image.new("L", (650, 500), "white")
+        draw = ImageDraw.Draw(image)
+        draw.arc((202, 152, 277, 226), 0, 270, fill=0, width=4)
+        draw.line([(239,153),(294,153),(294,189),(274,189)], fill=0, width=4)
+        draw.line((150,189,203,189), fill=0, width=4)
+        draw.line((294,164,330,164), fill=0, width=4)
+        boxes = recover_symbol_boxes(image, [[202,194,239,227]], [])
+        self.assertEqual(len(boxes), 1)
+        self.assertEqual(classify_symbol(image, boxes[0])["type"], "pump")
+
+    def test_curved_housing_does_not_supply_a_straight_valve_member(self):
+        ink = Image.new("L", (80, 52), 0)
+        draw = ImageDraw.Draw(ink)
+        for x in (3, 41):
+            draw.ellipse((x, 6, x+35, 46), outline=255, width=3)
+        self.assertFalse(_straight_member(ink, (3,6,77,47)))
+
+    def test_overlapping_fallbacks_survive_without_a_confirmed_whole_symbol(self):
+        image = Image.new("L", (420, 320), "white")
+        candidates = [[100,100,240,165], [195,101,239,142]]
+        with patch("aip.symbol_proposals.refine_symbol_boxes", return_value=candidates):
+            self.assertEqual(recover_symbol_boxes(image, [], []), candidates)
 
 
 if __name__ == "__main__":

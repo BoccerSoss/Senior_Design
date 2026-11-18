@@ -7,11 +7,25 @@ from unittest.mock import patch
 from PIL import Image, ImageDraw, ImageFont
 
 from aip.classical import associate_tags
-from aip.equipment_ocr import _regions, ink_label_regions, read_damaged_tags, read_ink_labels, recognize_equipment_labels
+from aip.equipment_ocr import _regions, fill_missing_regions, ink_label_regions, read_damaged_tags, read_ink_labels, recognize_equipment_labels
 from aip.windows_ocr import OCRUnavailable
 
 
 class EquipmentLabels(unittest.TestCase):
+    def test_crop_reread_includes_the_prefix_and_cannot_reuse_a_neighbor(self):
+        word = {"source_word_bbox":[20, 15, 92, 30]}
+        suffix = {"source_word_bbox":[55, 14, 92, 30]}
+        alternate = {"source_word_bbox":[158, 14, 222, 30]}
+        self.assertEqual(fill_missing_regions([word, None, None], [None, suffix, alternate]),
+                         [word, None, alternate])
+        prior = {"component_id":"unit", "source_word_bbox":word["source_word_bbox"],
+                 "observed_tag":"XY-173"}
+        image = Image.new("L", (240, 64), 255)
+        with TemporaryDirectory() as temp, patch("aip.equipment_ocr.recognize_label_boxes", return_value=[]) as read:
+            read_ink_labels(image, [suffix], [prior], temp)
+        self.assertEqual(read.call_args.args[1], [{"id":"unit", "tag_bbox":[20, 14, 92, 30]}])
+        self.assertEqual(prior["observed_tag"], "XY-173")
+
     def test_recovers_printed_tag_when_full_page_ocr_omits_its_words(self):
         for suffix in ("394", "785"):
             with self.subTest(suffix=suffix), TemporaryDirectory() as temp:
@@ -28,7 +42,7 @@ class EquipmentLabels(unittest.TestCase):
                 self.assertEqual(len(regions), 1)
                 component = {"component_id":"pump", "observed_tag":None, "source_word_bbox":None}
                 try:
-                    read_ink_labels(image, regions, [component], [], temp)
+                    read_ink_labels(image, regions, [component], temp)
                 except OCRUnavailable as exc:
                     self.skipTest(str(exc))
                 self.assertEqual(component["observed_tag"], name)
@@ -39,7 +53,7 @@ class EquipmentLabels(unittest.TestCase):
                         {"component_id":"b", "observed_tag":None, "source_word_bbox":None}]
         with TemporaryDirectory() as temp:
             readings = read_ink_labels(Image.new("L", (100, 35), 255),
-                                       [None, {"source_word_bbox":[7, 2, 92, 24]}], associations, [], temp)
+                                       [None, {"source_word_bbox":[7, 2, 92, 24]}], associations, temp)
         self.assertEqual(readings, [])
         self.assertIsNone(associations[1]["observed_tag"])
 

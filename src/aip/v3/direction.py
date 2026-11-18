@@ -87,7 +87,7 @@ def raster_arrows(ink, components, connections, ports, classical_arrows, existin
         if edge["kind"] not in PROCESS_LINE_KINDS:
             continue
         path = edge["path"]
-        if any(abs(a[0] - b[0]) > 2 and abs(a[1] - b[1]) > 2 for a, b in zip(path, path[1:])):
+        if any(abs(a[0] - b[0]) >= 20 and abs(a[1] - b[1]) > 2 for a, b in zip(path, path[1:])):
             oblique_edges.append(path)
         used_ports.update(((edge["source"], tuple(path[0])), (edge["target"], tuple(path[-1]))))
         for a, b in zip(path, path[1:]):
@@ -260,7 +260,7 @@ def _endpoint(edge, node):
 def _path_port(edge, node, ports, slack):
     path = edge["path"] if edge["source"] == node else list(reversed(edge["path"]))
     x, y = path[0]
-    a, b = next((p for p in path[1:] if p != path[0]), path[0])
+    a, b = next((p for p in path[1:] if hypot(p[0] - x, p[1] - y) >= 4), path[-1])
     dx, dy = a - x, b - y
     candidates = [(point, heading) for point, heading in ports
                   if hypot(x - point[0], y - point[1]) <= slack + 4

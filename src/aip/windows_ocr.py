@@ -471,7 +471,8 @@ def _check_suffix_votes(results, crops, scratch, timeout):
 def recognize_label_boxes(image_path, labels, *, scratch_dir=None, timeout=90):
     """Read text from supplied image-space regions without receiving expected values."""
     context = tempfile.TemporaryDirectory(prefix="aip-labels-") if scratch_dir is None else nullcontext(str(scratch_dir))
-    with context as temp, Image.open(image_path) as source:
+    source_image = nullcontext(image_path) if isinstance(image_path, Image.Image) else Image.open(image_path)
+    with context as temp, source_image as source:
         image = source.convert("L")
         Path(temp).mkdir(parents=True, exist_ok=True)
         results = []

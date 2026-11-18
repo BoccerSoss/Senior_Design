@@ -36,6 +36,29 @@ def local_graph(boxes, paths):
 
 
 class LearnedRouteTests(unittest.TestCase):
+    def test_centerline_retains_a_straight_pair_beside_a_separate_elbow(self):
+        boxes = [component("a", [4, 10, 24, 30]), component("b", [100, 62, 120, 82]),
+                 component("c", [5, 90, 25, 110]), component("d", [145, 90, 165, 110])]
+        lines = [[(23, 21), (110, 21), (110, 62)], [(24, 100), (145, 100)]]
+        result = local_graph(boxes, lines)
+        self.assertEqual({(e["source"], e["target"]): e["path"] for e in result["connections"]},
+                         {("a", "b"): [[23, 21], [110, 21], [110, 62]],
+                          ("c", "d"): [[24, 100], [145, 100]]})
+
+    def test_tee_connects_the_next_symbols_on_each_visible_arm(self):
+        boxes = [component("left", [4, 11, 24, 31]), component("right", [150, 11, 170, 31]),
+                 component("lower", [70, 85, 90, 110])]
+        result = local_graph(boxes, [[(23, 21), (150, 21)], [(80, 21), (80, 85)]])
+        self.assertEqual({frozenset((e["source"], e["target"])) for e in result["connections"]},
+                         {frozenset(pair) for pair in (("left", "right"), ("left", "lower"), ("right", "lower"))})
+
+    def test_stroke_model_remains_usable_without_numpy(self):
+        boxes = [component("a", [4, 10, 24, 30]), component("b", [150, 10, 170, 30])]
+        with patch("aip.v3.raster_network.np", None):
+            result = local_graph(boxes, [[(23, 21), (150, 21)]])
+        self.assertEqual(result["routing_method"], "stroke-model")
+        self.assertEqual(result["connections"][0]["path"], [[23, 21], [150, 21]])
+
     def test_frozen_stroke_model_discriminates_continuity(self):
         for samples in ([True] * 64, [True] * 30 + [False] + [True] * 33):
             self.assertIn(classify_stroke(samples)[0], CONTINUOUS)

@@ -4,16 +4,15 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections import Counter
 from pathlib import Path
 from statistics import median
 
-from PIL import Image, ImageChops, ImageOps
+from PIL import Image, ImageChops
 
 from .baseline import connected_ink_spans
 from .glyph_ocr import rank_tag_glyphs
-from .windows_ocr import (batch_read_label_rows, _choose_box_text, _observed_suffixes, _page_prefix, _prefix_and_suffix,
-                          _scanned_tag, _separator_suffix_box, recognize_image)
+from .windows_ocr import (batch_read_label_rows, _choose_box_text, _prefix_and_suffix,
+                          _scanned_tag, _separator_suffix_box, recognize_image, recognize_label_boxes)
 
 
 def _regions(reading):
@@ -124,7 +123,7 @@ def read_damaged_tags(image, records):
             record.update(selected_text=readings[0]["text"], selection="segmented glyph comparison on the associated label crop")
 
 
-def ink_label_regions(image, words):
+def ink_label_regions(image, words, *, remove_linework=False):
     """Find small clusters of adjacent printed glyphs, including words the page OCR missed."""
     heights = [w["bbox"][3] - w["bbox"][1] for w in words if w.get("bbox")]
     if not heights:
@@ -133,9 +132,20 @@ def ink_label_regions(image, words):
     gray = image.convert("L")
     scale = 2 if gray.width > 1500 else 1
     reduced = gray.resize((max(1, gray.width // scale), max(1, gray.height // scale)), Image.Resampling.BOX)
-    joined = reduced.point(lambda value: 255 if value < 210 else 0)
-    gap = max(1, round(0.33 * height / scale))
-    for horizontal, distance in ((True, gap), (False, max(1, gap // 5))):
+    cutoff = 195 if remove_linework else 210
+    pixels = reduced.point(lambda value: 255 if value < cutoff else 0)
+    if remove_linework:
+        data = bytearray(pixels.width * pixels.height)
+        for spans, (left, top, right, bottom) in connected_ink_spans(pixels.tobytes(), *pixels.size):
+            if 0.08 * height <= (bottom - top) * scale <= 1.6 * height and (right - left) * scale < 10 * height:
+                for y, x, end in spans:
+                    start = y * pixels.width
+                    data[start + x:start + end] = bytes([255]) * (end - x)
+        pixels = Image.frombytes("L", reduced.size, bytes(data))
+    joined = pixels
+    gap = max(1, round((0.65 if remove_linework else 0.33) * height / scale))
+    row_gap = max(1, round(0.09 * height / scale)) if remove_linework else max(1, gap // 5)
+    for horizontal, distance in ((True, gap), (False, row_gap)):
         added = 0
         while added < distance:
             step = min(added + 1, distance - added)
@@ -146,9 +156,16 @@ def ink_label_regions(image, words):
     regions = []
     for _, reduced_box in connected_ink_spans(joined.tobytes(), *joined.size):
         x, y, right, bottom = [value * scale for value in reduced_box]
-        if not (1.5 * height <= right - x <= 15 * height and 0.4 * height <= bottom - y <= 1.9 * height):
+        if not (1.4 * height <= right - x <= 16 * height and 0.32 * height <= bottom - y <= 2.2 * height):
             continue
         # The joining operation is only for locating a region. Keep the original ink for transcription.
+        if remove_linework:
+            bounds = pixels.crop(reduced_box).getbbox()
+            if bounds and bounds[2] - bounds[0] > 1.8 * (bounds[3] - bounds[1]):
+                regions.append({"source_word_bbox": [x + scale * bounds[0], y + scale * bounds[1],
+                                                     min(gray.width, x + scale * bounds[2]),
+                                                     min(gray.height, y + scale * bounds[3])]})
+            continue
         box = gray.crop((x, y, right, bottom)).point(lambda value: 255 if value < 200 else 0).getbbox()
         if box and box[2] - box[0] > 2.6 * (box[3] - box[1]):
             regions.append({"source_word_bbox": [x + box[0], y + box[1], x + box[2], y + box[3]]})
@@ -162,91 +179,41 @@ def _same_region(a, b):
     return overlap > 0.55 * min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
 
 
-def _margin(readings):
-    return readings[1]["mismatch"] - readings[0]["mismatch"] if len(readings) > 1 else 0
+def fill_missing_regions(primary, alternate):
+    """Use a second text mask only for unused words that the first mask missed."""
+    assigned = [r["source_word_bbox"] for r in primary if r]
+    return [first or (other if other and not any(_same_region(other["source_word_bbox"], used)
+                                                for used in assigned) else None)
+            for first, other in zip(primary, alternate)]
 
 
-def read_ink_labels(image, nearby, associations, native_records, scratch_dir):
-    """Recover spatially unambiguous labels from source ink and retain the evidence for each decision."""
-    gray = image.convert("L")
-    records, crops, passes = [], [], []
-    known = [(r["source_word_bbox"], r["selected_text"]) for r in native_records
-             if re.match(r"^[A-Za-z]{2,}-", r.get("selected_text") or "")]
-    occupied = [(a["component_id"], a["source_word_bbox"]) for a in associations if a["observed_tag"]]
-    output = {a["component_id"]: a for a in associations}
-    for region, association in zip(nearby, associations):
+def read_ink_labels(image, nearby, associations, scratch_dir):
+    """Reread automatically localized labels together, using the original image at several scales."""
+    owners = [(a["component_id"], a["source_word_bbox"]) for a in associations if a["observed_tag"]]
+    labels = []
+    by_id = {a["component_id"]: a for a in associations}
+    for region, prior in zip(nearby, associations):
         if not region:
             continue
+        component = prior["component_id"]
         box = region["source_word_bbox"]
-        prior, component = association["observed_tag"], association["component_id"]
-        if prior and not (re.match(r"^[A-Za-z]-", prior) or "segmented glyph" in str(association["ocr_selection"])):
+        if any(other != component and _same_region(box, used) for other, used in owners):
             continue
-        if any(other != component and _same_region(box, other_box) for other, other_box in occupied):
+        previous = prior["source_word_bbox"]
+        if previous and _same_region(box, previous):
+            # The ink cluster may contain only a suffix, or the native word may
+            # omit the printed prefix. Reread the complete overlapping word.
+            box = [min(box[0], previous[0]), min(box[1], previous[1]),
+                   max(box[2], previous[2]), max(box[3], previous[3])]
+        elif previous and prior["observed_tag"]:
             continue
-        crop = gray.crop(box)
-        prefix, suffix = _prefix_and_suffix(crop)
-        index = len(records)
-        records.append({**region, "component_id":component, "passes":[], "selected_text":None})
-        crops.append((crop, prefix))
-        passes.append((index, False, crop))
-        if prefix:
-            passes.append((index, True, suffix))
-    if not records:
+        labels.append({"id": component, "tag_bbox": box})
+    if not labels:
         return []
-    scratch = Path(scratch_dir) / "ink-rows"
-    scratch.mkdir()
-    for height in (32, 48):
-        batch_read_label_rows(passes, height, scratch, records, artifact_directory=scratch.name)
-    for record, (crop, prefix) in zip(records, crops):
-        text, reason = _choose_box_text(record["passes"], prefix)
-        # Single-letter prefixes on a degraded scan are often fused pairs of letters.
-        # A new label of that form must also survive the unrestricted glyph comparison.
-        if text and (prefix or not re.match(r"^[A-Za-z]-", text)):
-            record.update(selected_text=text, selection=reason)
-        else:
-            readings = rank_tag_glyphs(crop, _observed_suffixes(record["passes"]))
-            record["glyph_alternatives"] = readings
-            text = None
-            if readings and readings[0]["mismatch"] <= 0.22 and _margin(readings) >= 0.005:
-                text = readings[0]["text"]
-        if text and not any(_same_region(record["source_word_bbox"], b) for b, _ in known):
-            known.append((record["source_word_bbox"], text))
-    page_prefix = _page_prefix([{"observed_tag": text} for _, text in known])
-    for record, (crop, _) in zip(records, crops):
-        original = record.get("glyph_alternatives", [])
-        if not record["selected_text"] and original and original[0]["mismatch"] <= 0.24:
-            # A repeated prefix can shortlist letters, but still has to fit the pixels on this individual crop.
-            plausible = page_prefix and any(r["text"].startswith(page_prefix + "-") and
-                r["mismatch"] <= original[0]["mismatch"] + 0.025 for r in original)
-            prefix = page_prefix if plausible else None
-            base = rank_tag_glyphs(crop, prefix=prefix) if prefix else original
-            padded = ImageOps.expand(crop, 3, fill=255)
-            wide = padded.resize((round(padded.width * 1.15), padded.height), Image.Resampling.LANCZOS)
-            second = rank_tag_glyphs(wide, prefix=prefix)
-            record["comparison_passes"] = {"original":base, "widened":second, "observed_prefix":prefix}
-            texts = [p["text"] for p in record["passes"]]
-            for native in native_records:
-                if _same_region(record["source_word_bbox"], native["source_word_bbox"]):
-                    texts.extend(p["text"] for p in native.get("passes", []) if not p.get("suffix"))
-            suffixes = Counter(match[1].upper() for text in texts
-                               if (match := re.search(r"[-/]\s*(\d{2,7}[A-Za-z]?)$", text)))
-            # Independently recognized suffixes can distinguish nearly tied character shapes.
-            supported = {r["text"] for r in base if r["mismatch"] <= min(0.23, base[0]["mismatch"] + 0.008)
-                         and suffixes[r["text"].partition("-")[2]] >= 2}
-            supported &= {r["text"] for r in second if r["mismatch"] <= min(0.24, second[0]["mismatch"] + 0.008)}
-            if len(supported) == 1 and prefix:
-                record.update(selected_text=supported.pop(), selection="source glyphs with repeated OCR of the printed suffix")
-            elif (base and second and base[0]["text"] == second[0]["text"] and base[0]["mismatch"] <= 0.23
-                    and second[0]["mismatch"] <= 0.24 and min(_margin(base), _margin(second)) >= 0.002
-                    and max(_margin(base), _margin(second)) >= 0.006):
-                record.update(selected_text=base[0]["text"], selection="matching glyph readings on two preparations of the source label")
-        if record["selected_text"]:
-            target = output[record["component_id"]]
-            prior = target["observed_tag"]
-            # Correct an existing reading only when the same printed suffix and location corroborate it.
-            if prior and (not _same_region(record["source_word_bbox"], target["source_word_bbox"]) or
-                          prior.partition("-")[2].upper() != record["selected_text"].partition("-")[2].upper()):
-                continue
-            target.update(observed_tag=record["selected_text"], source_word_bbox=record["source_word_bbox"],
-                          native_text=record["passes"][0]["text"], ocr_selection=record["selection"], uncertainty=None)
+    records = recognize_label_boxes(image, labels, scratch_dir=Path(scratch_dir) / "ink-rows")
+    for record in records:
+        if record["observed_tag"]:
+            target = by_id[record["component_id"]]
+            target.update(observed_tag=record["observed_tag"], source_word_bbox=record["source_word_bbox"],
+                          native_text=record["native_text"], ocr_selection=record["ocr_selection"], uncertainty=None)
     return records

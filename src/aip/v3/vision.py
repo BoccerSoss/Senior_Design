@@ -15,6 +15,7 @@ from ..classical import extract_image
 from ..v2.providers import MAX_IMAGE_BYTES, ProviderError, extract_provider
 from .direction import PROCESS_LINE_KINDS, arrow_direction, assign_directions, raster_arrows
 from .line_model import CLASSES, CONTINUOUS, EXAMPLES_PER_CLASS, MODEL_ID, TRAINING_SEED, classify_stroke
+from .raster_network import trace_raster_connections
 
 
 def _segment_hits_box(a, b, box):
@@ -160,14 +161,21 @@ def extract_local_connections(image_path, classical_components=None, classical_a
                 "evidence": f"Stroke model accepted each leg between visible symbol contacts ({coverage:.0%} sampled ink).",
                 "uncertainty": "The stroke model identifies continuity. Line service is unspecified."})
     arrows = raster_arrows(ink, components, connections, ports, classical_arrows or [])
+    raster_connections = trace_raster_connections(ink, components, ports, arrows)
+    if raster_connections:
+        connections = raster_connections
+        arrows = raster_arrows(ink, components, connections, ports, (), arrows)
     slack = max(2, min(8, round(min(ink.size) * 0.002)))
     assign_directions(ink, components, connections, arrows, ports, slack)
+    for edge in connections:
+        edge["require_identified_endpoints"] = True
     return {"components": components, "connections": connections, "arrows": arrows, "connectors": [],
             "excluded_connections": [], "review_required": True, "provider": "local-ml", "model": MODEL_ID,
             "image": {"width": ink.width, "height": ink.height, "sha256": sha256(source.read_bytes()).hexdigest()},
+            "routing_method": "raster-centerline" if raster_connections else "stroke-model",
             "training": {"generator_seed": TRAINING_SEED, "examples": EXAMPLES_PER_CLASS * len(CLASSES),
                          "classes": list(CLASSES), "source": "procedural stroke profiles"},
-            "uncertainties": ["Traces straight runs and single elbows; turns at ambiguous crossings are withheld. "
+            "uncertainties": ["Traces connected pipe centerlines; turns at ambiguous crossings are withheld. "
                               "Missed symbols, more complex routes and unread equipment names can affect connectivity."]}
 
 

@@ -26,6 +26,21 @@ def state(*sheets, links=()):
 
 
 class DirectMatrixTests(unittest.TestCase):
+    def test_automatic_line_with_an_unidentified_end_stays_available_for_review(self):
+        source = state(sheet("drawing", [component("a", "P-1", "pump"), component("b", "", "unknown")],
+                             [{"id": "line", "source": "a", "target": "b", "kind": "pipe",
+                               "require_identified_endpoints": True, "review_status": "unreviewed"}]))
+        original = deepcopy(source)
+        result = build_matrix(source, "collection", "drawing")
+        self.assertEqual([[0, 0], [0, 0]], result["matrix"])
+        self.assertIn("unidentified_equipment", [entry["code"] for entry in result["diagnostics"]])
+        self.assertEqual(original, source)
+        source["sheets"][0]["components"][1]["tag"] = "V-1"
+        self.assertEqual([[0, 1], [1, 0]], build_matrix(source, "collection", "drawing")["matrix"])
+        source["sheets"][0]["components"][1]["tag"] = ""
+        source["sheets"][0]["connections"][0]["review_status"] = "confirmed"
+        self.assertEqual([[0, 1], [1, 0]], build_matrix(source, "collection", "drawing")["matrix"])
+
     def chain(self):
         return state(sheet("drawing", [component("first", "Q-91"), component("second", "B-6", "valve"),
             component("third", "Z-4", "pump"), component("fourth", "Q-22")],
