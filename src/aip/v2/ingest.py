@@ -227,11 +227,12 @@ class Imports:
         except (ValueError, OSError, zipfile.BadZipFile, RuntimeError) as exc:
             self.store.update_job(job_id, status="failed", messages=messages, error=str(exc), sheet_ids=ids)
 
-    def analyze(self, sheet_id):
+    def analyze(self, sheet_id, *, require_reference=False):
         image = self.store.directory / "images" / f"{sheet_id}.png"
         settings = self.store.snapshot()["settings"]
         result = analyze_drawing(image, self.store.directory / "analysis",
-                                 use_reference=settings.get("use_geometry_reference", True))
+                                 use_reference=require_reference or settings.get("use_geometry_reference", True),
+                                 require_reference=require_reference)
         components, connections, provenance = analysis_objects(result)
         outcome = self.store.replace_analysis(sheet_id, components, connections, provenance)
         sheet = outcome["sheet"]
@@ -241,13 +242,13 @@ class Imports:
             self.store.update_sheet(sheet_id, {"source_metadata": metadata})
         return outcome
 
-    def reanalyze(self, sheet_id):
+    def reanalyze(self, sheet_id, *, require_reference=False):
         sheet = self.store.sheet(sheet_id)
         job = self.store.job(f"Read {sheet['title']}", sheet["facility_id"])
         def work():
             self.store.update_job(job["id"], status="running")
             try:
-                result = self.analyze(sheet_id)
+                result = self.analyze(sheet_id, require_reference=require_reference)
                 self.store.update_job(job["id"], status="completed", progress=100,
                                       messages=[f"Kept {result['corrections_retained']} corrections."], sheet_ids=[sheet_id])
             except (ValueError, OSError, RuntimeError) as exc:

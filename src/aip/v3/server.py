@@ -1,6 +1,6 @@
 """Serve the V3 drawing workbench and its isolated AI predictions on loopback."""
 import argparse
-from functools import partial
+from functools import lru_cache, partial
 from hashlib import sha256
 import json
 import os
@@ -9,7 +9,8 @@ import sys
 import threading
 from time import perf_counter
 
-from ..io import ROOT
+from ..drawing_reference import reference_image_keys
+from ..io import ROOT, digest
 from ..v2.grid import equipment_positions
 from ..v2.matrix import build_matrix
 from ..v2.providers import provider_status
@@ -20,6 +21,11 @@ from .ask import ask_drawing
 from .beginner import preload_beginner
 from .plan import PlanClient
 from .vision import MODEL_ID, extract_connections
+
+
+@lru_cache(maxsize=512)
+def _png_digest(path, modified_ns, size):
+    return digest(path)
 
 
 def profile(profile_id):
@@ -70,6 +76,7 @@ class Application(BaseApplication):
         self._in_flight = set()
         self._lock = threading.Lock()
         self._profiles = {}
+        self._reference_keys = reference_image_keys()
         self.plan = PlanClient()
         with self.store.db:
             self.store.db.execute("CREATE TABLE IF NOT EXISTS v3_traces "
@@ -77,14 +84,30 @@ class Application(BaseApplication):
         self.beginner_collection = preload_beginner(self.store)
 
     def action(self, body):
+        if body.get("action") == "read_symbol_reference":
+            sheet = self.store.sheet(body.get("sheet_id"))
+            if not self.has_symbol_reference(sheet):
+                raise ValueError("There is no matching symbol reference for this drawing image.")
+            return {"job": self.imports.reanalyze(sheet["id"], require_reference=True)}
         if body.get("action") == "demo" and body.get("kind") == "beginner":
             return {"result": self.beginner_collection}
         return super().action(body)
 
+    def has_symbol_reference(self, sheet):
+        path = self.store.directory / "images" / (sheet["id"] + ".png")
+        try:
+            stat = path.stat()
+            fingerprint = _png_digest(path, stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            return False
+        return (fingerprint, sheet.get("width"), sheet.get("height")) in self._reference_keys
+
     def state(self, facility_id=None):
         state = super().state(facility_id)
-        state["capabilities"] = {"ai_connections": True}
+        state["capabilities"] = {"ai_connections": True, "local_trace_version": VERSION}
         sheets = {sheet["id"]: sheet for sheet in state["sheets"]}
+        for sheet in sheets.values():
+            sheet["has_symbol_reference"] = self.has_symbol_reference(sheet)
         with self.store.lock:
             # The library can search the saved names without loading every detailed trace into the browser.
             for sheet_id, count, names in self.store.db.execute("""

@@ -46,7 +46,10 @@ window.aipV3 = (() => {
   }
 
   function sourceSwitch() {
-    if (!traces.get(app.sheetId)) return "";
+    if (!traces.get(app.sheetId)) {
+      return sourceSheet()?.source_metadata?.analysis?.method === "drawing-reference"
+        ? '<span class="section-note">Source-checked symbols · Image-read names</span>' : "";
+    }
     return `<label class="v3-source">Method <select data-v3-source aria-label="Displayed extraction method">
       <option value="v2"${!isCandidate() ? " selected" : ""}>${esc(baselineLabel())}</option>
       <option value="v3"${isCandidate() ? " selected" : ""}>AI connections (V3)</option>
@@ -77,7 +80,12 @@ window.aipV3 = (() => {
   }
 
   function controls() {
-    return `${sourceSwitch()}<button type="button" class="button" data-v3="trace">Find connections with AI</button>
+    const sheet = sourceSheet();
+    const analysis = sheet?.source_metadata?.analysis;
+    const reference = sheet?.has_symbol_reference && analysis?.method !== "drawing-reference" &&
+      (isCandidate() || app.view === "matrix" || analysis)
+      ? '<button type="button" class="button" data-v3="read-symbols">Read with symbol reference</button>' : "";
+    return `${sourceSwitch()}${reference}<button type="button" class="button" data-v3="trace">Find connections with AI</button>
       <button type="button" class="button" data-v3="ask">Ask about drawing</button>`;
   }
 
@@ -94,9 +102,9 @@ window.aipV3 = (() => {
     const trace = traces.get(sheet.id);
     const edge = sheet.connections.find(item => item.id === app.connectionId);
     const component = sheet.components.find(item => item.id === app.componentId);
-    const priorLocal = trace.provider === "local-ml" && !trace.local_input;
+    const priorLocal = trace.provider === "local-ml" && trace.local_input?.version !== app.data.capabilities.local_trace_version;
     const heading = `<p class="section-note">AI observations from ${esc(trace.model || trace.provider)}.</p>` +
-      (priorLocal ? '<p class="section-note">This saved trace predates the name and arrow updates. Choose Find connections with AI → Local connection model to trace this drawing again.</p>' : "");
+      (priorLocal ? '<p class="section-note">This trace used an earlier reader. Choose Find connections with AI → Local connection model to update the equipment names and types.</p>' : "");
     if (app.tab === "connections") {
       if (!edge) {
         const excluded = trace.excluded_connections || [];
@@ -116,11 +124,11 @@ window.aipV3 = (() => {
         <p>${esc(evidenceText(edge.evidence) || "Review the traced route on the drawing.")}</p>`;
     }
     if (component) return `<button class="result-title back-link" data-action="all-components">← All AI components</button>
-      <h2>${esc(componentName(component))}</h2>${heading}<p>${esc(component.type || "Unknown type")} · Awaiting review</p>
+      <h2>${esc(componentName(component))}</h2>${heading}<p>${esc(component.type || "Unknown type")} · Awaiting review</p><dl class="fact-list"><dt>Grid coordinate</dt><dd>${drawingCoordinate(component, sheet)}</dd></dl>
       ${component.tag_bbox && component.tag ? '<p class="section-note">The dashed orange box marks the printed name on the drawing.</p>' : ""}
       <p class="section-note">${esc(evidenceText(component.evidence))}</p><h3>Connections</h3>${connectionRows(sheet, component.id)}`;
     return `<h2>AI components</h2>${heading}<div class="result-list">${sheet.components.map(item =>
-      `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(item.id)}">${esc(componentName(item))}</button>
+      `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(item.id)}">${esc(componentName(item))}</button> ${drawingCoordinate(item, sheet)}
       <div class="result-detail">${esc(item.type || "Unknown type")}</div></div></div>`).join("") || "<p>No components found.</p>"}</div>`;
   }
 
@@ -482,6 +490,7 @@ window.aipV3 = (() => {
     const named = !!report.methods?.baseline?.named_edges;
     const coverage = report.methods?.ai?.endpoint_coverage;
     const names = report.methods?.ai?.printed_names;
+    const types = report.methods?.ai?.equipment_types;
     return `<section><h3>${esc(report.cohort)}</h3><p class="section-note">${esc(report.review_status)}</p>
         <p class="section-note">${esc(report.completed_pairs)} of ${esc(report.drawing_count)} drawings compared · ${esc(report.workbench_version ? "V" + report.workbench_version : "Earlier V3 evaluation")} · ${esc(report.model || report.ai_method)}</p>
         <strong>${named ? "Direct connections with named endpoints" : "Direct connections by endpoint location"}</strong>
@@ -490,6 +499,7 @@ window.aipV3 = (() => {
           '<p class="section-note">Endpoint name accuracy requires reference equipment tags. This cohort has no named-edge score.</p>'}
         ${coverage ? `<p class="section-note">V3 located both endpoints on ${esc(coverage.both_endpoints_located)} of ${esc(coverage.reference_pairs)} reference connections.</p>` : ""}
         ${names ? `<p class="section-note">Of ${esc(names.expected)} items with printed names, V3 located ${esc(names.located)} and correctly named ${esc(names.correct)}.</p>` : ""}
+        ${types ? `<p class="section-note">Unknown types: ${esc(types.unknown)} of ${esc(types.predicted)} predicted items. Correct equipment family on ${esc(types.correct_family)} of ${esc(types.expected_with_type)} annotated items (valve subtypes grouped).</p>` : ""}
         ${(report.warnings || []).map(item => `<p class="section-note">${esc(item)}</p>`).join("")}</section>`;
   }
 
@@ -513,6 +523,15 @@ window.aipV3 = (() => {
     if (!button) return;
     const operation = button.dataset.v3;
     if (operation === "trace" || operation === "ask") await showModelDialog(operation);
+    if (operation === "read-symbols") {
+      const id = app.sheetId;
+      button.disabled = true;
+      try {
+        await action("read_symbol_reference", {sheet_id:id}, {message:"Reading printed names from the PNG using the source-checked symbol positions."});
+        if (app.sheetId === id) changeSource("v2");
+      } catch (error) { toast(error.message, true); }
+      finally { button.disabled = false; }
+    }
     if (operation === "report") await showReport();
     if (operation === "citation") {
       const result = button.closest(".v3-result");

@@ -8,13 +8,15 @@
 4. Under **Connectivity matrix**, use the method selector to compare the direct equipment pairs. The latest successful V3 trace for each sheet persists separately from V2 and its edits. Choose **Benchmark results** to inspect the scored comparisons.
 5. Choose **Ask about drawing → Local graph lookup** and enter **What connects to V-101?** on the four-component example. Click the cited connection to see the evidence on the drawing. Answers describe the selected extraction and its review status.
 
+On matching PNGs, **Read with symbol reference** uses checked symbol types and locations from the figure and reads the printed names from the image. The saved result is labeled **V2 · Reference-assisted**. **AI connections (V3)** shows the separate image-only trace. Only the image-only methods enter the comparison benchmark.
+
 Select a detected component to see the orange dashed box around the printed name used by OCR when that location is available. In **Connections**, select a pair to see whether the arrowhead was found on the segment or elsewhere on its uninterrupted run. The highlighted tip marks the observed position. A branch, a break in the line, or conflicting tips can leave the direction unknown. Unnamed junctions can still bound a run.
 
 **View saved trace** reopens a previous result immediately. Repeating a local trace reuses the result when the PNG, model and workbench version match. Select **Recompute the local trace from the image** for a fresh timing. Hosted tracing sends one new request each time you choose **Trace drawing**. The demo runs at `http://127.0.0.1:8766` and stores your workspace in `runs/v3`.
 
 ## Find equipment on the grid
 
-Open **Grid** and select the V2 or V3 extraction you want to inspect. **Regular grid** overlays the original drawing with evenly spaced lines. An equipment coordinate such as **(3, 2)** means the symbol center is nearest the third column and second row, counting from the upper left. Nearby symbols can share a coordinate. Select equipment under **Equipment locations** to find its symbol on the drawing.
+Open **Grid** and select the V2 or V3 extraction you want to inspect. **Regular grid** overlays the original drawing with evenly spaced lines. An equipment coordinate such as **(3, 2)** means the symbol center is nearest the third column and second row, counting from the upper left. Coordinates appear on the grid automatically and beside the names in the Drawing component list. Nearby symbols can share a coordinate. Select equipment under **Equipment locations** to find its symbol on the drawing.
 
 Choose **Equipment centers** to place lines through the exact centers of the detected equipment. The coordinate then gives the column and row among those lines. **Export JSON** saves the axes and equipment coordinates for the selected layout. To check a coordinate inside the demo, open **Ask about drawing**, select **Local graph lookup** and ask “Where is V-101 on the grid?” on the four-component example. [Grid conventions and exported fields](V2_WORKBENCH.md#use-the-separate-grid-tool)
 

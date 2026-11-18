@@ -13,6 +13,27 @@ from aip.v3.server import Application
 
 
 class BeginnerDrawings(unittest.TestCase):
+    def test_read_with_symbol_reference_requires_matching_png_and_leaves_global_method_alone(self):
+        with TemporaryDirectory() as directory:
+            app = Application(directory)
+            try:
+                sheet = app.state()["sheets"][0]
+                self.assertTrue(sheet["has_symbol_reference"])
+                request = {"action": "read_symbol_reference", "sheet_id": sheet["id"]}
+                with patch.object(app.imports, "reanalyze", return_value={"id": "test-job"}) as read:
+                    self.assertEqual("test-job", app.action(request)["job"]["id"])
+                    read.assert_called_once_with(sheet["id"], require_reference=True)
+                    png = Path(directory) / "images" / (sheet["id"] + ".png")
+                    Image.new("RGB", (sheet["width"], sheet["height"]), "white").save(png)
+                    self.assertFalse(app.has_symbol_reference(sheet))
+                    with self.assertRaisesRegex(ValueError, "no matching symbol reference"):
+                        app.action(request)
+                    read.assert_called_once()
+                self.assertFalse(app.store.snapshot()["settings"]["use_geometry_reference"])
+            finally:
+                app.close()
+                app.store.db.close()
+
     def test_fresh_launch_and_demo_button_use_all_six_source_pngs_without_analysis(self):
         with TemporaryDirectory() as directory, patch("aip.v2.ingest.Imports.submit") as submit:
             app = Application(directory)

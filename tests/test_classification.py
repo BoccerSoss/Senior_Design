@@ -3,7 +3,7 @@ import unittest
 
 from PIL import Image, ImageDraw
 
-from aip.classification import classify_symbol
+from aip.classification import classify_symbol, refine_symbol_boxes
 
 
 class SimplifiedShapeTests(unittest.TestCase):
@@ -82,6 +82,54 @@ class SimplifiedShapeTests(unittest.TestCase):
         for box in ([0, 0, 101, 90], [10, 10, 10, 20], [0, 0, float("nan"), 20], [False, 0, 50, 50]):
             with self.subTest(box=box), self.assertRaises(ValueError):
                 classify_symbol(image, box)
+
+    def test_valve_strokes_with_ports_operators_and_rotation(self):
+        for kind in ("slanted", "filled", "outline"):
+            image = Image.new("L", (156, 96), "white")
+            draw = ImageDraw.Draw(image)
+            draw.line((0,60,32,60), fill=0, width=3)
+            draw.line((116,60,155,60), fill=0, width=3)
+            if kind == "slanted":
+                draw.line([(32,83),(32,37),(116,83),(116,37)], fill=0, width=4)
+            else:
+                for x in (32,116):
+                    points = [(x,38),(74,60),(x,82),(x,38)]
+                    if kind == "filled":
+                        draw.polygon(points, fill=0)
+                    else:
+                        draw.line(points, fill=0, width=3)
+                draw.line((74,60,74,25), fill=0, width=3)
+                draw.rectangle((61,4,87,25), outline=0, width=3)
+            for view in (image, image.transpose(Image.Transpose.ROTATE_90)):
+                with self.subTest(kind=kind, size=view.size):
+                    self.assertEqual(classify_symbol(view, [0,0,*view.size])["type"], "valve")
+
+    def test_scroll_pump_and_rounded_vessel(self):
+        pump = Image.new("L", (154, 103), "white")
+        d = ImageDraw.Draw(pump)
+        d.arc((28,2,117,100), 0,270, fill=0, width=4)
+        d.line([(72,3),(139,3),(139,51),(115,51)], fill=0, width=4)
+        d.line((0,50,29,50), fill=0, width=3)
+        self.assertEqual(classify_symbol(pump, [0,0,*pump.size])["type"], "pump")
+        vessel = Image.new("L", (88, 212), "white")
+        ImageDraw.Draw(vessel).rounded_rectangle((4,2,84,210), radius=40, outline=0, width=4)
+        self.assertEqual(classify_symbol(vessel, [0,0,*vessel.size])["type"], "vessel")
+
+    def test_split_adjacent_valves_and_prune_only_whole_arrowheads_and_corners(self):
+        image = Image.new("L",(425,170),"white")
+        d = ImageDraw.Draw(image)
+        for x in (22,214):
+            d.line([(x,92),(x,40),(x+80,92),(x+80,40)], fill=0, width=4)
+        d.line((102,65,214,65), fill=0, width=3)
+        d.line((302,116,388,116), fill=0, width=2)
+        d.polygon([(325,106),(345,116),(325,126)], fill=0)
+        d.line([(320,40),(360,40),(360,80)], fill=0,width=3)
+        marks = [{"arrow_tip":[345,116],"arrow_wings":[[325,106],[325,126]]}]
+        boxes = [[18,36,300,96],[325,106,346,127],[319,39,363,82]]
+        repaired = refine_symbol_boxes(image, boxes, marks)
+        self.assertEqual(len(repaired),2)
+        self.assertLess(repaired[0][2],repaired[1][0])
+        self.assertEqual([classify_symbol(image,b)["type"] for b in repaired], ["valve","valve"])
 
 
 if __name__ == "__main__":

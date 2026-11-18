@@ -8,9 +8,11 @@ Download the `codex/aip-v3` branch, extract the ZIP and double-click [Open AIP V
 
 The left-hand **Drawing library** lists all saved drawings by collection. Click a drawing to switch while staying on **Drawing**, **Connectivity matrix** or **Grid**. Search covers all collections.
 
-Open **Grid** for a square grid over the original drawing. An equipment coordinate such as **(3, 2)** identifies the nearest intersection in column 3, row 2, counting from the upper left. Select the equipment to inspect its position. Choose **Equipment centers** to draw lines through every marked center. **Export JSON** and drawing questions use the selected layout.
+On matching beginner PNGs, **Read with symbol reference** uses source-checked symbol types and locations and reads the names from the drawing. The image-only AI trace is available separately.
 
-**Connectivity matrix → Benchmark results** shows V3.2 local model scores of **0.207 F1 for localized direct connections** and **0.083 F1 for correctly named direct connections** across the six provisional beginner sheets. The four-component synthetic control scored **1.000** on both measures. The project target is **0.90**. The panel also retains the earlier independent OPEN100 benchmark.
+Open **Grid** for a square grid over the original drawing. Coordinates display automatically there and in the Drawing tab’s component list. An equipment coordinate such as **(3, 2)** identifies the nearest intersection in column 3, row 2, counting from the upper left. Select the equipment to inspect its position. Choose **Equipment centers** to draw lines through every marked center. **Export JSON** and drawing questions use the selected layout.
+
+**Connectivity matrix → Benchmark results** shows V3.3 image-only scores of **0.296 F1 for localized direct connections** and **0.143 F1 for correctly named direct connections** across the six provisional beginner sheets. The four-component synthetic control scored **1.000** on both measures. The project target is **0.90**. The panel also retains the earlier independent OPEN100 benchmark.
 
 [V3 demo and model setup](docs/V3_WORKBENCH.md) · [Evaluation results and reproduction](docs/V3_EVALUATION.md) · [Independent annotation source](https://zenodo.org/records/14803338)
 

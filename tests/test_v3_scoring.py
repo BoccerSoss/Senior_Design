@@ -26,6 +26,19 @@ def graph(ids, tags, edges):
 
 
 class V3ScoringTests(unittest.TestCase):
+    def test_unknowns_and_broad_valve_types_are_counted_against_localized_symbols(self):
+        reference = graph(["a", "b"], ["A", "B"], [])
+        reference["components"][0]["type"] = "check valve"
+        prediction = graph(["x", "y", "z"], ["A", "B", "Z"], [])
+        prediction["components"][1]["type"] = "unknown"
+        prediction["components"][2]["type"] = "pump"
+        score, _ = score_graph(prediction, reference)
+        expected = {"predicted": 3, "unknown": 1, "expected_with_type": 2,
+                    "located_with_type": 2, "correct_family": 1}
+        self.assertEqual(expected, score["equipment_types"])
+        self.assertEqual(expected, micro_average([score])["equipment_types"])
+        self.assertIsNone(micro_average([score, None])["equipment_types"])
+
     def test_benchmark_explicitly_disables_geometry_lookup(self):
         with patch.object(benchmark, "analyze_drawing", return_value=SimpleNamespace(reference_citation=None)) as run, \
              patch.object(benchmark, "analysis_objects", return_value=([], [], {"method": "classical"})):

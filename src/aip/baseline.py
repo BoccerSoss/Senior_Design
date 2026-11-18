@@ -37,7 +37,7 @@ def baseline_info():
     }
 
 
-def _ink_components(mask, width, height):
+def connected_ink_spans(mask, width, height):
     """Flood connected row spans. Diagonal pixel contacts count as connected."""
     remaining = bytearray(mask)
     ink = re.compile(rb"[^\x00]")
@@ -53,8 +53,6 @@ def _ink_components(mask, width, height):
         remaining[left:right] = bytes(right - left)
         return row, left - start, right - start
 
-    minimum_w = max(36, round(width * 0.02))
-    minimum_h = max(36, round(height * 0.045))
     cursor = 0
     while first := ink.search(remaining, cursor):
         cursor = first.start() + 1
@@ -74,6 +72,13 @@ def _ink_components(mask, width, height):
         xmax = max(right for _, _, right in spans)
         ymin = min(row for row, _, _ in spans)
         ymax = max(row for row, _, _ in spans) + 1
+        yield spans, (xmin, ymin, xmax, ymax)
+
+
+def _ink_components(mask, width, height):
+    minimum_w = max(36, round(width * 0.02))
+    minimum_h = max(36, round(height * 0.045))
+    for spans, (xmin, ymin, xmax, ymax) in connected_ink_spans(mask, width, height):
         if xmax - xmin >= minimum_w and ymax - ymin >= minimum_h:
             yield [(x, row) for row, left, right in spans for x in range(left, right)], (xmin, ymin, xmax, ymax)
 
@@ -204,8 +209,7 @@ def _horizontal_contact(mask, width, left, right):
     return horizontal_stroke(mask, width, ax1 - 1, bx0, top, bottom)
 
 
-def _drawing_arrows(mask, width, connections):
-    arrows = observe_flow_arrows(mask, width)
+def _drawing_arrows(mask, width, connections, arrows):
     for edge in connections:
         flow = edge["direction"]
         if flow["status"] == "unknown":
@@ -220,7 +224,7 @@ def _drawing_arrows(mask, width, connections):
     return [{"id": f"arrow-{index:03d}", **arrow} for index, arrow in enumerate(arrows, 1)]
 
 
-def extract_image(image_path):
+def extract_image(image_path, *, refine_boxes=None):
     """Consume raster pixels and return observations, including explicit uncertainty.
 
     Filesystem access is restricted by design to the supplied image path. This
@@ -238,6 +242,9 @@ def extract_image(image_path):
     for points, _ in _ink_components(mask, width, height):
         boxes.extend(box for box in _candidate_boxes(points, width)
                      if not is_pipe_arrow_box(mask, width, box))
+    arrow_marks = observe_flow_arrows(mask, width)
+    if refine_boxes is not None:
+        boxes = refine_boxes(gray, boxes, arrow_marks)
     boxes.sort(key=lambda b: (b[0], b[1], b[2], b[3]))
     components = []
     for index, box in enumerate(boxes, 1):
@@ -263,7 +270,7 @@ def extract_image(image_path):
                     "evidence": f"Uninterrupted dark horizontal raster stroke between candidate borders at {contact.path}.",
                     "uncertainty": "Geometric contact only; candidate identity and process-line interpretation require review.",
                 })
-    arrows = _drawing_arrows(mask, width, connections)
+    arrows = _drawing_arrows(mask, width, connections, arrow_marks)
     routes = trace_arrow_routes(mask, width, arrows, components)
     uncertainties = [
         "Local geometry baseline has no OCR or semantic symbol classifier; tags remain null and types unknown.",

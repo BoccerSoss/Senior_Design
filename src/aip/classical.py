@@ -5,9 +5,9 @@ import json
 from pathlib import Path
 from PIL import Image
 from .baseline import extract_image as geometry_extract
-from .classification import classify_symbol
+from .classification import classify_symbol, refine_symbol_boxes
 from .core import normalize_tag
-from .equipment_ocr import read_damaged_tags, recognize_equipment_labels
+from .equipment_ocr import ink_label_regions, read_damaged_tags, read_ink_labels, recognize_equipment_labels
 
 
 def classical_info():
@@ -15,13 +15,14 @@ def classical_info():
             "model": None, "access_route": "local raster pixels, Windows.Media.Ocr and deterministic shape rules",
             "tag_method": "native OCR plus batched label and suffix crops; labels can sit on any side of a symbol",
             "direction_method": "visible arrowheads and connected raster paths through symbol candidates",
-            "supported_symbols": ["simplified tank", "opposed-triangle valve", "circle pump with entry/tangent strokes"],
+            "supported_symbols": ["simplified tank", "rounded vessel", "opposed-triangle, diagonal and angle valve bodies",
+                                  "circular pump with entry/tangent strokes", "scroll pump housing"],
             "limitations": ["Limited educational vocabulary, horizontal pipe contacts only.",
                            "OCR and geometric association can fail; no reference-driven correction.",
                            "Correlated crop agreement is not confidence or human verification."]}
 
 
-def associate_tags(components, crop_records, image_height):
+def _associate_regions(components, crop_records, image_height):
     """Associate adjacent, separately printed labels using only their observed boxes.
 
     Each text region can support at most one symbol. Overlapping/competing text
@@ -36,11 +37,11 @@ def associate_tags(components, crop_records, image_height):
         # A merged linework region can enclose several unrelated labels. An
         # exterior label cannot safely identify that whole region as one symbol.
         if any(x0 < (b[0]+b[2])/2 < x1 and y0 < (b[1]+b[3])/2 < y1
-               for r in crop_records if r.get("selected_text") and (b := r.get("source_word_bbox"))):
+                 for r in crop_records if (b := r.get("source_word_bbox"))):
             continue
         for i, record in enumerate(crop_records):
-            text, box = record.get("selected_text"), record.get("source_word_bbox")
-            if not isinstance(text,str) or not text.strip() or not box:
+            box = record.get("source_word_bbox")
+            if not box:
                 continue
             tx0,ty0,tx1,ty1 = box
             line_height = max(1, ty1 - ty0)
@@ -67,17 +68,23 @@ def associate_tags(components, crop_records, image_height):
             competing = sorted((s for s in scored if s[2]==best[2]),key=lambda item:item[0])
             if competing[0][1]==ci and (len(competing)==1 or competing[1][0]-competing[0][0]>0.12):
                 chosen = best[3]
-        associations.append({"component_id":component["id"],"observed_tag":chosen["selected_text"] if chosen else None,
-            "source_word_bbox":chosen["source_word_bbox"] if chosen else None,
-            "native_text":chosen["original_text"] if chosen else None,
-            "ocr_selection":chosen["selection"] if chosen else None,
-            "uncertainty":None if chosen else "No unambiguous adjacent equipment label; tag remains unresolved."})
+        associations.append(chosen)
     return associations
+
+
+def associate_tags(components, crop_records, image_height):
+    valid = [r for r in crop_records if isinstance(r.get("selected_text"), str) and r["selected_text"].strip()]
+    chosen = _associate_regions(components, valid, image_height)
+    return [{"component_id":item["id"], "observed_tag":r["selected_text"] if r else None,
+             "source_word_bbox":r["source_word_bbox"] if r else None,
+             "native_text":r["original_text"] if r else None, "ocr_selection":r["selection"] if r else None,
+             "uncertainty":None if r else "No unambiguous adjacent equipment label; tag remains unresolved."}
+            for item, r in zip(components, chosen)]
 
 
 def extract_image(image_path, scratch_dir):
     """Consume the image, then combine geometric, text and outline observations."""
-    raw = geometry_extract(image_path)
+    raw = geometry_extract(image_path, refine_boxes=refine_symbol_boxes)
     with Image.open(image_path) as source:
         image = source.convert("RGB")
     if raw["components"]:
@@ -93,6 +100,10 @@ def extract_image(image_path, scratch_dir):
                       if a["source_word_bbox"] and tuple(a["source_word_bbox"]) in damaged]
             read_damaged_tags(image, chosen)
         associations = associate_tags(raw["components"],records,image.height)
+        if any(not a["observed_tag"] for a in associations):
+            regions = ink_label_regions(image, ocr["native"].get("words", []))
+            nearby = _associate_regions(raw["components"], regions, image.height)
+            ocr["ink_label_readings"] = read_ink_labels(image, nearby, associations, records, scratch_dir)
     else:
         ocr = {"method":"OCR not invoked because no supported geometric candidates were detected", "native":None,
                "tag_crop_passes":[],"crop_artifacts_retained":False}

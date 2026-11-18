@@ -5,7 +5,7 @@ function remember(name, value) { try { localStorage.setItem(`aip-v2-${name}`, va
 const app = {
   data: { facilities: [], sheets: [], links: [], jobs: [], audit: [], settings: {} },
   facilityId: remembered("facility"), sheetId: remembered("sheet"), componentId: "", connectionId: "", view: remembered("view", "drawings"), tab: "components",
-  tool: "select", search: "", gridVisible: true, gridLabels: false, labels: true, pipes: true, signals: true,
+  tool: "select", search: "", gridVisible: true, gridLabels: true, labels: true, pipes: true, signals: true,
   gridLayout: remembered("grid-layout") === "source" ? "source" : "regular",
   scale: 1, offset: [0, 0], image: null, imageKey: "", pointer: null, draft: null,
   matrixData: {}, matrixPending: new Set(), linkSourceId: "",
@@ -19,7 +19,13 @@ const selectedSheet = () => window.aipV3?.displaySheet(sourceSheet()) || sourceS
 const selectedComponent = () => selectedSheet()?.components?.find(component => component.id === app.componentId);
 const activeSheets = () => app.data.sheets.filter(sheet => sheet.facility_id === app.facilityId);
 const isJunction = component => ["junction","pipe junction","junction point","tee"].includes(String(component?.type || "").toLowerCase());
-const componentName = component => component?.tag || component?.label || component?.observed_tag || component?.normalized_tag || (isJunction(component) ? "Junction" : `Unnamed ${component?.type || "component"}`);
+function componentName(component) {
+  const name = component?.tag || component?.label || component?.observed_tag || component?.normalized_tag;
+  if (name) return name;
+  if (isJunction(component)) return "Junction";
+  if (component?.type && String(component.type).toLowerCase() !== "unknown") return `Unnamed ${component.type}`;
+  return component?.id ? `Unidentified symbol (${component.id})` : "Unidentified symbol";
+}
 const sheetName = sheet => sheet?.drawing_number || sheet?.title || sheet?.filename || "Untitled drawing";
 const norm = value => String(value ?? "").toLowerCase();
 const pointCenter = component => component.bbox ? [(component.bbox[0] + component.bbox[2]) / 2, (component.bbox[1] + component.bbox[3]) / 2] : [0, 0];
@@ -167,11 +173,16 @@ function replaceWorkspace(markup) {
 function renderDrawings() {
   const sheet = selectedSheet(), gridMode = app.view === "grid";
   const aiView = window.aipV3?.isCandidate() && !gridMode;
+  const analysis = sheet?.source_metadata?.analysis;
+  const referenceRead = window.aipV3 && sheet?.has_symbol_reference && (!analysis || analysis.method === "drawing-reference");
+  const readButton = referenceRead
+    ? `<button class="button primary" data-v3="read-symbols">${analysis ? "Reread" : "Read"} with symbol reference</button>`
+    : '<button class="button primary" data-action="reanalyze">Analyze drawing</button>';
   const previousInspector = $(".inspector[data-grid-sheet]");
   const previousScroll = gridMode && sheet?.id === previousInspector?.dataset.gridSheet ? previousInspector?.scrollTop || 0 : 0;
   replaceWorkspace(`<div class="drawing-layout">${libraryMarkup()}<section class="viewer">
     ${sheet ? `<div class="viewer-heading"><div><h2>${esc(sheetName(sheet))}</h2><div class="muted">${esc(sheet.title || sheet.filename || "")} ${sheet.revision ? `· Revision ${esc(sheet.revision)}` : ""}</div></div><button class="button small sheet-menu" data-action="sheet-settings">Drawing details</button></div>
-    ${!gridMode ? `<div class="drawing-actions">${aiView ? "" : '<button class="button primary" data-action="reanalyze">Analyze drawing</button>'}${window.aipV3?.drawingControls() || ""}<button class="button" data-action="matrix-view">View matrix</button><span>${sheet.components?.length||0} components · ${sheet.connections?.length||0} recorded connections</span></div>` : ""}
+    ${!gridMode ? `<div class="drawing-actions">${aiView ? "" : readButton}${window.aipV3?.drawingControls() || ""}<button class="button" data-action="matrix-view">View matrix</button><span>${sheet.components?.length||0} components · ${sheet.connections?.length||0} recorded connections</span></div>` : ""}
     <div class="viewer-toolbar">
       ${gridMode ? `<select class="grid-layout-select" id="grid-layout" aria-label="Grid layout"><option value="regular"${app.gridLayout === "regular" ? " selected" : ""}>Regular grid</option><option value="source"${app.gridLayout === "source" ? " selected" : ""}>Equipment centers</option></select>` : aiView ? '<span class="section-note">AI observations · Select to inspect</span>' : `<button class="tool-button${app.tool === "select" ? " active" : ""}" data-tool="select" title="Select equipment or pan">Select</button><button class="tool-button${app.tool === "component" ? " active" : ""}" data-tool="component" title="Drag a box around missing equipment">+ Component</button><button class="tool-button${app.tool === "pipe" ? " active" : ""}" data-tool="pipe" title="Connect immediate equipment endpoints">+ Connection</button><button class="tool-button${app.tool === "signal" ? " active" : ""}" data-tool="signal">+ Signal</button><button class="tool-button${app.tool === "move" ? " active" : ""}" data-tool="move">Move</button>`}
       <span class="toolbar-divider"></span><button class="tool-button" data-action="zoom-out" title="Zoom out">−</button><span class="zoom-label" id="zoom-label"></span><button class="tool-button" data-action="zoom-in" title="Zoom in">+</button><button class="tool-button" data-action="fit">Fit</button>
@@ -181,7 +192,10 @@ function renderDrawings() {
     <div class="viewer-legend">${gridMode ? `<span><i class="grid-dot"></i>Equipment location</span><span>Column → &nbsp; Row ↓</span>` : `<span><i class="legend-line"></i>Equipment connection</span><span><i class="legend-line signal"></i>Signal</span><span><i class="legend-line unknown"></i>Unclassified</span>`}</div>` : `<div class="empty-workspace"><div class="eyebrow">Drawing → Components and connections → Matrix</div><h1>Build a connectivity matrix</h1><p>Open a PNG or JPEG, review detected components and direct connections, then view the labeled matrix. PDFs are converted to images before analysis.</p><div class="actions"><button class="button primary" data-action="import">Import drawings</button><button class="button" data-action="show-demo">Open example</button></div></div>`}
     </section><aside class="inspector"${gridMode && sheet ? ` data-grid-sheet="${dataValue(sheet.id)}"` : ""}>${gridMode ? `<div class="inspector-content">${gridPanelMarkup()}</div>` : `<div class="inspector-tabs">${["components", "connections"].map(tab => `<button data-tab="${tab}" class="${app.tab === tab ? "active" : ""}">${tab === "components" ? "Components" : "Connections"}</button>`).join("")}</div><div class="inspector-content">${aiView ? window.aipV3.inspector(sheet) : app.tab === "connections" ? connectionsMarkup() : selectionMarkup()}</div>`}</aside></div>`);
   if (previousScroll) $(".inspector").scrollTop = previousScroll;
-  if (sheet) { setupCanvas(); if (gridMode) loadGrid(sheet); }
+  if (sheet) {
+    setupCanvas();
+    if (gridMode || (app.tab === "components" && sheet.components?.length)) loadGrid(sheet);
+  }
 }
 
 function toolHint() {
@@ -201,12 +215,21 @@ function gridQuery() {
   return `${matrixQuery()}&layout=${app.gridLayout}`;
 }
 
+function coordinateText(id, map) {
+  const point = map?.records?.get(id)?.coordinate;
+  return point ? `(${point.join(", ")})` : !map ? "…" : map.error ? "Unavailable" : "Unplaced";
+}
+
+function drawingCoordinate(item, sheet) {
+  return `<span class="drawing-coordinate" title="Grid coordinate (column, row)" data-grid-component="${dataValue(item.id)}">${esc(coordinateText(item.id, gridMap(sheet)))}</span>`;
+}
+
 async function loadGrid(sheet) {
   const layout = app.gridLayout;
   const key = `${sheet.id}/${sheet.version}/${layout}`;
   if (app.gridPending.has(key) || gridMap(sheet)) return;
   app.gridPending.add(key);
-  const current = () => app.view === "grid" && app.sheetId === sheet.id &&
+  const current = () => ["drawings", "grid"].includes(app.view) && app.sheetId === sheet.id &&
     selectedSheet()?.version === sheet.version && app.gridLayout === layout;
   try {
     const result = await api(`/api/grid?${gridQuery()}`);
@@ -222,7 +245,13 @@ async function loadGrid(sheet) {
     if (current()) app.gridData[sheet.id] = {version:sheet.version, layout, error:error.message};
   } finally {
     app.gridPending.delete(key);
-    if (current()) renderDrawings();
+    if (current() && app.view === "grid") renderDrawings();
+    else if (current()) {
+      const map = gridMap(sheet);
+      for (const label of document.querySelectorAll("[data-grid-component]")) {
+        label.textContent = coordinateText(label.dataset.gridComponent, map);
+      }
+    }
   }
 }
 
@@ -231,8 +260,7 @@ function gridPanelMarkup() {
   if (!sheet) return '<p class="empty-selection">Open a drawing to view equipment locations.</p>';
   const map = gridMap(sheet);
   const rows = (sheet.components || []).map(component => {
-    const point = gridRecord(component, sheet)?.coordinate;
-    const location = point ? `(${point.join(", ")})` : !map ? "…" : map.error ? "Unavailable" : "Unplaced";
+    const location = coordinateText(component.id, map);
     const selected = component.id === app.componentId;
     return `<button type="button" class="grid-location" data-action="select-component" data-id="${dataValue(component.id)}" aria-pressed="${selected}">
       <span>${esc(componentName(component))}</span><span class="grid-coordinate">${esc(location)}</span></button>`;
@@ -257,11 +285,11 @@ function extractionNotes(sheet) {
 function selectionMarkup() {
   const sheet = selectedSheet(), component = selectedComponent();
   if (!sheet) return '<h2>Components</h2><p class="empty-selection">Open an example or import a drawing to begin.</p>';
-  if (!component) return `<div class="eyebrow">1 · Review components</div><h2>Components <span class="muted tiny">${sheet.components.length}</span></h2><p class="section-note">Select a symbol or a name below to review its type and printed label. Unread names remain explicit.</p>${extractionNotes(sheet)}<div class="result-list">${sheet.components.map(item => `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(item.id)}">${esc(componentName(item))}</button><div class="result-detail">${esc(item.type || "unknown")} · ${!item.tag && !isJunction(item) ? "Name unread" : item.review_status === "confirmed" ? "Reviewed" : "Awaiting review"}</div></div></div>`).join("") || '<p class="empty-selection">No components recorded yet. Choose Analyze drawing, or mark a missed symbol with + Component.</p>'}</div>`;
+  if (!component) return `<div class="eyebrow">1 · Review components</div><h2>Components <span class="muted tiny">${sheet.components.length}</span></h2><p class="section-note">Select a symbol or a name below to review its type and printed label. Unread names remain explicit.</p>${extractionNotes(sheet)}<div class="result-list">${sheet.components.map(item => `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(item.id)}">${esc(componentName(item))}</button> ${drawingCoordinate(item, sheet)}<div class="result-detail">${esc(item.type || "unknown")} · ${!item.tag && !isJunction(item) ? "Name unread" : item.review_status === "confirmed" ? "Reviewed" : "Awaiting review"}</div></div></div>`).join("") || '<p class="empty-selection">No components recorded yet. Choose Analyze drawing, or mark a missed symbol with + Component.</p>'}</div>`;
   const warning = !component.tag || norm(component.type) === "unknown" || component.review_status !== "confirmed";
   return `<button class="result-title back-link" data-action="all-components">← All components</button><div class="eyebrow">Selected component</div><div class="selected-tag">${esc(componentName(component))}</div><div class="selection-meta"><span>${esc(component.type || "unknown")}</span><span class="pill${warning ? " warn" : " good"}">${warning ? "Review needed" : "Reviewed"}</span></div>
     <form id="component-form"><label class="field">Equipment tag or printed name<input name="tag" value="${dataValue(component.tag || "")}" placeholder="Unread label"></label><label class="field">Type<input name="type" list="component-types" value="${dataValue(component.type || "unknown")}" required></label><datalist id="component-types">${["pump","valve","tank","vessel","instrument","junction","connector","unknown"].map(type => `<option value="${type}">`).join("")}</datalist><label class="field">Review state<select name="review_status">${options(["unreviewed","confirmed"],component.review_status || "unreviewed")}</select></label><div class="form-actions"><button type="submit" class="button primary">Save correction</button><button type="button" class="button danger" data-action="delete-component">Remove</button></div></form>
-    <hr class="section-divider"><dl class="fact-list"><dt>Drawing</dt><dd>${esc(sheetName(sheet))}</dd><dt>Coordinates</dt><dd><button class="result-title" data-action="grid-view">Open Grid</button></dd><dt>Source</dt><dd>${esc(evidenceText(component.source || component.provenance || sheet.source_metadata?.analysis?.method || "Drawing review"))}</dd></dl>
+    <hr class="section-divider"><dl class="fact-list"><dt>Drawing</dt><dd>${esc(sheetName(sheet))}</dd><dt>Grid coordinate</dt><dd>${drawingCoordinate(component, sheet)} <button class="result-title" data-action="grid-view">Open Grid</button></dd><dt>Source</dt><dd>${esc(evidenceText(component.source || component.provenance || sheet.source_metadata?.analysis?.method || "Drawing review"))}</dd></dl>
     ${component.evidence ? `<p class="section-note">${esc(evidenceText(component.evidence))}</p>` : ""}<img class="region-preview" src="/api/region?sheet_id=${encodeURIComponent(sheet.id)}&component_id=${encodeURIComponent(component.id)}" alt="Drawing region around selected component">
     <h3>Direct connections</h3><div class="result-list">${connectionRows(sheet, component.id)}</div>`;
 }
@@ -577,14 +605,18 @@ function drawGridCoordinate(ctx, item, bounds, labels, active) {
   ctx.font = (active ? "600 " : "") + "11px Segoe UI, sans-serif";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   const w = ctx.measureText(text).width + 8, h = 16;
-  const left = Math.max(bounds.left, Math.min(x - w / 2, bounds.right - w));
-  const top = y + 6 + h <= bounds.bottom ? y + 6 : y - 6 - h;
-  const box = {left, top, right:left + w, bottom:top + h};
-  if (!active && labels.some(other => box.left <= other.right + 2 && other.left <= box.right + 2 &&
-      box.top <= other.bottom + 1 && other.top <= box.bottom + 1)) return;
-  labels.push(box);
-  ctx.fillStyle = active ? "#155845" : "#fffffff0"; ctx.fillRect(left, top, w, h);
-  ctx.fillStyle = active ? "#fff" : "#305d55"; ctx.fillText(text, left + w / 2, top + h / 2);
+  const centered = Math.max(bounds.left, Math.min(x - w / 2, bounds.right - w));
+  const positions = [[centered, y + 6], [centered, y - h - 6], [x + 6, y - h / 2], [x - w - 6, y - h / 2]];
+  for (const [left, top] of positions) {
+    const box = {left, top, right:left + w, bottom:top + h};
+    if (box.left < bounds.left || box.right > bounds.right || box.top < bounds.top || box.bottom > bounds.bottom) continue;
+    if (labels.some(other => box.left <= other.right + 2 && other.left <= box.right + 2 &&
+        box.top <= other.bottom + 1 && other.top <= box.bottom + 1)) continue;
+    labels.push(box);
+    ctx.fillStyle = active ? "#155845" : "#fffffff0"; ctx.fillRect(left, top, w, h);
+    ctx.fillStyle = active ? "#fff" : "#305d55"; ctx.fillText(text, left + w / 2, top + h / 2);
+    break;
+  }
 }
 
 function drawEquipmentLabel(ctx,component) {

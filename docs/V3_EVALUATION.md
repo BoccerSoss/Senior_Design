@@ -1,19 +1,21 @@
 # V3 equipment connection evaluation
 
-On the six NUREG/CR-5745 beginner drawings, the V3.2 local model scored **0.083 F1 on named connections** and **0.207 on localized connections**. The previous release scored 0.000 and 0.062 respectively. The V3.2 named-edge score is 0.817 below the 0.90 target. Both methods use the updated equipment detector and OCR.
+Across the six beginner PNGs, V3.3 image-only extraction scored **0.143 F1 on correctly named direct connections** and **0.296 on localized direct connections**. V3.2 scored 0.083 and 0.207, respectively. V3.3 is 0.757 below the project’s 0.90 named-connection target. The V2 and V3 runs share the same image-based symbol and text reader.
 
 | Drawing set and measure | V2 TP / FP / FN | V2 F1 | V3 TP / FP / FN | V3 F1 |
 | --- | ---: | ---: | ---: | ---: |
-| NUREG, located and correctly named endpoints | 9 / 32 / 124 | 0.103 | 8 / 52 / 125 | 0.083 |
-| NUREG, located endpoints | 16 / 25 / 117 | 0.184 | 20 / 40 / 113 | 0.207 |
+| NUREG, located and correctly named endpoints | 13 / 28 / 120 | 0.149 | 14 / 49 / 119 | 0.143 |
+| NUREG, located endpoints | 23 / 18 / 110 | 0.264 | 29 / 34 / 104 | 0.296 |
 | Earlier release, PID2Graph OPEN100, located endpoints | 0 / 35 / 125 | 0.000 | 0 / 0 / 125 | 0.000 |
 | Synthetic development drawing, located and correctly named endpoints | 3 / 0 / 0 | 1.000 | 3 / 0 / 0 | 1.000 |
 
-The detector located 72 of 125 annotated equipment symbols, up from 14. Of the 123 items with a printed name, it located 70 and read 30 correctly. Both endpoints were located for 50 of 133 reference pairs, and 14 pairs had both names correct. V3 recovered 20 localized pairs and proposed 40 extra pairs. The annotations are provisional. Direction was tested separately with constructed drawings that exercise terminal tips, branches, line breaks and conflicting arrows. The three-sheet OPEN100 row records the earlier evaluation. [Beginner results](../reports/v3_comparison.json) · [Synthetic results](../reports/v3_synthetic_comparison.json) · [Earlier OPEN100 results](../reports/v3_pid2graph_comparison.json)
+The detector located 83 of 125 annotated equipment symbols, up from 72. Of 126 predicted items, 37 had an unknown type, down from 135 of 137. At the 0.50 overlap threshold, 79 matched the correct equipment family (valve subtypes grouped). Of 123 printed names, it located 81 and transcribed 50 correctly, up from 30. V3 recovered 29 localized pairs and proposed 34 extra pairs. The annotations are provisional. Direction was tested separately with constructed drawings that exercise terminal tips, branches, line breaks and conflicting arrows. The three-sheet OPEN100 row records the earlier evaluation. [Beginner results](../reports/v3_comparison.json) · [Synthetic results](../reports/v3_synthetic_comparison.json) · [Earlier OPEN100 results](../reports/v3_pid2graph_comparison.json)
+
+The optional **Read with symbol reference** workflow uses the checked geometry on an exact image match. On the same six figures it placed all 125 reference symbols and supplied their source types. Local OCR matched 99 of the 123 printed names, left 18 unread and returned 6 different readings. Two additional symbols have no printed name. The image-only scores above exclude this workflow.
 
 ## Methods and ground truth
 
-On the demo computer, one fresh **Local connection model** request per bundled page took 2.57–6.99 seconds (median 4.37). Repeating the request for the same PNG reopened the saved trace in 0.005–0.006 seconds over loopback. These timings include the local HTTP response and exclude browser repaint. All six saved matrices, grid views and traces were available after this run.
+Timings for the previous V3.2 reader on the demo computer ranged from 2.57 to 6.99 seconds per beginner page. V3.3 performs extra OCR on nearby text when the initial pass leaves names unread. Reopening a saved trace with the same reader and PNG uses the cache.
 
 - **V2** runs the existing Windows OCR, shape classifier and geometry-based connection extraction. The benchmark disables V2's exact-drawing reference lookup. That lookup supplies some of the same geometry used by the NUREG evaluator.
 - **V3 local** takes the same image-derived component boxes and OCR readings. It proposes straight and single-elbow connections at detected symbol contacts, then classifies line continuity. Its nearest-centroid model used 960 procedurally generated stroke profiles and seed 340197. Each method receives the same metadata-stripped PNG pixels. Neither receives reference nodes, transcriptions, edges or user corrections. The measured model is `synthetic-stroke-centroids-v1`.

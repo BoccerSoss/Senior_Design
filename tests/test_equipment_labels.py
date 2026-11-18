@@ -7,11 +7,42 @@ from unittest.mock import patch
 from PIL import Image, ImageDraw, ImageFont
 
 from aip.classical import associate_tags
-from aip.equipment_ocr import _regions, read_damaged_tags, recognize_equipment_labels
+from aip.equipment_ocr import _regions, ink_label_regions, read_damaged_tags, read_ink_labels, recognize_equipment_labels
 from aip.windows_ocr import OCRUnavailable
 
 
 class EquipmentLabels(unittest.TestCase):
+    def test_recovers_printed_tag_when_full_page_ocr_omits_its_words(self):
+        for suffix in ("394", "785"):
+            with self.subTest(suffix=suffix), TemporaryDirectory() as temp:
+                name = "ZX-" + suffix
+                image = Image.new("L", (500, 220), 255)
+                draw = ImageDraw.Draw(image)
+                font = ImageFont.load_default(size=34)
+                draw.text((90, 80), name, fill=0, font=font)
+                expected = draw.textbbox((90, 80), name, font=font)
+                height = expected[3] - expected[1]
+                # Full-page OCR only saw another word elsewhere. No transcription
+                # or location of the missed label is given to the region finder.
+                regions = ink_label_regions(image, [{"text":"Note", "bbox":[10, 10, 55, 10 + height]}])
+                self.assertEqual(len(regions), 1)
+                component = {"component_id":"pump", "observed_tag":None, "source_word_bbox":None}
+                try:
+                    read_ink_labels(image, regions, [component], [], temp)
+                except OCRUnavailable as exc:
+                    self.skipTest(str(exc))
+                self.assertEqual(component["observed_tag"], name)
+                self.assertLess(abs(component["source_word_bbox"][0] - expected[0]), 3)
+
+    def test_one_observed_text_region_cannot_name_a_second_piece_of_equipment(self):
+        associations = [{"component_id":"a", "observed_tag":"QK-574A", "source_word_bbox":[10, 3, 90, 22]},
+                        {"component_id":"b", "observed_tag":None, "source_word_bbox":None}]
+        with TemporaryDirectory() as temp:
+            readings = read_ink_labels(Image.new("L", (100, 35), 255),
+                                       [None, {"source_word_bbox":[7, 2, 92, 24]}], associations, [], temp)
+        self.assertEqual(readings, [])
+        self.assertIsNone(associations[1]["observed_tag"])
+
     def test_words_from_distinct_ocr_lines_join_only_when_adjacent(self):
         words = [{"text": text, "bbox": box} for text, box in [
             ("West", [10, 10, 40, 25]), ("Pump", [50, 11, 89, 26]), ("B", [98, 10, 109, 25]),

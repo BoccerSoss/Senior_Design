@@ -89,6 +89,13 @@ def _edge_result(observed, expected, mapping):
                     "missing_reference_edges": missing}
 
 
+def _family(component):
+    name = " ".join(str(component.get("type") or "").lower().replace("_", " ").split())
+    if not name or name == "unknown":
+        return None
+    return "valve" if "valve" in name.split() else name
+
+
 def score_graph(prediction, reference):
     observed, edges = _equipment(prediction)
     expected, expected_edges = _equipment(reference)
@@ -99,6 +106,12 @@ def score_graph(prediction, reference):
     named = named_details = None
     printed_names = None
     matched_ids = set(mapping.values())
+    typed_truth = {key: _family(item) for key, item in expected.items() if _family(item)}
+    symbol_types = {
+        "predicted": len(observed), "unknown": sum(_family(item) is None for item in observed.values()),
+        "expected_with_type": len(typed_truth), "located_with_type": len(matched_ids & typed_truth.keys()),
+        "correct_family": sum(_family(observed[a]) == typed_truth[b] for a, b in mapping.items() if b in typed_truth),
+    }
     coverage = {"reference_pairs": len(expected_edges),
                 "both_endpoints_located": sum(a in matched_ids and b in matched_ids for a, b in expected_edges),
                 "both_endpoints_located_and_named": None}
@@ -111,7 +124,7 @@ def score_graph(prediction, reference):
                          "correct": len(printed & named_ids)}
         coverage["both_endpoints_located_and_named"] = sum(a in named_ids and b in named_ids for a, b in expected_edges)
     return ({"named_edges": named, "localized_edges": localized,
-             "endpoint_coverage": coverage, "printed_names": printed_names,
+             "endpoint_coverage": coverage, "printed_names": printed_names, "equipment_types": symbol_types,
              "localized_nodes": metrics(len(mapping), len(observed) - len(mapping), len(expected) - len(mapping))},
             {"matched_nodes": mapping, "localized_edges": local_details, "named_edges": named_details})
 
@@ -124,6 +137,9 @@ def micro_average(scored):
         result[metric] = (metrics(*(sum(row[name] for row in rows) for name in ("tp", "fp", "fn")))
                           if rows and all(row is not None for row in rows) else None)
     result["endpoint_coverage"] = None
+    types = [item.get("equipment_types") if item else None for item in scored]
+    result["equipment_types"] = ({key: sum(page[key] for page in types) for key in types[0]}
+                                 if types and all(page is not None for page in types) else None)
     name_counts = [item.get("printed_names") if item else None for item in scored]
     result["printed_names"] = ({key: sum(row[key] for row in name_counts) for key in ("expected", "located", "correct")}
                                if name_counts and all(row is not None for row in name_counts) else None)

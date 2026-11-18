@@ -263,6 +263,33 @@ def _prefix_and_suffix(crop):
     return None, None
 
 
+def batch_read_label_rows(crops, height, scratch, records, *, timeout=90, artifact_directory=""):
+    """Read multiple isolated source crops in one OCR call, then map words back to rows."""
+    padding = 20
+    row_height = height + padding
+    for start in range(0, len(crops), 24):
+        batch = crops[start:start + 24]
+        widths = [max(1, min(1600, round(c.width * height / c.height))) for _, _, c in batch]
+        canvas = Image.new("L", (max(widths) + 2 * padding, row_height * len(batch)), 255)
+        for row, ((_, _, crop), width) in enumerate(zip(batch, widths)):
+            canvas.paste(crop.resize((width, height), Image.Resampling.LANCZOS), (padding, row * row_height + padding // 2))
+        filename = scratch / f"label-rows-{height}-{start}.png"
+        canvas.save(filename)
+        reading = recognize_image(filename, timeout)
+        words_by_row = [[] for _ in batch]
+        for word in reading["words"]:
+            if word["bbox"] is None:
+                continue
+            left, top, _, bottom = word["bbox"]
+            row = math.floor((top + bottom) / (2 * row_height))
+            if 0 <= row < len(batch) and top >= row * row_height and bottom <= (row + 1) * row_height:
+                words_by_row[row].append((left, word["text"]))
+        for row, (index, suffix, _) in enumerate(batch):
+            text = " ".join(word for _, word in sorted(words_by_row[row]))
+            records[index]["passes"].append({"text": text, "suffix": suffix, "row": row,
+                "rendered_height": height, "crop_image_filename": (Path(artifact_directory) / filename.name).as_posix()})
+
+
 def _text_pass(crop, scale, padding, name, temp, timeout):
     view = ImageOps.expand(crop, padding, fill=255)
     view = view.resize((round(view.width * scale[0]), round(view.height * scale[1])), Image.Resampling.LANCZOS)
@@ -362,6 +389,85 @@ def _check_repeated_prefix(results, crops):
                           uncertainty=None)
 
 
+def _prefix_signature(crop):
+    """Compare prefix ink only where the scan contains a separable printed dash."""
+    separator = _separator_suffix_box(crop, (0, 0, *crop.size))
+    if not separator:
+        return None
+    ink = crop.crop((0, 0, separator[0], crop.height)).point(lambda value: 255 if value < 160 else 0)
+    bounds = ink.getbbox()
+    if bounds:
+        ink = ink.crop(bounds)
+        return ink.width / ink.height, ink.resize((48, 24), Image.Resampling.BOX).tobytes()
+    return None
+
+
+def _check_suffix_votes(results, crops, scratch, timeout):
+    prefix = _page_prefix(results)
+    if not prefix:
+        return
+    samples, pending = [], []
+    for record, crop in zip(results, crops):
+        if crop is None:
+            continue
+        previous = record["observed_tag"] or ""
+        signature = _prefix_signature(crop)
+        if signature and previous.startswith(prefix + "-"):
+            samples.append((record["component_id"], signature))
+        ranks = record.get("repeated_prefix_alternatives") or record.get("glyph_alternatives")
+        if not ranks:
+            continue
+        if (len(ranks) > 1 and previous == ranks[0]["text"] and ranks[0]["mismatch"] < 0.23
+                and ranks[1]["mismatch"] - ranks[0]["mismatch"] > 0.011):
+            continue
+        pending.append((record, crop, ranks, signature))
+    if not pending:
+        return
+    rows = [{"passes":[]} for _ in pending]
+    for thickness, heights in ((0, (16, 25, 45, 70)), (3, (25, 45, 70))):
+        folder = scratch / f"suffix-check-{thickness}"
+        folder.mkdir(exist_ok=True)
+        views = []
+        for index, (_, crop, _, _) in enumerate(pending):
+            view = ImageOps.expand(crop, 4, fill=255)
+            if thickness:
+                view = view.filter(ImageFilter.MaxFilter(thickness))
+            views.append((index, False, view))
+        for height in heights:
+            batch_read_label_rows(views, height, folder, rows, timeout=timeout, artifact_directory=folder.name)
+    for (record, _, ranks, signature), extra in zip(pending, rows):
+        record["suffix_check_passes"] = extra["passes"]
+        texts = [p["text"] for p in record["crop_passes"] + extra["passes"] if not p.get("suffix")]
+        votes = Counter(m[1].upper() for text in texts
+                        if (m := re.search(r"[-·•‐‑–—]\s*(\d{2,7}[A-Za-z]?(?:/[A-Za-z])?)$", text)))
+        if not votes:
+            continue
+        suffix, count = votes.most_common(1)[0]
+        previous = record["observed_tag"] or ""
+        if count < (2 if previous else 4) or votes[previous.partition("-")[2].upper()] or list(votes.values()).count(count) > 1:
+            continue
+        candidate = prefix + "-" + suffix
+        if any(r["text"] == candidate and r["mismatch"] <= min(0.285, ranks[0]["mismatch"] + 0.012)
+               for r in record.get("repeated_prefix_alternatives", [])):
+            reason = "repeated suffix OCR corroborated by the region's segmented glyph alternatives"
+        elif signature and count >= 4 and previous and not previous.startswith(prefix + "-") and ranks[0]["mismatch"] >= 0.25:
+            aspect, pixels = signature
+            similar = []
+            for other, (ratio, sample) in samples:
+                if other == record["component_id"]:
+                    continue
+                mismatch = sum(abs(a-b) for a, b in zip(pixels, sample)) / (255 * len(sample))
+                if mismatch + 0.1 * abs(aspect - ratio) <= 0.15:
+                    similar.append(other)
+            if len(similar) < 2:
+                continue
+            record["matching_prefix_regions"] = similar
+            reason = "matching prefix ink on other labels in this image and repeated OCR of this label's suffix"
+        else:
+            continue
+        record.update(observed_tag=candidate, ocr_selection=reason, uncertainty=None)
+
+
 def recognize_label_boxes(image_path, labels, *, scratch_dir=None, timeout=90):
     """Read text from supplied image-space regions without receiving expected values."""
     context = tempfile.TemporaryDirectory(prefix="aip-labels-") if scratch_dir is None else nullcontext(str(scratch_dir))
@@ -407,6 +513,7 @@ def recognize_label_boxes(image_path, labels, *, scratch_dir=None, timeout=90):
                             "uncertainty": None if observed else "No consistent label reading from the supplied image region."})
             crops.append(crop)
         _check_repeated_prefix(results, crops)
+        _check_suffix_votes(results, crops, Path(temp), timeout)
     return results
 
 

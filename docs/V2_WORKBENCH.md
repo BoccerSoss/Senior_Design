@@ -69,7 +69,7 @@ Only confirmed links are followed as established continuations. Suggested or mis
 
 ## Use the separate Grid tool
 
-Open **Grid** to see equipment on the original drawing. **Regular grid** is the initial layout. Read each pair as **(column, row)**. The upper-left intersection is **(1, 1)**, columns increase to the right and rows increase downward. Select a symbol or its entry under **Equipment locations** to inspect its position.
+Open **Grid** to see equipment on the original drawing. **Regular grid** is the initial layout. Coordinates appear beside equipment names on **Drawing** and on the **Grid** overlay by default. Read each pair as **(column, row)**. The upper-left intersection is **(1, 1)**, columns increase to the right and rows increase downward. Select a symbol or its entry under **Equipment locations** to inspect its position.
 
 **Regular grid** uses equal horizontal and vertical spacing. The workbench centers the grid on the sheet and uses the drawing dimensions to fit the available rows and columns. For sheets with the default settings, it fits up to 12 columns and 16 rows. A component gets the nearest intersection to the center of its marked symbol. A center exactly halfway between intersections uses the one to the right or below. Several pieces of equipment can share a coordinate. Adding another mark leaves the existing grid lines in place.
 

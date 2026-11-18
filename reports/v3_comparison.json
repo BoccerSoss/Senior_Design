@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "created_utc": "2026-11-17T22:51:06.476371+00:00",
+  "created_utc": "2026-11-18T01:45:36.885265+00:00",
   "cohort": "NUREG/CR-5745 Figures A.1\u2013A.6, six complete beginner drawings",
   "source_url": "https://www.osti.gov/servlets/purl/10145659",
   "review_status": "Provisional development annotations from the same report and drawing set used during V2 development. Independent human verification is pending.",
-  "workbench_version": "3.2.0",
+  "workbench_version": "3.3.0",
   "manifest_sha256": "056eb83ee542445e7bc9e26b2927e5514fb5e481ea1c379d39ddba0d4913a1e4",
   "ai_method": "local-ml",
   "model": "synthetic-stroke-centroids-v1",
@@ -17,84 +17,98 @@
   "methods": {
     "baseline": {
       "named_edges": {
-        "tp": 9,
-        "fp": 32,
-        "fn": 124,
-        "precision": 0.21951219512195122,
-        "recall": 0.06766917293233082,
-        "f1": 0.10344827586206896,
-        "gap_to_target": 0.7965517241379311
+        "tp": 13,
+        "fp": 28,
+        "fn": 120,
+        "precision": 0.3170731707317073,
+        "recall": 0.09774436090225563,
+        "f1": 0.14942528735632185,
+        "gap_to_target": 0.7505747126436781
       },
       "localized_edges": {
-        "tp": 16,
-        "fp": 25,
-        "fn": 117,
-        "precision": 0.3902439024390244,
-        "recall": 0.12030075187969924,
-        "f1": 0.1839080459770115,
-        "gap_to_target": 0.7160919540229885
+        "tp": 23,
+        "fp": 18,
+        "fn": 110,
+        "precision": 0.5609756097560976,
+        "recall": 0.17293233082706766,
+        "f1": 0.26436781609195403,
+        "gap_to_target": 0.635632183908046
       },
       "localized_nodes": {
-        "tp": 72,
-        "fp": 65,
-        "fn": 53,
-        "precision": 0.5255474452554745,
-        "recall": 0.576,
-        "f1": 0.549618320610687,
-        "gap_to_target": 0.35038167938931297
+        "tp": 83,
+        "fp": 43,
+        "fn": 42,
+        "precision": 0.6587301587301587,
+        "recall": 0.664,
+        "f1": 0.6613545816733067,
+        "gap_to_target": 0.23864541832669328
       },
       "endpoint_coverage": {
         "reference_pairs": 133,
-        "both_endpoints_located": 50,
-        "both_endpoints_located_and_named": 14
+        "both_endpoints_located": 60,
+        "both_endpoints_located_and_named": 29
+      },
+      "equipment_types": {
+        "predicted": 126,
+        "unknown": 37,
+        "expected_with_type": 125,
+        "located_with_type": 83,
+        "correct_family": 79
       },
       "printed_names": {
         "expected": 123,
-        "located": 70,
-        "correct": 30
+        "located": 81,
+        "correct": 50
       }
     },
     "ai": {
       "named_edges": {
-        "tp": 8,
-        "fp": 52,
-        "fn": 125,
-        "precision": 0.13333333333333333,
-        "recall": 0.06015037593984962,
-        "f1": 0.08290155440414508,
-        "gap_to_target": 0.817098445595855
+        "tp": 14,
+        "fp": 49,
+        "fn": 119,
+        "precision": 0.2222222222222222,
+        "recall": 0.10526315789473684,
+        "f1": 0.14285714285714285,
+        "gap_to_target": 0.7571428571428571
       },
       "localized_edges": {
-        "tp": 20,
-        "fp": 40,
-        "fn": 113,
-        "precision": 0.3333333333333333,
-        "recall": 0.15037593984962405,
-        "f1": 0.20725388601036268,
-        "gap_to_target": 0.6927461139896374
+        "tp": 29,
+        "fp": 34,
+        "fn": 104,
+        "precision": 0.4603174603174603,
+        "recall": 0.21804511278195488,
+        "f1": 0.29591836734693877,
+        "gap_to_target": 0.6040816326530613
       },
       "localized_nodes": {
-        "tp": 72,
-        "fp": 65,
-        "fn": 53,
-        "precision": 0.5255474452554745,
-        "recall": 0.576,
-        "f1": 0.549618320610687,
-        "gap_to_target": 0.35038167938931297
+        "tp": 83,
+        "fp": 43,
+        "fn": 42,
+        "precision": 0.6587301587301587,
+        "recall": 0.664,
+        "f1": 0.6613545816733067,
+        "gap_to_target": 0.23864541832669328
       },
       "endpoint_coverage": {
         "reference_pairs": 133,
-        "both_endpoints_located": 50,
-        "both_endpoints_located_and_named": 14
+        "both_endpoints_located": 60,
+        "both_endpoints_located_and_named": 29
+      },
+      "equipment_types": {
+        "predicted": 126,
+        "unknown": 37,
+        "expected_with_type": 125,
+        "located_with_type": 83,
+        "correct_family": 79
       },
       "printed_names": {
         "expected": 123,
-        "located": 70,
-        "correct": 30
+        "located": 81,
+        "correct": 50
       }
     }
   },
-  "delta_f1": -0.020546721457923883,
+  "delta_f1": -0.006568144499179002,
   "sheets": [
     {
       "id": "NUREG/CR-5745 Fig. A.1",
@@ -103,80 +117,94 @@
       "methods": {
         "baseline": {
           "named_edges": {
-            "tp": 8,
-            "fp": 4,
-            "fn": 10,
-            "precision": 0.6666666666666666,
-            "recall": 0.4444444444444444,
-            "f1": 0.5333333333333333,
-            "gap_to_target": 0.3666666666666667
+            "tp": 11,
+            "fp": 3,
+            "fn": 7,
+            "precision": 0.7857142857142857,
+            "recall": 0.6111111111111112,
+            "f1": 0.6875,
+            "gap_to_target": 0.21250000000000002
           },
           "localized_edges": {
-            "tp": 9,
+            "tp": 11,
             "fp": 3,
-            "fn": 9,
-            "precision": 0.75,
-            "recall": 0.5,
-            "f1": 0.6,
-            "gap_to_target": 0.30000000000000004
+            "fn": 7,
+            "precision": 0.7857142857142857,
+            "recall": 0.6111111111111112,
+            "f1": 0.6875,
+            "gap_to_target": 0.21250000000000002
           },
           "endpoint_coverage": {
             "reference_pairs": 18,
-            "both_endpoints_located": 13,
-            "both_endpoints_located_and_named": 9
+            "both_endpoints_located": 15,
+            "both_endpoints_located_and_named": 15
           },
           "printed_names": {
             "expected": 20,
-            "located": 15,
-            "correct": 13
+            "located": 17,
+            "correct": 17
+          },
+          "equipment_types": {
+            "predicted": 23,
+            "unknown": 5,
+            "expected_with_type": 20,
+            "located_with_type": 17,
+            "correct_family": 17
           },
           "localized_nodes": {
-            "tp": 15,
-            "fp": 8,
-            "fn": 5,
-            "precision": 0.6521739130434783,
-            "recall": 0.75,
-            "f1": 0.6976744186046512,
-            "gap_to_target": 0.20232558139534884
+            "tp": 17,
+            "fp": 6,
+            "fn": 3,
+            "precision": 0.7391304347826086,
+            "recall": 0.85,
+            "f1": 0.7906976744186046,
+            "gap_to_target": 0.10930232558139541
           }
         },
         "ai": {
           "named_edges": {
-            "tp": 8,
-            "fp": 6,
-            "fn": 10,
-            "precision": 0.5714285714285714,
-            "recall": 0.4444444444444444,
-            "f1": 0.5,
-            "gap_to_target": 0.4
+            "tp": 11,
+            "fp": 5,
+            "fn": 7,
+            "precision": 0.6875,
+            "recall": 0.6111111111111112,
+            "f1": 0.6470588235294118,
+            "gap_to_target": 0.2529411764705882
           },
           "localized_edges": {
-            "tp": 9,
+            "tp": 11,
             "fp": 5,
-            "fn": 9,
-            "precision": 0.6428571428571429,
-            "recall": 0.5,
-            "f1": 0.5625,
-            "gap_to_target": 0.3375
+            "fn": 7,
+            "precision": 0.6875,
+            "recall": 0.6111111111111112,
+            "f1": 0.6470588235294118,
+            "gap_to_target": 0.2529411764705882
           },
           "endpoint_coverage": {
             "reference_pairs": 18,
-            "both_endpoints_located": 13,
-            "both_endpoints_located_and_named": 9
+            "both_endpoints_located": 15,
+            "both_endpoints_located_and_named": 15
           },
           "printed_names": {
             "expected": 20,
-            "located": 15,
-            "correct": 13
+            "located": 17,
+            "correct": 17
+          },
+          "equipment_types": {
+            "predicted": 23,
+            "unknown": 5,
+            "expected_with_type": 20,
+            "located_with_type": 17,
+            "correct_family": 17
           },
           "localized_nodes": {
-            "tp": 15,
-            "fp": 8,
-            "fn": 5,
-            "precision": 0.6521739130434783,
-            "recall": 0.75,
-            "f1": 0.6976744186046512,
-            "gap_to_target": 0.20232558139534884
+            "tp": 17,
+            "fp": 6,
+            "fn": 3,
+            "precision": 0.7391304347826086,
+            "recall": 0.85,
+            "f1": 0.7906976744186046,
+            "gap_to_target": 0.10930232558139541
           }
         }
       },
@@ -191,7 +219,7 @@
         "baseline": {
           "named_edges": {
             "tp": 0,
-            "fp": 7,
+            "fp": 8,
             "fn": 34,
             "precision": 0.0,
             "recall": 0.0,
@@ -199,38 +227,45 @@
             "gap_to_target": 0.9
           },
           "localized_edges": {
-            "tp": 0,
+            "tp": 1,
             "fp": 7,
-            "fn": 34,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": 0.0,
-            "gap_to_target": 0.9
+            "fn": 33,
+            "precision": 0.125,
+            "recall": 0.029411764705882353,
+            "f1": 0.047619047619047616,
+            "gap_to_target": 0.8523809523809525
           },
           "endpoint_coverage": {
             "reference_pairs": 34,
-            "both_endpoints_located": 3,
+            "both_endpoints_located": 4,
             "both_endpoints_located_and_named": 1
           },
           "printed_names": {
             "expected": 29,
-            "located": 10,
-            "correct": 4
+            "located": 13,
+            "correct": 8
+          },
+          "equipment_types": {
+            "predicted": 24,
+            "unknown": 5,
+            "expected_with_type": 29,
+            "located_with_type": 13,
+            "correct_family": 13
           },
           "localized_nodes": {
-            "tp": 10,
-            "fp": 13,
-            "fn": 19,
-            "precision": 0.43478260869565216,
-            "recall": 0.3448275862068966,
-            "f1": 0.38461538461538464,
-            "gap_to_target": 0.5153846153846153
+            "tp": 13,
+            "fp": 11,
+            "fn": 16,
+            "precision": 0.5416666666666666,
+            "recall": 0.4482758620689655,
+            "f1": 0.49056603773584906,
+            "gap_to_target": 0.40943396226415096
           }
         },
         "ai": {
           "named_edges": {
             "tp": 0,
-            "fp": 11,
+            "fp": 12,
             "fn": 34,
             "precision": 0.0,
             "recall": 0.0,
@@ -238,32 +273,39 @@
             "gap_to_target": 0.9
           },
           "localized_edges": {
-            "tp": 0,
+            "tp": 1,
             "fp": 11,
-            "fn": 34,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": 0.0,
-            "gap_to_target": 0.9
+            "fn": 33,
+            "precision": 0.08333333333333333,
+            "recall": 0.029411764705882353,
+            "f1": 0.043478260869565216,
+            "gap_to_target": 0.8565217391304348
           },
           "endpoint_coverage": {
             "reference_pairs": 34,
-            "both_endpoints_located": 3,
+            "both_endpoints_located": 4,
             "both_endpoints_located_and_named": 1
           },
           "printed_names": {
             "expected": 29,
-            "located": 10,
-            "correct": 4
+            "located": 13,
+            "correct": 8
+          },
+          "equipment_types": {
+            "predicted": 24,
+            "unknown": 5,
+            "expected_with_type": 29,
+            "located_with_type": 13,
+            "correct_family": 13
           },
           "localized_nodes": {
-            "tp": 10,
-            "fp": 13,
-            "fn": 19,
-            "precision": 0.43478260869565216,
-            "recall": 0.3448275862068966,
-            "f1": 0.38461538461538464,
-            "gap_to_target": 0.5153846153846153
+            "tp": 13,
+            "fp": 11,
+            "fn": 16,
+            "precision": 0.5416666666666666,
+            "recall": 0.4482758620689655,
+            "f1": 0.49056603773584906,
+            "gap_to_target": 0.40943396226415096
           }
         }
       },
@@ -278,7 +320,7 @@
         "baseline": {
           "named_edges": {
             "tp": 0,
-            "fp": 9,
+            "fp": 11,
             "fn": 44,
             "precision": 0.0,
             "recall": 0.0,
@@ -286,38 +328,45 @@
             "gap_to_target": 0.9
           },
           "localized_edges": {
-            "tp": 6,
+            "tp": 8,
             "fp": 3,
-            "fn": 38,
-            "precision": 0.6666666666666666,
-            "recall": 0.13636363636363635,
-            "f1": 0.22641509433962265,
-            "gap_to_target": 0.6735849056603773
+            "fn": 36,
+            "precision": 0.7272727272727273,
+            "recall": 0.18181818181818182,
+            "f1": 0.2909090909090909,
+            "gap_to_target": 0.6090909090909091
           },
           "endpoint_coverage": {
             "reference_pairs": 44,
-            "both_endpoints_located": 17,
+            "both_endpoints_located": 19,
             "both_endpoints_located_and_named": 0
           },
           "printed_names": {
             "expected": 39,
-            "located": 22,
-            "correct": 2
+            "located": 23,
+            "correct": 4
+          },
+          "equipment_types": {
+            "predicted": 27,
+            "unknown": 4,
+            "expected_with_type": 39,
+            "located_with_type": 23,
+            "correct_family": 22
           },
           "localized_nodes": {
-            "tp": 22,
-            "fp": 6,
-            "fn": 17,
-            "precision": 0.7857142857142857,
-            "recall": 0.5641025641025641,
-            "f1": 0.6567164179104478,
-            "gap_to_target": 0.24328358208955225
+            "tp": 23,
+            "fp": 4,
+            "fn": 16,
+            "precision": 0.8518518518518519,
+            "recall": 0.5897435897435898,
+            "f1": 0.696969696969697,
+            "gap_to_target": 0.203030303030303
           }
         },
         "ai": {
           "named_edges": {
             "tp": 0,
-            "fp": 13,
+            "fp": 14,
             "fn": 44,
             "precision": 0.0,
             "recall": 0.0,
@@ -325,32 +374,39 @@
             "gap_to_target": 0.9
           },
           "localized_edges": {
-            "tp": 6,
-            "fp": 7,
-            "fn": 38,
-            "precision": 0.46153846153846156,
-            "recall": 0.13636363636363635,
-            "f1": 0.21052631578947367,
-            "gap_to_target": 0.6894736842105263
+            "tp": 8,
+            "fp": 6,
+            "fn": 36,
+            "precision": 0.5714285714285714,
+            "recall": 0.18181818181818182,
+            "f1": 0.27586206896551724,
+            "gap_to_target": 0.6241379310344828
           },
           "endpoint_coverage": {
             "reference_pairs": 44,
-            "both_endpoints_located": 17,
+            "both_endpoints_located": 19,
             "both_endpoints_located_and_named": 0
           },
           "printed_names": {
             "expected": 39,
-            "located": 22,
-            "correct": 2
+            "located": 23,
+            "correct": 4
+          },
+          "equipment_types": {
+            "predicted": 27,
+            "unknown": 4,
+            "expected_with_type": 39,
+            "located_with_type": 23,
+            "correct_family": 22
           },
           "localized_nodes": {
-            "tp": 22,
-            "fp": 6,
-            "fn": 17,
-            "precision": 0.7857142857142857,
-            "recall": 0.5641025641025641,
-            "f1": 0.6567164179104478,
-            "gap_to_target": 0.24328358208955225
+            "tp": 23,
+            "fp": 4,
+            "fn": 16,
+            "precision": 0.8518518518518519,
+            "recall": 0.5897435897435898,
+            "f1": 0.696969696969697,
+            "gap_to_target": 0.203030303030303
           }
         }
       },
@@ -364,80 +420,94 @@
       "methods": {
         "baseline": {
           "named_edges": {
-            "tp": 1,
+            "tp": 2,
             "fp": 4,
-            "fn": 6,
-            "precision": 0.2,
-            "recall": 0.14285714285714285,
-            "f1": 0.16666666666666666,
-            "gap_to_target": 0.7333333333333334
+            "fn": 5,
+            "precision": 0.3333333333333333,
+            "recall": 0.2857142857142857,
+            "f1": 0.3076923076923077,
+            "gap_to_target": 0.5923076923076923
           },
           "localized_edges": {
-            "tp": 1,
-            "fp": 4,
-            "fn": 6,
-            "precision": 0.2,
-            "recall": 0.14285714285714285,
-            "f1": 0.16666666666666666,
-            "gap_to_target": 0.7333333333333334
+            "tp": 3,
+            "fp": 3,
+            "fn": 4,
+            "precision": 0.5,
+            "recall": 0.42857142857142855,
+            "f1": 0.46153846153846156,
+            "gap_to_target": 0.43846153846153846
           },
           "endpoint_coverage": {
             "reference_pairs": 7,
-            "both_endpoints_located": 2,
-            "both_endpoints_located_and_named": 1
+            "both_endpoints_located": 7,
+            "both_endpoints_located_and_named": 4
           },
           "printed_names": {
             "expected": 8,
-            "located": 4,
-            "correct": 2
+            "located": 8,
+            "correct": 6
+          },
+          "equipment_types": {
+            "predicted": 14,
+            "unknown": 6,
+            "expected_with_type": 8,
+            "located_with_type": 8,
+            "correct_family": 8
           },
           "localized_nodes": {
-            "tp": 4,
-            "fp": 15,
-            "fn": 4,
-            "precision": 0.21052631578947367,
-            "recall": 0.5,
-            "f1": 0.2962962962962963,
-            "gap_to_target": 0.6037037037037037
+            "tp": 8,
+            "fp": 6,
+            "fn": 0,
+            "precision": 0.5714285714285714,
+            "recall": 1.0,
+            "f1": 0.7272727272727273,
+            "gap_to_target": 0.17272727272727273
           }
         },
         "ai": {
           "named_edges": {
-            "tp": 0,
+            "tp": 1,
             "fp": 4,
-            "fn": 7,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": 0.0,
-            "gap_to_target": 0.9
+            "fn": 6,
+            "precision": 0.2,
+            "recall": 0.14285714285714285,
+            "f1": 0.16666666666666666,
+            "gap_to_target": 0.7333333333333334
           },
           "localized_edges": {
-            "tp": 0,
-            "fp": 4,
-            "fn": 7,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": 0.0,
-            "gap_to_target": 0.9
+            "tp": 2,
+            "fp": 3,
+            "fn": 5,
+            "precision": 0.4,
+            "recall": 0.2857142857142857,
+            "f1": 0.3333333333333333,
+            "gap_to_target": 0.5666666666666667
           },
           "endpoint_coverage": {
             "reference_pairs": 7,
-            "both_endpoints_located": 2,
-            "both_endpoints_located_and_named": 1
+            "both_endpoints_located": 7,
+            "both_endpoints_located_and_named": 4
           },
           "printed_names": {
             "expected": 8,
-            "located": 4,
-            "correct": 2
+            "located": 8,
+            "correct": 6
+          },
+          "equipment_types": {
+            "predicted": 14,
+            "unknown": 6,
+            "expected_with_type": 8,
+            "located_with_type": 8,
+            "correct_family": 8
           },
           "localized_nodes": {
-            "tp": 4,
-            "fp": 15,
-            "fn": 4,
-            "precision": 0.21052631578947367,
-            "recall": 0.5,
-            "f1": 0.2962962962962963,
-            "gap_to_target": 0.6037037037037037
+            "tp": 8,
+            "fp": 6,
+            "fn": 0,
+            "precision": 0.5714285714285714,
+            "recall": 1.0,
+            "f1": 0.7272727272727273,
+            "gap_to_target": 0.17272727272727273
           }
         }
       },
@@ -452,7 +522,7 @@
         "baseline": {
           "named_edges": {
             "tp": 0,
-            "fp": 2,
+            "fp": 1,
             "fn": 8,
             "precision": 0.0,
             "recall": 0.0,
@@ -461,7 +531,7 @@
           },
           "localized_edges": {
             "tp": 0,
-            "fp": 2,
+            "fp": 1,
             "fn": 8,
             "precision": 0.0,
             "recall": 0.0,
@@ -471,27 +541,34 @@
           "endpoint_coverage": {
             "reference_pairs": 8,
             "both_endpoints_located": 2,
-            "both_endpoints_located_and_named": 1
+            "both_endpoints_located_and_named": 2
           },
           "printed_names": {
             "expected": 9,
             "located": 7,
-            "correct": 6
+            "correct": 7
+          },
+          "equipment_types": {
+            "predicted": 10,
+            "unknown": 1,
+            "expected_with_type": 9,
+            "located_with_type": 7,
+            "correct_family": 7
           },
           "localized_nodes": {
             "tp": 7,
-            "fp": 5,
+            "fp": 3,
             "fn": 2,
-            "precision": 0.5833333333333334,
+            "precision": 0.7,
             "recall": 0.7777777777777778,
-            "f1": 0.6666666666666666,
-            "gap_to_target": 0.2333333333333334
+            "f1": 0.7368421052631579,
+            "gap_to_target": 0.16315789473684217
           }
         },
         "ai": {
           "named_edges": {
             "tp": 0,
-            "fp": 7,
+            "fp": 5,
             "fn": 8,
             "precision": 0.0,
             "recall": 0.0,
@@ -500,7 +577,7 @@
           },
           "localized_edges": {
             "tp": 0,
-            "fp": 7,
+            "fp": 5,
             "fn": 8,
             "precision": 0.0,
             "recall": 0.0,
@@ -510,21 +587,28 @@
           "endpoint_coverage": {
             "reference_pairs": 8,
             "both_endpoints_located": 2,
-            "both_endpoints_located_and_named": 1
+            "both_endpoints_located_and_named": 2
           },
           "printed_names": {
             "expected": 9,
             "located": 7,
-            "correct": 6
+            "correct": 7
+          },
+          "equipment_types": {
+            "predicted": 10,
+            "unknown": 1,
+            "expected_with_type": 9,
+            "located_with_type": 7,
+            "correct_family": 7
           },
           "localized_nodes": {
             "tp": 7,
-            "fp": 5,
+            "fp": 3,
             "fn": 2,
-            "precision": 0.5833333333333334,
+            "precision": 0.7,
             "recall": 0.7777777777777778,
-            "f1": 0.6666666666666666,
-            "gap_to_target": 0.2333333333333334
+            "f1": 0.7368421052631579,
+            "gap_to_target": 0.16315789473684217
           }
         }
       },
@@ -539,7 +623,7 @@
         "baseline": {
           "named_edges": {
             "tp": 0,
-            "fp": 6,
+            "fp": 1,
             "fn": 22,
             "precision": 0.0,
             "recall": 0.0,
@@ -548,7 +632,7 @@
           },
           "localized_edges": {
             "tp": 0,
-            "fp": 6,
+            "fp": 1,
             "fn": 22,
             "precision": 0.0,
             "recall": 0.0,
@@ -558,60 +642,74 @@
           "endpoint_coverage": {
             "reference_pairs": 22,
             "both_endpoints_located": 13,
-            "both_endpoints_located_and_named": 2
+            "both_endpoints_located_and_named": 7
           },
           "printed_names": {
             "expected": 18,
-            "located": 12,
-            "correct": 3
+            "located": 13,
+            "correct": 8
+          },
+          "equipment_types": {
+            "predicted": 28,
+            "unknown": 16,
+            "expected_with_type": 20,
+            "located_with_type": 15,
+            "correct_family": 12
           },
           "localized_nodes": {
-            "tp": 14,
-            "fp": 18,
-            "fn": 6,
-            "precision": 0.4375,
-            "recall": 0.7,
-            "f1": 0.5384615384615384,
-            "gap_to_target": 0.3615384615384616
+            "tp": 15,
+            "fp": 13,
+            "fn": 5,
+            "precision": 0.5357142857142857,
+            "recall": 0.75,
+            "f1": 0.625,
+            "gap_to_target": 0.275
           }
         },
         "ai": {
           "named_edges": {
-            "tp": 0,
-            "fp": 11,
-            "fn": 22,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": 0.0,
-            "gap_to_target": 0.9
+            "tp": 2,
+            "fp": 9,
+            "fn": 20,
+            "precision": 0.18181818181818182,
+            "recall": 0.09090909090909091,
+            "f1": 0.12121212121212122,
+            "gap_to_target": 0.7787878787878788
           },
           "localized_edges": {
-            "tp": 5,
-            "fp": 6,
-            "fn": 17,
-            "precision": 0.45454545454545453,
-            "recall": 0.22727272727272727,
-            "f1": 0.30303030303030304,
-            "gap_to_target": 0.5969696969696969
+            "tp": 7,
+            "fp": 4,
+            "fn": 15,
+            "precision": 0.6363636363636364,
+            "recall": 0.3181818181818182,
+            "f1": 0.42424242424242425,
+            "gap_to_target": 0.47575757575757577
           },
           "endpoint_coverage": {
             "reference_pairs": 22,
             "both_endpoints_located": 13,
-            "both_endpoints_located_and_named": 2
+            "both_endpoints_located_and_named": 7
           },
           "printed_names": {
             "expected": 18,
-            "located": 12,
-            "correct": 3
+            "located": 13,
+            "correct": 8
+          },
+          "equipment_types": {
+            "predicted": 28,
+            "unknown": 16,
+            "expected_with_type": 20,
+            "located_with_type": 15,
+            "correct_family": 12
           },
           "localized_nodes": {
-            "tp": 14,
-            "fp": 18,
-            "fn": 6,
-            "precision": 0.4375,
-            "recall": 0.7,
-            "f1": 0.5384615384615384,
-            "gap_to_target": 0.3615384615384616
+            "tp": 15,
+            "fp": 13,
+            "fn": 5,
+            "precision": 0.5357142857142857,
+            "recall": 0.75,
+            "f1": 0.625,
+            "gap_to_target": 0.275
           }
         }
       },

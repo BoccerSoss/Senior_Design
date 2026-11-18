@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "created_utc": "2026-11-17T22:50:05.718775+00:00",
+  "created_utc": "2026-11-18T00:39:56.225533+00:00",
   "cohort": "Four-component synthetic development drawing",
   "source_url": null,
   "review_status": "Computer-generated development example. This was used to design the V2 method and is outside the real-drawing comparison.",
-  "workbench_version": "3.2.0",
+  "workbench_version": "3.3.0",
   "manifest_sha256": "6c9e57a00aa407ccc8620d935ccdfad7cacd25a67917830a58c848e08d57f1ee",
   "ai_method": "local-ml",
   "model": "synthetic-stroke-centroids-v1",
@@ -48,6 +48,13 @@
         "both_endpoints_located": 3,
         "both_endpoints_located_and_named": 3
       },
+      "equipment_types": {
+        "predicted": 4,
+        "unknown": 0,
+        "expected_with_type": 4,
+        "located_with_type": 4,
+        "correct_family": 4
+      },
       "printed_names": {
         "expected": 4,
         "located": 4,
@@ -86,6 +93,13 @@
         "reference_pairs": 3,
         "both_endpoints_located": 3,
         "both_endpoints_located_and_named": 3
+      },
+      "equipment_types": {
+        "predicted": 4,
+        "unknown": 0,
+        "expected_with_type": 4,
+        "located_with_type": 4,
+        "correct_family": 4
       },
       "printed_names": {
         "expected": 4,
@@ -130,6 +144,13 @@
             "located": 4,
             "correct": 4
           },
+          "equipment_types": {
+            "predicted": 4,
+            "unknown": 0,
+            "expected_with_type": 4,
+            "located_with_type": 4,
+            "correct_family": 4
+          },
           "localized_nodes": {
             "tp": 4,
             "fp": 0,
@@ -168,6 +189,13 @@
             "expected": 4,
             "located": 4,
             "correct": 4
+          },
+          "equipment_types": {
+            "predicted": 4,
+            "unknown": 0,
+            "expected_with_type": 4,
+            "located_with_type": 4,
+            "correct_family": 4
           },
           "localized_nodes": {
             "tp": 4,
