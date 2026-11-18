@@ -564,13 +564,14 @@ function drawGrid(ctx, sheet) {
   }
 
   const labels = [];
+  const pitch = map.layout_kind === "regular-intersections" && xs.length > 1 ? xs[1] - xs[0] : Infinity;
   if (record?.display_point) {
-    drawGridCoordinate(ctx, record, bounds, labels, true);
+    drawGridCoordinate(ctx, record, bounds, labels, true, pitch);
   }
   if (app.gridLabels) {
     for (const item of occupied.values()) {
       if (item.coordinate.join(",") !== record?.coordinate?.join(",")) {
-        drawGridCoordinate(ctx, item, bounds, labels, false);
+        drawGridCoordinate(ctx, item, bounds, labels, false, pitch);
       }
     }
   }
@@ -598,13 +599,13 @@ function drawGridRuler(ctx, positions, horizontal, bounds, selectedNumber) {
   });
 }
 
-function drawGridCoordinate(ctx, item, bounds, labels, active) {
+function drawGridCoordinate(ctx, item, bounds, labels, active, pitch) {
   const [x, y] = screenPoint(item.display_point);
   if (x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom) return;
   const text = "(" + item.coordinate.join(", ") + ")";
   ctx.font = (active ? "600 " : "") + "11px Segoe UI, sans-serif";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  const w = ctx.measureText(text).width + 8, h = 16;
+  const w = Math.min(ctx.measureText(text).width + 8, Math.max(23, pitch - 4)), h = 16;
   const centered = Math.max(bounds.left, Math.min(x - w / 2, bounds.right - w));
   const positions = [[centered, y + 6], [centered, y - h - 6], [x + 6, y - h / 2], [x - w - 6, y - h / 2]];
   for (const [left, top] of positions) {
@@ -614,7 +615,7 @@ function drawGridCoordinate(ctx, item, bounds, labels, active) {
         box.top <= other.bottom + 1 && other.top <= box.bottom + 1)) continue;
     labels.push(box);
     ctx.fillStyle = active ? "#155845" : "#fffffff0"; ctx.fillRect(left, top, w, h);
-    ctx.fillStyle = active ? "#fff" : "#305d55"; ctx.fillText(text, left + w / 2, top + h / 2);
+    ctx.fillStyle = active ? "#fff" : "#305d55"; ctx.fillText(text, left + w / 2, top + h / 2, w - 4);
     break;
   }
 }
