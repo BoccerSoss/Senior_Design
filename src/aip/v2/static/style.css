@@ -65,13 +65,12 @@
 .v3-benchmark-score { align-items: center; white-space: nowrap; }
 .v3-benchmark-score strong { font-size: 18px; line-height: 1; font-variant-numeric: tabular-nums; }
 .v3-benchmark-arrow { color: #416b58; }
-.v3-benchmark-chatgpt { padding-left: 10px; border-left: 1px solid #c8dcd0; color: #15634a; }
+.v3-benchmark-chatgpt { color: #15634a; }
 @media(max-width:620px) {
-  .v3-benchmark { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .v3-benchmark { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
   .v3-benchmark-title { grid-column: 1 / -1; padding: 0; border: 0; }
   .v3-benchmark-score { text-align: center; white-space: normal; }
   .v3-benchmark-arrow { display: none; }
-  .v3-benchmark-chatgpt { padding: 0; border: 0; }
 }
 
 .grid-layout-select {

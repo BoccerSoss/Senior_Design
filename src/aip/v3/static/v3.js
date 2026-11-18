@@ -595,15 +595,11 @@ window.aipV3 = (() => {
     let reports;
     try { ({reports} = await api("/api/v3/report")); }
     catch { return; }
-    const complete = (reports ?? []).filter(report => report.drawing_count > 0 && report.completed_pairs === report.drawing_count);
-    const local = complete.find(report => report.ai_method === "local-ml" && report.cohort?.startsWith("NUREG/CR-5745"));
-    const baselineScore = local?.methods?.baseline?.named_edges?.f1;
-    const localScore = local?.methods?.ai?.named_edges?.f1;
-    if (!Number.isFinite(baselineScore) || !Number.isFinite(localScore)) return;
-
-    const subscription = complete.find(report => report.ai_method === "subscription-crops" &&
-      report.manifest_sha256 === local.manifest_sha256 && report.methods?.baseline?.named_edges?.f1 === baselineScore);
+    const subscription = (reports ?? []).find(report => report.ai_method === "subscription-crops" &&
+      report.cohort?.startsWith("NUREG/CR-5745") && report.drawing_count > 0 && report.completed_pairs === report.drawing_count);
+    const baselineScore = subscription?.methods?.baseline?.named_edges?.f1;
     const subscriptionScore = subscription?.methods?.ai?.named_edges?.f1;
+    if (!Number.isFinite(baselineScore) || !Number.isFinite(subscriptionScore)) return;
     const card = document.createElement("button");
     card.type = "button";
     card.className = "v3-benchmark";
@@ -611,12 +607,11 @@ window.aipV3 = (() => {
     card.setAttribute("aria-haspopup", "dialog");
     card.title = "Open benchmark results";
     card.innerHTML = `<span class="v3-benchmark-title"><strong>F1 score</strong>
-        <small>Named direct connections · ${esc(local.drawing_count)} beginner drawings</small></span>
+        <small>Named direct connections · ${esc(subscription.drawing_count)} beginner drawings</small></span>
       <span class="v3-benchmark-score"><small>V2 baseline</small><strong>${formatScore(baselineScore)}</strong></span>
       <span class="v3-benchmark-arrow" aria-hidden="true">→</span>
-      <span class="v3-benchmark-score"><small>V3 local</small><strong>${formatScore(localScore)}</strong></span>
-      ${Number.isFinite(subscriptionScore) ? `<span class="v3-benchmark-score v3-benchmark-chatgpt">
-        <small>V3 + ChatGPT crops</small><strong>${formatScore(subscriptionScore)}</strong></span>` : ""}`;
+      <span class="v3-benchmark-score v3-benchmark-chatgpt">
+        <small>V3 with ChatGPT</small><strong>${formatScore(subscriptionScore)}</strong></span>`;
     $("#workspace-description").after(card);
   }
 
