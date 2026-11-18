@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw
 
 from aip.io import ROOT
 from aip.v2.providers import _config
+from aip.v2.store import Conflict
 from aip.v3 import VERSION
 from aip.v3.server import Application, Handler
 
@@ -84,6 +85,73 @@ class V3Workbench(unittest.TestCase):
             self.assertIn(f"Grid ({coordinate[0]}, {coordinate[1]})", answer["answer"])
             self.assertEqual(answer["citations"][0]["id"], "b")
         self.assertEqual([], self.app.grid_query({**query, "method": ["v2"], "layout": ["regular"]})["coordinates"])
+
+    def test_review_corrections_persist_in_the_v3_graph_without_changing_v2_or_original_evidence(self):
+        before = self.trace()
+        request = {"sheet_id": self.sheet_id, "trace_id": before["created_at"], "revision": 0,
+                   "kind": "component", "id": "b", "changes": {"tag": "V-22", "type": "check valve"},
+                   "status": "confirmed"}
+        after = self.app.review_trace(request)
+        item = after["components"][1]
+        self.assertEqual(("V-22", "check valve", "confirmed"), (item["tag"], item["type"], item["review_status"]))
+        self.assertEqual(before["components"][1]["bbox"], item["bbox"])
+        self.assertEqual({"tag": "B", "type": "valve"}, item["ai_observation"])
+        self.assertEqual(after, self.app.latest(self.sheet_id))
+        self.assertEqual([], self.app.store.sheet(self.sheet_id)["components"])
+        with self.assertRaises(Conflict):
+            self.app.review_trace(request)
+        request.update(revision=after["review_revision"], kind="connection", id="edge-1",
+                       changes={"direction": "target_to_source"}, status="confirmed")
+        reviewed = self.app.review_trace(request)
+        edge = reviewed["connections"][0]
+        self.assertEqual("target_to_source", edge["direction"])
+        self.assertEqual("reviewed", edge["direction_evidence"]["basis"])
+        self.assertEqual("unknown", edge["ai_observation"]["direction"])
+        self.assertEqual(before["connections"][0]["path"], edge["path"])
+        matrix = self.app.matrix_query({"sheet_id": [self.sheet_id], "method": ["v3"]})
+        self.assertEqual(["A", "V-22"], matrix["order"])
+        self.assertEqual("target_to_source", matrix["direct_edges"][0]["observations"][0]["direction"])
+        self.assertEqual([], matrix["review"])
+        self.assertEqual(0, matrix["stats"]["review_items"])
+        self.assertFalse(any("still require review" in warning for warning in matrix["warnings"]))
+
+    def test_replacing_a_reviewed_trace_requires_explicit_choice_and_archives_corrections(self):
+        before = self.trace()
+        update = {"sheet_id": self.sheet_id, "trace_id": before["created_at"], "revision": 0,
+                  "kind": "component", "id": "a", "changes": {"tag": "Revised A"}, "status": "unreviewed"}
+        self.app.review_trace(update)
+        base = {"sheet_id": self.sheet_id, "provider": "local-ml"}
+        with patch("aip.v3.server.extract_connections", side_effect=lambda *args: dict(self.graph)) as extract:
+            self.assertEqual("Revised A", self.app.trace(base)["components"][0]["tag"])
+            with self.assertRaises(Conflict):
+                self.app.trace({**base, "refresh": True})
+            extract.assert_not_called()
+            replacement = self.app.trace({**base, "refresh": True, "replace_reviewed": True})
+        archived = self.app.store.db.execute(
+            "SELECT result FROM v3_reviewed_traces WHERE sheet_id=? AND trace_id=?",
+            (self.sheet_id, before["created_at"])).fetchone()
+        self.assertEqual("Revised A", json.loads(archived[0])["components"][0]["tag"])
+        self.assertEqual("A", replacement["components"][0]["tag"])
+        self.assertEqual(0, replacement["review_revision"])
+
+    def test_legacy_trace_rechecks_saved_direction_evidence_once_and_keeps_cache_identity(self):
+        legacy = self.trace()
+        legacy.pop("direction_revision")
+        legacy["local_input"]["version"] = "3.3.0"
+        with self.app.store.db:
+            self.app.store.db.execute("UPDATE v3_traces SET result=? WHERE sheet_id=?",
+                                      (json.dumps(legacy), self.sheet_id))
+        updated_edge = {**legacy["connections"][0], "direction": "source_to_target",
+                        "direction_evidence": {"basis": "on_edge", "arrow_ids": ["arrow-1"]}}
+        with patch("aip.v3.server.refresh_trace_directions",
+                   return_value={**legacy, "connections": [updated_edge]}) as recheck:
+            result = self.app.latest(self.sheet_id)
+            self.assertEqual(result, self.app.latest(self.sheet_id))
+            recheck.assert_called_once()
+        self.assertEqual(legacy["created_at"], result["created_at"])
+        self.assertEqual(VERSION, result["local_input"]["version"])
+        self.assertEqual("source_to_target", result["connections"][0]["direction"])
+        self.assertTrue(self.app.trace({"sheet_id": self.sheet_id, "provider": "local-ml"})["reused"])
 
     def test_failed_retry_preserves_previous_successful_trace_and_v2(self):
         self.assertIsNone(self.app.latest("drawing"))

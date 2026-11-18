@@ -46,7 +46,11 @@ async function api(url, options = {}) {
   const response = await fetch(url, options);
   const type = response.headers.get("content-type") || "";
   const body = type.includes("json") ? await response.json() : { error: await response.text() };
-  if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(body.error || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
   return body;
 }
 
@@ -110,7 +114,8 @@ function schedulePoll() {
 
 function render() {
   if (!["drawings", "matrix", "grid"].includes(app.view)) app.view = "drawings";
-  if (!["components", "connections"].includes(app.tab)) app.tab = "components";
+  if (!["components", "connections"].includes(app.tab) &&
+      (app.tab !== "review" || !window.aipV3?.isV3View())) app.tab = "components";
   remember("view", app.view);
   document.querySelectorAll("[data-view]").forEach(button => button.classList.toggle("active", button.dataset.view === app.view));
   if (app.view === "matrix") renderMatrix();
@@ -179,6 +184,12 @@ function renderDrawings() {
     ? `<button class="button primary" data-v3="read-symbols">${analysis ? "Reread" : "Read"} with symbol reference</button>`
     : '<button class="button primary" data-action="reanalyze">Analyze drawing</button>';
   const named = sheet?.components?.filter(component => component.tag).length || 0;
+  const tabs = {components:"Components", connections:"Connections"};
+  if (aiView) tabs.review = window.aipV3.reviewTabLabel();
+  const inspector = gridMode ? gridPanelMarkup() : aiView ? window.aipV3.inspector(sheet)
+    : app.tab === "connections" ? connectionsMarkup() : selectionMarkup();
+  const inspectorTabs = Object.entries(tabs).map(([tab, label]) =>
+    `<button type="button" data-tab="${tab}" class="${app.tab === tab ? "active" : ""}" aria-pressed="${app.tab === tab}">${esc(label)}</button>`).join("");
   const previousInspector = $(".inspector[data-grid-sheet]");
   const previousScroll = gridMode && sheet?.id === previousInspector?.dataset.gridSheet ? previousInspector?.scrollTop || 0 : 0;
   replaceWorkspace(`<div class="drawing-layout">${libraryMarkup()}<section class="viewer">
@@ -191,11 +202,12 @@ function renderDrawings() {
       ${!gridMode ? `<label class="layer-toggle"><input type="checkbox" data-layer="pipes"${app.pipes ? " checked" : ""}>Connections</label><label class="layer-toggle"><input type="checkbox" data-layer="signals"${app.signals ? " checked" : ""}>Signals</label>` : `<label class="layer-toggle"><input type="checkbox" data-layer="gridVisible"${app.gridVisible ? " checked" : ""}>Grid lines</label>`}
     </div><div class="canvas-wrap"><canvas class="drawing-canvas" id="drawing-canvas" aria-label="Interactive drawing. Scroll to zoom, drag to pan and click components or connections to inspect." tabindex="0"></canvas>${gridMode ? "" : `<div class="canvas-caption" id="canvas-caption">${toolHint()}</div>`}</div>
     <div class="viewer-legend">${gridMode ? `<span><i class="grid-dot"></i>Equipment location</span><span>Column → &nbsp; Row ↓</span>` : `<span><i class="legend-line"></i>Equipment connection</span><span><i class="legend-line signal"></i>Signal</span><span><i class="legend-line unknown"></i>Unclassified</span>`}</div>` : `<div class="empty-workspace"><div class="eyebrow">Drawing → Components and connections → Matrix</div><h1>Build a connectivity matrix</h1><p>Open a PNG or JPEG, review detected components and direct connections, then view the labeled matrix. PDFs are converted to images before analysis.</p><div class="actions"><button class="button primary" data-action="import">Import drawings</button><button class="button" data-action="show-demo">Open example</button></div></div>`}
-    </section><aside class="inspector"${gridMode && sheet ? ` data-grid-sheet="${dataValue(sheet.id)}"` : ""}>${gridMode ? `<div class="inspector-content">${gridPanelMarkup()}</div>` : `<div class="inspector-tabs">${["components", "connections"].map(tab => `<button data-tab="${tab}" class="${app.tab === tab ? "active" : ""}">${tab === "components" ? "Components" : "Connections"}</button>`).join("")}</div><div class="inspector-content">${aiView ? window.aipV3.inspector(sheet) : app.tab === "connections" ? connectionsMarkup() : selectionMarkup()}</div>`}</aside></div>`);
+    </section><aside class="inspector"${gridMode && sheet ? ` data-grid-sheet="${dataValue(sheet.id)}"` : ""}>
+      ${gridMode ? "" : `<div class="inspector-tabs">${inspectorTabs}</div>`}<div class="inspector-content">${inspector}</div></aside></div>`);
   if (previousScroll) $(".inspector").scrollTop = previousScroll;
   if (sheet) {
     setupCanvas();
-    if (!window.aipV3?.needsTrace() && (gridMode || (app.tab === "components" && sheet.components?.length))) loadGrid(sheet);
+    if (!window.aipV3?.needsTrace() && (gridMode || (app.tab !== "connections" && sheet.components?.length))) loadGrid(sheet);
   }
 }
 
@@ -301,11 +313,15 @@ function selectionMarkup() {
 
 function lineKind(kind) { return ({direct_undirected:"Equipment connection",pipe:"Process pipe",signal:"Instrument signal",unknown:"Unclassified line"})[kind] || "Unclassified line"; }
 
-function connectionRows(sheet, componentId = null) {
+function connectionRows(sheet, componentId = null, describe = null) {
   const edges = sheet.connections.filter(edge => !componentId || [edge.source,edge.target].includes(componentId));
   return edges.map(edge => {
     const first = sheet.components.find(item=>item.id===edge.source), second = sheet.components.find(item=>item.id===edge.target);
-    return `<div class="result-item"><div><button class="result-title" data-action="select-connection" data-id="${dataValue(edge.id)}">${esc(first ? componentName(first) : `Missing: ${edge.source}`)} ↔ ${esc(second ? componentName(second) : `Missing: ${edge.target}`)}</button><div class="result-detail">${esc(lineKind(edge.kind))} · ${edge.review_status === "confirmed" ? "Reviewed" : edge.review_status === "rejected" ? "Rejected" : "Awaiting review"}</div></div></div>`;
+    const from = first ? componentName(first) : `Missing: ${edge.source}`;
+    const to = second ? componentName(second) : `Missing: ${edge.target}`;
+    const status = edge.review_status === "confirmed" ? "Reviewed" : edge.review_status === "rejected" ? "Rejected" : "Awaiting review";
+    const {label, detail} = describe ? describe(edge, from, to) : {label:`${from} ↔ ${to}`, detail:`${lineKind(edge.kind)} · ${status}`};
+    return `<div class="result-item"><div><button class="result-title" data-action="select-connection" data-id="${dataValue(edge.id)}">${esc(label)}</button><div class="result-detail">${esc(detail)}</div></div></div>`;
   }).join("") || '<p class="section-note">No direct connections recorded.</p>';
 }
 
@@ -401,9 +417,36 @@ function matrixMarkup(result) {
   const inspectNode=node=>`data-action="matrix-component" data-sheet="${dataValue(node.sheet_id)}" data-id="${dataValue(node.component_id)}"`;
   const table=nodes.length?`${nodes.length>5?'<p class="matrix-scroll-hint">↔ Scroll sideways to see more columns. Row labels stay fixed.</p>':""}<div class="matrix-scroll" tabindex="0" aria-label="Scrollable connectivity matrix"><table class="connectivity-table${nodes.length<=5?" compact-matrix":""}"><caption>Rows and columns use the same component order. Select a name to inspect its symbol or a 1 to inspect its connection.</caption><thead><tr><th class="matrix-corner" scope="col">Component</th>${nodes.map(node=>`<th scope="col"><button ${inspectNode(node)}>${esc(node.label)}</button></th>`).join("")}</tr></thead><tbody>${nodes.map((node,row)=>`<tr><th scope="row"><button ${inspectNode(node)}>${esc(node.label)}</button></th>${nodes.map((_,col)=>{const value=values[row]?.[col]===1?1:0,edge=pairs.get([row,col].sort((a,b)=>a-b).join(":")),observation=edge?.observations?.[0];return `<td class="${value?"connected":"empty-cell"}${row===col?" diagonal":""}">${value&&observation?`<button class="matrix-value" data-action="matrix-connection" data-sheet="${dataValue(observation.sheet_id)}" data-id="${dataValue(observation.connection_id)}" aria-label="Inspect connection ${dataValue(node.label)} and ${dataValue(nodes[col].label)}">1</button>`:value}</td>`;}).join("")}</tr>`).join("")}</tbody></table></div>`:'<p class="empty-selection">No equipment observations are available for this matrix. Analyze the drawing or add missing components first.</p>';
   const diagnostics=result.diagnostics||[],warnings=result.warnings||[];
-  return `<div class="matrix-summary"><div><strong>${Number(stats.components??nodes.length)}</strong><span>Components</span></div><div><strong>${Number(stats.direct_connections??edges.length)}</strong><span>Direct connections</span></div><div><strong>${Number(stats.unread_labels||0)}</strong><span>Unread names</span></div><div><strong>${Number(stats.unreviewed_connections||0)}</strong><span title="Recorded connections awaiting review">To review</span></div></div>
+  const review = Array.isArray(result.review) ? result.review : null;
+  const reviewConnections = new Set(review?.filter(item => item.kind === "connection").map(item => item.id));
+  const directList = edges.length ? `<div class="result-list">${edges.map(edge => {
+    const observation = edge.observations?.[0];
+    const flagged = edge.observations?.some(item => reviewConnections.has(item.connection_id));
+    let status = edge.review_status === "confirmed" ? "Reviewed" : "Awaiting review";
+    if (review && edge.review_status !== "confirmed") {
+      status = flagged ? "Needs review" : edge.observations?.length === 1 ? window.aipV3?.directionStatus(observation) : "";
+    }
+    const detail = [status, edge.observations?.length > 1 ? `${edge.observations.length} observations, counted once` : ""].filter(Boolean).join(" · ");
+    return `<div class="result-item"><div><strong class="direct-edge-label">${esc(edge.source_label)} ↔ ${esc(edge.target_label)}</strong>
+      ${detail ? `<div class="result-detail">${esc(detail)}</div>` : ""}</div>
+      ${observation ? `<button class="button small" data-action="matrix-connection" data-sheet="${dataValue(observation.sheet_id)}" data-id="${dataValue(observation.connection_id)}">Inspect</button>` : ""}</div>`;
+  }).join("")}</div>` : '<p class="section-note">No included direct equipment connections are recorded.</p>';
+  const diagnosticList = diagnostics.length || warnings.length ? `<ul class="matrix-diagnostics">${diagnostics.map(item =>
+    `<li><span class="pill ${item.severity === "error" ? "bad" : "warn"}">${esc(item.code || "Review")}</span><p>${esc(item.message || item.reason || "")}</p>
+    ${item.connection_id ? `<button class="result-title" data-action="matrix-connection" data-sheet="${dataValue(item.sheet_id)}" data-id="${dataValue(item.connection_id)}">Inspect connection</button>`
+      : item.component_id ? `<button class="result-title" data-action="matrix-component" data-sheet="${dataValue(item.sheet_id)}" data-id="${dataValue(item.component_id)}">Inspect component</button>` : ""}</li>`).join("")}
+      ${warnings.map(item => `<li><p>${esc(typeof item === "string" ? item : item.message || item.reason || JSON.stringify(item))}</p></li>`).join("")}</ul>` : "";
+  let reviewPanel = diagnosticList || '<p class="section-note">No matrix validation issues were reported. Check the observations against the source drawing before using the result.</p>';
+  if (review) {
+    const flags = review.length ? `<ul class="matrix-diagnostics">${review.map(item =>
+      `<li><p>${esc(item.reason)}</p><button class="result-title" data-action="matrix-${item.kind === "component" ? "component" : "connection"}"
+      data-sheet="${dataValue(result.scope.sheet_id)}" data-id="${dataValue(item.id)}">Inspect ${item.kind === "component" ? "component" : "connection"}</button></li>`).join("")}</ul>`
+      : '<p class="section-note">No issues flagged in this trace.</p>';
+    reviewPanel = flags + (diagnosticList ? `<details class="matrix-order"><summary>Matrix validation details</summary>${diagnosticList}</details>` : "");
+  }
+  return `<div class="matrix-summary"><div><strong>${Number(stats.components??nodes.length)}</strong><span>Components</span></div><div><strong>${Number(stats.direct_connections??edges.length)}</strong><span>Direct connections</span></div><div><strong>${Number(stats.unread_labels||0)}</strong><span>Unread names</span></div><div><strong>${Number(stats.review_items ?? stats.unreviewed_connections ?? 0)}</strong><span>To review</span></div></div>
     <section class="card matrix-card"><h2>Equipment adjacency</h2><p class="section-note">A path passing through another equipment item does not create an extra direct edge. Signals, rejected lines and unclassified connections do not create a 1. Unread names keep a unique label in the matrix.</p>${table}<details class="matrix-order"><summary>Row / column order (${nodes.length})</summary><ol>${nodes.map(node=>`<li><button class="result-title" ${inspectNode(node)}>${esc(node.label)}</button> <span class="muted tiny">${esc(node.type||"unknown")}</span></li>`).join("")}</ol></details></section>
-    <div class="matrix-detail-grid"><section class="card"><h2>Direct connection list</h2>${edges.length?`<div class="result-list">${edges.map(edge=>{const observation=edge.observations?.[0];return `<div class="result-item"><div><strong class="direct-edge-label">${esc(edge.source_label)} ↔ ${esc(edge.target_label)}</strong><div class="result-detail">${edge.review_status==="confirmed"?"Reviewed":"Awaiting review"}${edge.observations?.length>1?` · ${edge.observations.length} observations, counted once`:""}</div></div>${observation?`<button class="button small" data-action="matrix-connection" data-sheet="${dataValue(observation.sheet_id)}" data-id="${dataValue(observation.connection_id)}">Inspect</button>`:""}</div>`;}).join("")}</div>`:'<p class="section-note">No included direct equipment connections are recorded.</p>'}</section><section class="card"><h2>Items to review</h2>${diagnostics.length||warnings.length?`<ul class="matrix-diagnostics">${diagnostics.map(item=>`<li><span class="pill ${item.severity==="error"?"bad":"warn"}">${esc(item.code||"Review")}</span><p>${esc(item.message||item.reason||"")}</p>${item.connection_id?`<button class="result-title" data-action="matrix-connection" data-sheet="${dataValue(item.sheet_id)}" data-id="${dataValue(item.connection_id)}">Inspect connection</button>`:item.component_id?`<button class="result-title" data-action="matrix-component" data-sheet="${dataValue(item.sheet_id)}" data-id="${dataValue(item.component_id)}">Inspect component</button>`:""}</li>`).join("")}${warnings.map(item=>`<li><p>${esc(typeof item==="string"?item:item.message||item.reason||JSON.stringify(item))}</p></li>`).join("")}</ul>`:'<p class="section-note">No matrix validation issues were reported. Check the observations against the source drawing before using the result.</p>'}</section></div>`;
+    <div class="matrix-detail-grid"><section class="card"><h2>Direct connection list</h2>${directList}</section><section class="card"><h2>Items to review</h2>${reviewPanel}</section></div>`;
 }
 
 function setupCanvas() {
@@ -462,7 +505,7 @@ function drawCanvas() {
     }
   }
   const selected=selectedComponent();
-  if(app.view!=="grid" && selected?.tag && selected.tag_bbox){
+  if(app.view!=="grid" && selected?.tag_bbox && (selected.tag || window.aipV3?.isV3View())){
     const [l,t,r,b]=selected.tag_bbox;
     ctx.save();ctx.strokeStyle="#c46116";ctx.lineWidth=2/app.scale;
     ctx.setLineDash([4/app.scale,3/app.scale]);ctx.strokeRect(l,t,r-l,b-t);ctx.restore();
@@ -640,7 +683,7 @@ function drawGridCoordinate(ctx, item, bounds, labels, active, pitch) {
 
 function drawEquipmentLabel(ctx,component) {
   if(isJunction(component) && !component.tag && component.id!==app.componentId)return;
-  if(component.id===app.componentId && component.tag_bbox && component.tag)return;
+  if(component.id===app.componentId && component.tag_bbox && (component.tag || window.aipV3?.isV3View()))return;
   const [x0,,x1,y1] = component.bbox, label = componentName(component);
   ctx.font=`${11/app.scale}px Segoe UI`;ctx.textAlign="center";ctx.textBaseline="top";
   const width=ctx.measureText(label).width+8/app.scale,x=(x0+x1)/2,y=y1+5/app.scale;
@@ -673,7 +716,7 @@ function hitConnection(point){const sheet=selectedSheet();return(sheet.connectio
 
 function pointerDown(event){if(event.button!==0)return;const canvas=event.currentTarget;canvas.setPointerCapture(event.pointerId);const screen=eventPoint(event),world=worldPoint(screen);const hit=hitComponent(world);app.pointer={screen,world,offset:[...app.offset],hit,moved:false,box:hit?.bbox?[...hit.bbox]:null};if(app.tool==="component"&&app.view!=="grid")app.draft={box:[...world,...world]};}
 function pointerMove(event){if(!app.pointer)return;const point=eventPoint(event),world=worldPoint(point);const dx=point[0]-app.pointer.screen[0],dy=point[1]-app.pointer.screen[1];if(Math.hypot(dx,dy)>4)app.pointer.moved=true;if(app.tool==="component"&&app.view!=="grid"){app.draft={box:[...app.pointer.world,...world]};}else if(app.tool==="move"&&app.pointer.hit&&app.view!=="grid"){const sheet=selectedSheet();const shift=[Math.max(-app.pointer.box[0],Math.min(sheet.width-app.pointer.box[2],dx/app.scale)),Math.max(-app.pointer.box[1],Math.min(sheet.height-app.pointer.box[3],dy/app.scale))];app.pointer.hit.bbox=app.pointer.box.map((value,index)=>value+shift[index%2]);}else if(["select","move"].includes(app.tool)||app.view==="grid")app.offset=[app.pointer.offset[0]+dx,app.pointer.offset[1]+dy];drawCanvas();}
-async function pointerUp(event){if(!app.pointer)return;const start=app.pointer;app.pointer=null;const point=worldPoint(eventPoint(event));try{if(app.tool==="component"&&app.view!=="grid"){const box=app.draft?.box;app.draft=null;if(start.moved&&box){const sheet=selectedSheet();const bbox=[Math.max(0,Math.min(box[0],box[2])),Math.max(0,Math.min(box[1],box[3])),Math.min(sheet.width,Math.max(box[0],box[2])),Math.min(sheet.height,Math.max(box[1],box[3]))].map(Math.round);if(bbox[2]-bbox[0]<3||bbox[3]-bbox[1]<3)return;const result=await action("save_component",{sheet_id:sheet.id,component:{type:"unknown",tag:"",bbox,normal_position:"unknown",review_status:"unreviewed",isolation_credit:"unverified"}});app.componentId=result.result?.item_id||result.result?.id||result.component?.id||selectedSheet().components.at(-1)?.id||"";app.tool="select";render();}}else if(app.tool==="move"&&start.hit&&start.moved&&app.view!=="grid"){await action("save_component",{sheet_id:app.sheetId,component:start.hit},{message:"Equipment position saved."});}else if(!start.moved){const hit=hitComponent(point);if((app.tool==="pipe"||app.tool==="signal")&&app.view!=="grid"){if(!app.draft){if(!hit)return toast("Choose the first equipment item.");app.draft={source:hit.id,points:[pointCenter(hit)]};}else if(hit){if(hit.id===app.draft.source)return toast("Choose a different endpoint.");const draft=app.draft;app.draft=null;await action("save_connection",{sheet_id:app.sheetId,connection:{source:draft.source,target:hit.id,kind:app.tool==="pipe"?"direct_undirected":"signal",path:[...draft.points,pointCenter(hit)],review_status:"confirmed"}},{message:"Connection saved."});}else app.draft.points.push(point.map(Math.round));drawCanvas();}else{app.componentId=hit?.id||"";app.connectionId=hit||app.view==="grid"?"":hitConnection(point)?.id||"";app.tab=app.connectionId?"connections":"components";render();}}}catch(error){toast(error.message,true);app.draft=null;if(start.box&&start.hit)start.hit.bbox=start.box;drawCanvas();}drawCanvas();}
+async function pointerUp(event){if(!app.pointer)return;const start=app.pointer;app.pointer=null;const point=worldPoint(eventPoint(event));try{if(app.tool==="component"&&app.view!=="grid"){const box=app.draft?.box;app.draft=null;if(start.moved&&box){const sheet=selectedSheet();const bbox=[Math.max(0,Math.min(box[0],box[2])),Math.max(0,Math.min(box[1],box[3])),Math.min(sheet.width,Math.max(box[0],box[2])),Math.min(sheet.height,Math.max(box[1],box[3]))].map(Math.round);if(bbox[2]-bbox[0]<3||bbox[3]-bbox[1]<3)return;const result=await action("save_component",{sheet_id:sheet.id,component:{type:"unknown",tag:"",bbox,normal_position:"unknown",review_status:"unreviewed",isolation_credit:"unverified"}});app.componentId=result.result?.item_id||result.result?.id||result.component?.id||selectedSheet().components.at(-1)?.id||"";app.tool="select";render();}}else if(app.tool==="move"&&start.hit&&start.moved&&app.view!=="grid"){await action("save_component",{sheet_id:app.sheetId,component:start.hit},{message:"Equipment position saved."});}else if(!start.moved){const hit=hitComponent(point);if((app.tool==="pipe"||app.tool==="signal")&&app.view!=="grid"){if(!app.draft){if(!hit)return toast("Choose the first equipment item.");app.draft={source:hit.id,points:[pointCenter(hit)]};}else if(hit){if(hit.id===app.draft.source)return toast("Choose a different endpoint.");const draft=app.draft;app.draft=null;await action("save_connection",{sheet_id:app.sheetId,connection:{source:draft.source,target:hit.id,kind:app.tool==="pipe"?"direct_undirected":"signal",path:[...draft.points,pointCenter(hit)],review_status:"confirmed"}},{message:"Connection saved."});}else app.draft.points.push(point.map(Math.round));drawCanvas();}else{app.componentId=hit?.id||"";app.connectionId=hit||app.view==="grid"?"":hitConnection(point)?.id||"";if(app.tab!=="review")app.tab=app.connectionId?"connections":"components";render();if((app.componentId||app.connectionId)&&window.aipV3?.isV3View())window.aipV3.focusSelection();}}}catch(error){toast(error.message,true);app.draft=null;if(start.box&&start.hit)start.hit.bbox=start.box;drawCanvas();}drawCanvas();}
 
 function openSheet(id, componentId = "", view = app.view, connectionId = "") {
   const sheet = app.data.sheets.find(item => item.id === id);
@@ -697,7 +740,11 @@ function openConnection(sheetId,connectionId) {
 
 document.addEventListener("click",async event=>{
   const viewButton=event.target.closest("[data-view]");if(viewButton){app.view=viewButton.dataset.view;app.tool="select";app.draft=null;render();return;}
-  const tabButton=event.target.closest("[data-tab]");if(tabButton){app.tab=tabButton.dataset.tab;render();return;}
+  const tabButton=event.target.closest("[data-tab]");
+  if(tabButton){
+    if (tabButton.dataset.tab === "review") app.componentId = app.connectionId = "";
+    app.tab=tabButton.dataset.tab;render();return;
+  }
   const toolButton=event.target.closest("[data-tool]");if(toolButton){app.tool=toolButton.dataset.tool;app.draft=null;render();return;}
   const button=event.target.closest("[data-action]");if(!button)return;
   const name=button.dataset.action;
@@ -753,7 +800,7 @@ document.addEventListener("change",async event=>{
 document.addEventListener("input",event=>{if(event.target.id==="sheet-search"){const start=event.target.selectionStart;app.search=event.target.value;render();const input=$("#sheet-search");input.focus();input.setSelectionRange(start,start);}});
 
 document.addEventListener("submit",async event=>{
-  if(event.target.id==="sheet-form")return;
+  if(["sheet-form", "v3-review-form"].includes(event.target.id))return;
   event.preventDefault();const form=event.target,data=new FormData(form);const submit=form.querySelector('[type="submit"]');if(submit)submit.disabled=true;
   try {
     if(form.id==="component-form"){const component={...selectedComponent(),tag:data.get("tag").trim(),type:data.get("type").trim(),review_status:data.get("review_status")};await action("save_component",{sheet_id:app.sheetId,component},{message:"Component correction saved."});}

@@ -20,7 +20,7 @@ window.aipV3 = (() => {
     if (!sheet || !isV3View()) return sheet;
     const trace = traces.get(sheet.id);
     if (!trace) return {...sheet, version:`v3/${sheet.version}/pending`, components:[], connections:[], arrows:[]};
-    return {...sheet, version:`v3/${sheet.version}/${trace.created_at || ""}`, components: trace.components, connections: trace.connections,
+    return {...sheet, version:`v3/${sheet.version}/${trace.created_at || ""}/${trace.review_revision ?? 0}`, components: trace.components, connections: trace.connections,
       arrows:(trace.arrows || []).filter(arrow => arrow.verified ?? (trace.provider === "local-ml" || !!arrow.connection_id))};
   }
 
@@ -113,6 +113,133 @@ window.aipV3 = (() => {
     heading.after(actions);
   }
 
+  function reviewItems() {
+    return traces.get(app.sheetId)?.review || [];
+  }
+
+  function cacheTrace(sheetId, trace) {
+    const current = traces.get(sheetId);
+    if (current && trace?.created_at === current.created_at &&
+        (trace.review_revision ?? 0) < (current.review_revision ?? 0)) return;
+    traces.set(sheetId, trace);
+    const sheet = app.data.sheets.find(item => item.id === sheetId);
+    if (sheet && trace) {
+      sheet.v3_summary = {components:trace.components.length, names:trace.components.map(item => item.tag).filter(Boolean)};
+    }
+    delete app.matrixData[sheetId];
+    delete app.gridData[sheetId];
+  }
+
+  function reviewTabLabel() {
+    const count = reviewItems().length;
+    return count ? `Review (${count})` : "Review";
+  }
+
+  function connectionLabels(edge, sheet) {
+    const label = id => {
+      const component = sheet.components.find(item => item.id === id);
+      return component ? componentName(component) : id;
+    };
+    return [label(edge.source), label(edge.target)];
+  }
+
+  function directionStatus(edge) {
+    const basis = edge.direction_evidence?.basis;
+    if (basis === "reviewed") return "Direction corrected";
+    if (["on_edge", "run"].includes(basis)) return "Arrow observed";
+    return edge.direction === "bidirectional" ? "Bidirectional" : "Direction undetermined";
+  }
+
+  function describeConnection(edge, from, to) {
+    const label = ({
+      source_to_target:`${from} → ${to}`, target_to_source:`${to} → ${from}`, bidirectional:`${from} ↔ ${to}`
+    })[edge.direction] || `${from} · ${to}`;
+    const flagged = reviewItems().some(row => row.kind === "connection" && row.id === edge.id);
+    const status = edge.review_status === "confirmed" ? "Reviewed" : flagged ? "Needs review" : directionStatus(edge);
+    return {label, detail:`${lineKind(edge.kind)} · ${status}`};
+  }
+
+  function reviewQueue(sheet) {
+    const items = reviewItems();
+    if (!items.length) return '<h2>Review</h2><p class="empty-selection">No issues flagged in this trace.</p>';
+    return `<h2>Review</h2><div class="result-list">${items.map(({kind, id, reason}) => {
+      const component = kind === "component" && sheet.components.find(item => item.id === id);
+      const edge = kind === "connection" && sheet.connections.find(item => item.id === id);
+      const label = component ? componentName(component) : edge ? describeConnection(edge, ...connectionLabels(edge, sheet)).label : id;
+      return `<div class="result-item"><div><button type="button" class="result-title" data-v3="open-review" data-kind="${dataValue(kind)}" data-id="${dataValue(id)}">${esc(label)}</button>
+        <div class="result-detail">${esc(reason)}</div></div></div>`;
+    }).join("")}</div>`;
+  }
+
+  function evidenceMarkup(item, extra = "") {
+    const raw = evidenceText(item.evidence) || "";
+    const [methodText, association] = String(raw).split(" OCR association: ", 2);
+    let description = methodText;
+    if (association) {
+      try {
+        const {native_text, ocr_selection} = JSON.parse(association);
+        if (native_text) description += ` The OCR engine read “${native_text}”.`;
+        if (ocr_selection) description += ` Reading selected by ${ocr_selection}.`;
+      } catch { description = String(raw); }
+    }
+    const note = evidenceText(item.uncertainty);
+    const uncertainty = note === "Process-line type and any observed flow direction require drawing review."
+      ? "Line service is unspecified." : note;
+    return `<h3>AI evidence</h3>${extra}<p class="section-note">${esc(description || "No evidence was recorded for this item.")}</p>
+      ${uncertainty ? `<p class="section-note">${esc(uncertainty)}</p>` : ""}`;
+  }
+
+  function reviewEditor(item, trace, fields, kind) {
+    const issue = reviewItems().find(row => row.kind === kind && row.id === item.id);
+    const reviewed = item.review_status === "confirmed";
+    return `${reviewed ? '<p><span class="pill good">Reviewed</span></p>' : ""}
+      ${issue ? `<p class="section-note"><strong>Needs review</strong> · ${esc(issue.reason)}</p>` : ""}
+      <form id="v3-review-form" data-kind="${kind}" data-id="${dataValue(item.id)}" data-sheet="${dataValue(app.sheetId)}"
+        data-trace-id="${dataValue(trace.created_at)}" data-revision="${dataValue(trace.review_revision ?? 0)}">
+        ${fields}
+        <div class="form-actions">
+          <button class="button primary" type="submit" value="save">Save correction</button>
+          ${reviewed ? "" : '<button class="button" type="submit" value="confirm">Mark reviewed</button>'}
+        </div>
+      </form>`;
+  }
+
+  function reviewComponent(item, sheet, trace, heading) {
+    const back = app.tab === "review" ? 'data-v3="back-review">← Review' : 'data-action="all-components">← All components';
+    const fields = `<label class="field">Equipment tag or printed name<input name="tag" value="${dataValue(item.tag || "")}" placeholder="Unread label"></label>
+      <label class="field">Type<input name="type" list="v3-component-types" value="${dataValue(item.type || "unknown")}" required></label>
+      <datalist id="v3-component-types">${["pump", "valve", "tank", "vessel", "instrument", "junction", "connector", "unknown"].map(type =>
+        `<option value="${type}"></option>`).join("")}</datalist>`;
+    const original = item.ai_observation
+      ? `<p class="section-note"><strong>Original prediction</strong><br>${esc(item.ai_observation.tag || "Unread label")} · ${esc(item.ai_observation.type || "Unknown type")}</p>` : "";
+    return `<button type="button" class="result-title back-link" ${back}</button><h2>${esc(componentName(item))}</h2>${heading}
+      <dl class="fact-list"><dt>Grid coordinate</dt><dd>${drawingCoordinate(item, sheet)}</dd></dl>
+      ${reviewEditor(item, trace, fields, "component")}
+      ${evidenceMarkup(item, original)}
+      ${item.tag_bbox ? '<p class="section-note">The dashed orange box marks the label region on the drawing.</p>' : ""}
+      <h3>Connections</h3><div class="result-list">${connectionRows(sheet, item.id, describeConnection)}</div>`;
+  }
+
+  function reviewConnection(edge, sheet, trace, heading) {
+    const back = app.tab === "review" ? 'data-v3="back-review">← Review' : 'data-action="all-connections">← All AI connections';
+    const [from, to] = connectionLabels(edge, sheet);
+    const directions = {unknown:"Undetermined", source_to_target:`${from} → ${to}`, target_to_source:`${to} → ${from}`, bidirectional:"Bidirectional"};
+    const evidenceLabels = {run:"Arrowhead on the same uninterrupted run", on_edge:"Arrowhead on this segment",
+      conflict:"Conflicting arrow observations", reviewed:"Direction set by reviewer"};
+    const currentEvidence = evidenceLabels[edge.direction_evidence?.basis];
+    const original = edge.ai_observation;
+    const originalDirection = original ? directions[original.direction] || directions.unknown : null;
+    const originalEvidence = original ? evidenceLabels[original.direction_evidence?.basis] : null;
+    const fields = `<label class="field">Connection type<select name="kind">${["direct_undirected", "pipe", "signal", "unknown"].map(value =>
+      `<option value="${value}"${value === (edge.kind || "unknown") ? " selected" : ""}>${esc(lineKind(value))}</option>`).join("")}</select></label>
+      <label class="field">Observed direction<select name="direction">${Object.entries(directions).map(([value, label]) =>
+      `<option value="${value}"${value === (edge.direction || "unknown") ? " selected" : ""}>${esc(label)}</option>`).join("")}</select></label>`;
+    return `<button type="button" class="result-title back-link" ${back}</button><h2>${esc(describeConnection(edge, from, to).label)}</h2>${heading}
+      ${currentEvidence ? `<dl class="fact-list"><dt>Direction evidence</dt><dd>${esc(currentEvidence)}</dd></dl>` : ""}
+      ${reviewEditor(edge, trace, fields, "connection")}
+      ${evidenceMarkup(edge, original ? `<p class="section-note"><strong>Original prediction</strong><br>${esc(lineKind(original.kind))} · ${esc(originalDirection)}${originalEvidence ? ` · ${esc(originalEvidence)}` : ""}</p>` : "")}`;
+  }
+
   function inspector(sheet) {
     const trace = traces.get(sheet.id);
     if (!trace) return '<h2>AI extraction</h2><p class="empty-selection">Choose Find connections with AI to trace this drawing.</p>';
@@ -121,28 +248,19 @@ window.aipV3 = (() => {
     const priorLocal = trace.provider === "local-ml" && trace.local_input?.version !== app.data.capabilities.local_trace_version;
     const heading = `<p class="section-note">AI observations from ${esc(trace.model || trace.provider)}.</p>` +
       (priorLocal ? '<p class="section-note">This trace used an earlier reader. Choose Find connections with AI → Local connection model to update the equipment names and types.</p>' : "");
-    if (app.tab === "connections") {
-      if (!edge) {
-        const excluded = trace.excluded_connections || [];
-        return `<h2>AI connections</h2>${heading}<div class="result-list">${connectionRows(sheet)}</div>
-          ${excluded.length ? `<details class="matrix-order"><summary>${excluded.length} excluded proposals</summary><ul>${excluded.map(item =>
-            `<li>${esc(item.exclusion_reason || item.uncertainty || "Insufficient evidence")}</li>`).join("")}</ul></details>` : ""}`;
-      }
-      const label = id => componentName(sheet.components.find(item => item.id === id));
-      const from = label(edge.source), to = label(edge.target);
-      const direction = {source_to_target: `${from} → ${to}`, target_to_source: `${to} → ${from}`, bidirectional: "Bidirectional"};
-      const arrowSource = {run:"Arrowhead on the same uninterrupted run", on_edge:"Arrowhead on this segment",
-        conflict:"Conflicting arrow observations"}[edge.direction_evidence?.basis];
-      return `<button class="result-title back-link" data-action="all-connections">← All AI connections</button>
-        <h2>${esc(from)} ↔ ${esc(to)}</h2>${heading}<dl class="fact-list"><dt>Line type</dt><dd>${esc(lineKind(edge.kind))}</dd>
-        <dt>Flow direction</dt><dd>${esc(direction[edge.direction] || "Unknown")}</dd>
-        ${arrowSource ? `<dt>Direction evidence</dt><dd>${esc(arrowSource)}</dd>` : ""}</dl>
-        <p>${esc(evidenceText(edge.evidence) || "Review the traced route on the drawing.")}</p>`;
+    if (app.tab === "review") {
+      if (component) return reviewComponent(component, sheet, trace, heading);
+      if (edge) return reviewConnection(edge, sheet, trace, heading);
+      return reviewQueue(sheet);
     }
-    if (component) return `<button class="result-title back-link" data-action="all-components">← All AI components</button>
-      <h2>${esc(componentName(component))}</h2>${heading}<p>${esc(component.type || "Unknown type")} · Awaiting review</p><dl class="fact-list"><dt>Grid coordinate</dt><dd>${drawingCoordinate(component, sheet)}</dd></dl>
-      ${component.tag_bbox && component.tag ? '<p class="section-note">The dashed orange box marks the printed name on the drawing.</p>' : ""}
-      <p class="section-note">${esc(evidenceText(component.evidence))}</p><h3>Connections</h3>${connectionRows(sheet, component.id)}`;
+    if (app.tab === "connections") {
+      if (edge) return reviewConnection(edge, sheet, trace, heading);
+      const excluded = trace.excluded_connections || [];
+      return `<h2>AI connections</h2>${heading}<div class="result-list">${connectionRows(sheet, null, describeConnection)}</div>
+        ${excluded.length ? `<details class="matrix-order"><summary>${excluded.length} excluded proposals</summary><ul>${excluded.map(item =>
+          `<li>${esc(item.exclusion_reason || item.uncertainty || "Insufficient evidence")}</li>`).join("")}</ul></details>` : ""}`;
+    }
+    if (component) return reviewComponent(component, sheet, trace, heading);
     return `<h2>AI components</h2>${heading}<div class="result-list">${sheet.components.map(item =>
       `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(item.id)}">${esc(componentName(item))}</button> ${drawingCoordinate(item, sheet)}
       <div class="result-detail">${esc(item.type || "Unknown type")}</div></div></div>`).join("") || "<p>No components found.</p>"}</div>`;
@@ -264,6 +382,7 @@ window.aipV3 = (() => {
         <p class="v3-profile section-note"></p>
         ${!asking && saved ? `<button type="button" class="button small" data-view-saved>View saved trace · ${esc(saved.model || saved.provider)}</button>` : ""}
         ${!asking && saved?.local_input ? '<label data-refresh-trace hidden><input type="checkbox" name="refresh_trace"> Recompute the local trace from the image</label>' : ""}
+        ${!asking && saved?.review_revision > 0 ? '<label data-replace-trace><input type="checkbox" name="replace_reviewed"> Allow a new run to replace this reviewed trace</label>' : ""}
         <section class="v3-plan" hidden>
           <label class="field" data-plan-account hidden>ChatGPT connection<select name="plan_account"></select></label>
           <div class="v3-plan-controls">
@@ -319,6 +438,8 @@ window.aipV3 = (() => {
         const note = $(".v3-profile", form), isPlan = profile.id === "chatgpt-plan", isWeb = profile.id === chatgptWeb.id;
         const refreshOption = $("[data-refresh-trace]", form);
         if (refreshOption) refreshOption.hidden = profile.id !== "local-ml";
+        const replaceOption = $("[data-replace-trace]", form);
+        if (replaceOption) replaceOption.hidden = isWeb;
         plan.hidden = !isPlan;
         web.hidden = !isWeb;
         if (isWeb) {
@@ -468,11 +589,9 @@ window.aipV3 = (() => {
             status.dataset.sheet = sheet.id;
           } else {
             const refresh = provider === "local-ml" && !!form.elements.refresh_trace?.checked;
-            const {trace} = await post("/api/v3/trace", {sheet_id:sheet.id, provider, refresh, ...selectedModel});
-            traces.set(sheet.id, trace);
-            sheet.v3_summary = {components:trace.components.length, names:trace.components.map(item => item.tag).filter(Boolean)};
-            delete app.matrixData[sheet.id];
-            delete app.gridData[sheet.id];
+            const replace_reviewed = !!form.elements.replace_reviewed?.checked;
+            const {trace} = await post("/api/v3/trace", {sheet_id:sheet.id, provider, refresh, replace_reviewed, ...selectedModel});
+            cacheTrace(sheet.id, trace);
             if (app.sheetId === sheet.id && modal.open) {
               changeSource("v3");
               app.tab = "connections";
@@ -533,12 +652,57 @@ window.aipV3 = (() => {
   document.addEventListener("change", event => {
     if (event.target.matches("[data-v3-source]")) changeSource(event.target.value);
   });
+  document.addEventListener("submit", async event => {
+    const form = event.target;
+    if (form.id !== "v3-review-form") return;
+    event.preventDefault();
+    const {sheet:sheetId, traceId, revision, id, kind} = form.dataset;
+    const buttons = [...form.querySelectorAll('button[type="submit"]')];
+    buttons.forEach(button => { button.disabled = true; });
+    const changes = Object.fromEntries([...new FormData(form)].map(([key, value]) => [key, value.trim()]));
+    const current = traces.get(sheetId);
+    const item = (kind === "component" ? current?.components : current?.connections)?.find(value => value.id === id);
+    const changed = Object.entries(changes).some(([key, value]) => value !== item?.[key]);
+    const status = event.submitter?.value === "confirm" || (!changed && item?.review_status === "confirmed") ? "confirmed" : "unreviewed";
+    try {
+      const {trace} = await post("/api/v3/review", {sheet_id:sheetId, trace_id:traceId, revision:Number(revision), id, kind, changes, status});
+      cacheTrace(sheetId, trace);
+      if (app.sheetId === sheetId && isV3View()) {
+        const currentSelection = kind === "component" ? app.componentId : app.connectionId;
+        if (currentSelection === id && app.tab === "review" && !reviewItems().some(row => row.kind === kind && row.id === id)) {
+          app.componentId = app.connectionId = "";
+        }
+        render();
+      }
+      toast(status === "confirmed" ? "Review saved." : "Correction saved.");
+    } catch (error) {
+      if (error.status === 409) {
+        try {
+          const {trace} = await api(`/api/v3/trace?sheet_id=${encodeURIComponent(sheetId)}`);
+          cacheTrace(sheetId, trace);
+          if (app.sheetId === sheetId && isV3View()) {
+            if (trace?.created_at !== traceId) app.componentId = app.connectionId = "";
+            render();
+          }
+          toast("The trace changed. The latest saved result is open.", true);
+        } catch { toast(error.message, true); }
+      } else toast(error.message, true);
+    } finally {
+      buttons.forEach(button => { button.disabled = false; });
+    }
+  });
   document.addEventListener("click", async event => {
     if (event.target.closest('[data-action="select-connection"], [data-action="select-component"]')) focusSelection();
     const button = event.target.closest("[data-v3]");
     if (!button) return;
     const operation = button.dataset.v3;
     if (operation === "trace" || operation === "ask") await showModelDialog(operation);
+    if (operation === "open-review" || operation === "back-review") {
+      app.componentId = button.dataset.kind === "component" ? button.dataset.id : "";
+      app.connectionId = button.dataset.kind === "connection" ? button.dataset.id : "";
+      render();
+      focusSelection();
+    }
     if (operation === "read-symbols") {
       const id = app.sheetId;
       button.disabled = true;
@@ -580,5 +744,5 @@ window.aipV3 = (() => {
     connector.open = false;
     connectSetup($("div", connector));
   });
-  return {isCandidate, isV3View, needsTrace, displaySheet, drawingControls: controls, matrixControls, syncDrawing, inspector, sourceSwitch, traceButton, focusSelection};
+  return {isCandidate, isV3View, needsTrace, displaySheet, drawingControls: controls, matrixControls, syncDrawing, inspector, sourceSwitch, traceButton, focusSelection, reviewTabLabel, directionStatus};
 })();

@@ -1,11 +1,14 @@
 """Locate real arrowheads and relate them to individual equipment pairs on a straight run."""
 from collections import defaultdict
-from math import hypot
+from math import ceil, floor, hypot
 
 from PIL import Image
 
 from ..connection_geometry import HorizontalStroke, arrowheads_on_stroke
 from ..flow_routes import trace_arrow_routes
+
+
+PROCESS_LINE_KINDS = {"pipe", "direct_undirected"}
 
 
 def _scan(mask, width, low, high, y):
@@ -32,14 +35,17 @@ def _scan(mask, width, low, high, y):
     return arrowheads_on_stroke(mask, width, HorizontalStroke(low, high, top, bottom))
 
 
-def raster_arrows(ink, components, connections, ports, classical_arrows):
+def raster_arrows(ink, components, connections, ports, classical_arrows, existing=()):
     """Reuse the image detector's landmarks, then check pipe legs and their exposed ends."""
-    arrows = []
+    arrows = list(existing)
+    known_ids = {arrow["id"] for arrow in arrows}
 
     def add(tip, wings):
         tail = [sum(p[i] for p in wings) / 2 for i in (0, 1)]
         vx, vy = tip[0] - tail[0], tip[1] - tail[1]
         for arrow in arrows:
+            if not arrow.get("verified"):
+                continue
             ax, ay = arrow["tip"]
             dx, dy = ax - arrow["tail"][0], ay - arrow["tail"][1]
             if hypot(ax - tip[0], ay - tip[1]) <= 6 and dx * vx + dy * vy > 0:
@@ -47,8 +53,13 @@ def raster_arrows(ink, components, connections, ports, classical_arrows):
         points = [tip, *wings]
         bbox = [min(p[0] for p in points), min(p[1] for p in points),
                 max(p[0] for p in points) + 1, max(p[1] for p in points) + 1]
-        arrows.append({"id": f"ml-arrow-{len(arrows) + 1}", "bbox": bbox, "tip": list(tip),
-                       "tail": tail, "wings": wings, "review_status": "unreviewed", "verified": True})
+        index = len(arrows) + 1
+        while f"ml-arrow-{index}" in known_ids:
+            index += 1
+        arrow_id = f"ml-arrow-{index}"
+        known_ids.add(arrow_id)
+        arrows.append({"id": arrow_id, "bbox": bbox, "tip": list(tip), "tail": tail, "wings": wings,
+                       "origin": "raster", "review_status": "unreviewed", "verified": True})
 
     for arrow in classical_arrows:
         add(arrow["arrow_tip"], arrow["arrow_wings"])
@@ -62,7 +73,9 @@ def raster_arrows(ink, components, connections, ports, classical_arrows):
 
     def scan(vertical, low, high, y):
         mask, width = mask_for(vertical)
-        for head in _scan(mask, width, low, high, y):
+        if not 0 <= round(y) < len(mask) // width:
+            return
+        for head in _scan(mask, width, max(0, round(low)), min(width - 1, round(high)), round(y)):
             tip, wings = head["arrow_tip"], head["arrow_wings"]
             if vertical:
                 tip, wings = tip[::-1], [w[::-1] for w in wings]
@@ -70,13 +83,15 @@ def raster_arrows(ink, components, connections, ports, classical_arrows):
 
     used_ports = set()
     for edge in connections:
+        if edge["kind"] not in PROCESS_LINE_KINDS:
+            continue
         path = edge["path"]
         used_ports.update(((edge["source"], tuple(path[0])), (edge["target"], tuple(path[-1]))))
         for a, b in zip(path, path[1:]):
             vertical = abs(a[0] - b[0]) < abs(a[1] - b[1])
             first, last = (a[::-1], b[::-1]) if vertical else (a, b)
             if abs(first[1] - last[1]) <= 2:
-                scan(vertical, min(first[0], last[0]), max(first[0], last[0]), (first[1] + last[1]) // 2)
+                scan(vertical, min(first[0], last[0]), max(first[0], last[0]), (first[1] + last[1]) / 2)
 
     # A terminal arrow need not fall between two pieces of equipment. Search a
     # connected outgoing stem up to the next symbol or first break in the ink.
@@ -111,7 +126,7 @@ def raster_arrows(ink, components, connections, ports, classical_arrows):
 
 
 def _axial_routes(ink, arrows, components):
-    """Trace upstream on actual ink. Transpose vertical runs into the shared shaft walker."""
+    """Trace continuous ink on both sides of an axial arrow."""
     for vertical in (False, True):
         marks = []
         for arrow in arrows:
@@ -133,8 +148,13 @@ def _axial_routes(ink, arrows, components):
                      for node in components]
         else:
             boxes = components
-        for route in trace_arrow_routes(raster.tobytes(), raster.width, marks, boxes):
-            yield route, vertical
+        mask = raster.tobytes()
+        for toward_upstream in (True, False):
+            scan_marks = marks if toward_upstream else [
+                {**mark, "direction": "left" if mark["direction"] == "right" else "right"} for mark in marks
+            ]
+            for route in trace_arrow_routes(mask, raster.width, scan_marks, boxes):
+                yield route, vertical, toward_upstream
 
 
 def arrow_direction(arrow, path, slack):
@@ -184,62 +204,104 @@ def _has_branch(path, arrow, ink, slack):
     return False
 
 
+def _has_symbol_branch(ink, box, ports, shaft, vertical, slack):
+    """Match extra ports to connected ink inside an inline symbol's box."""
+    if len(ports) <= 2:
+        return False
+    cross_axis = 0 if vertical else 1
+    pixels = ink.load()
+    extra = {point for point, heading in ports
+             if (heading[cross_axis] or abs(point[cross_axis] - shaft) > slack) and pixels[point]}
+    if not extra:
+        return False
+    left, top, right, bottom = (floor(box[0]), floor(box[1]), ceil(box[2]), ceil(box[3]))
+    ends = [(shaft, top), (shaft, bottom - 1)] if vertical else [(left, shaft), (right - 1, shaft)]
+    pending = [point for point in ends if pixels[point]]
+    seen = set(pending)
+    for x, y in pending:
+        if (x, y) in extra:
+            return True
+        for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)):
+            nx, ny = point = x + dx, y + dy
+            if left <= nx < right and top <= ny < bottom and point not in seen and pixels[point]:
+                seen.add(point)
+                pending.append(point)
+    return False
+
+
 def assign_directions(ink, components, connections, arrows, ports, slack):
     """Attach a head once, and carry its direction only along evidenced neighboring pairs."""
     incident = defaultdict(list)
     pairs = defaultdict(list)
     direct = defaultdict(dict)
     inferred = defaultdict(dict)
+    ambiguous = defaultdict(set)
     for edge in connections:
         incident[edge["source"]].append(edge)
         incident[edge["target"]].append(edge)
         pairs[frozenset((edge["source"], edge["target"]))].append(edge)
     verified = []
     for arrow in arrows:
+        # A saved edge association comes from an earlier assignment or a model claim.
+        previous = arrow.pop("connection_id", None)
         if not arrow.get("verified"):
+            if previous:
+                arrow.setdefault("proposed_connection_id", previous)
             continue
         matches = []
         for edge in connections:
+            if edge["kind"] not in PROCESS_LINE_KINDS:
+                continue
             direction = arrow_direction(arrow, edge["path"], slack)
             if direction:
                 matches.append((edge, direction))
         if len(matches) > 1:
-            if "connection_id" in arrow:
-                arrow["proposed_connection_id"] = arrow.pop("connection_id")
+            if previous:
+                arrow.setdefault("proposed_connection_id", previous)
+            for edge, _ in matches:
+                ambiguous[edge["id"]].add(arrow["id"])
             continue
         if matches:
             edge, direction = matches[0]
             arrow["connection_id"] = edge["id"]
             if not _has_branch(edge["path"], arrow, ink, slack):
                 direct[edge["id"]][arrow["id"]] = direction
+            else:
+                ambiguous[edge["id"]].add(arrow["id"])
         verified.append(arrow)
     stops = {node["id"] for node in components
-             if node.get("type") == "junction" or len(incident[node["id"]]) > 2 or len(ports.get(node["id"], [])) > 2}
-    for route, vertical in _axial_routes(ink, verified, components):
-        downstream = list(reversed(route["component_ids"]))
+             if node.get("type") == "junction" or len(incident[node["id"]]) > 2}
+    boxes = {node["id"]: node["bbox"] for node in components}
+    for route, vertical, toward_upstream in _axial_routes(ink, verified, components):
+        nodes_from_tip = list(reversed(route["component_ids"]))
         axis = 0 if vertical else 1
         shaft = route["path"][-1][1]  # The walker reports paths in transposed space for vertical runs.
-        for target, source in zip(downstream, downstream[1:]):
-            edges = pairs[frozenset((source, target))]
-            if len(edges) != 1 or target in stops:
+        for near, far in zip(nodes_from_tip, nodes_from_tip[1:]):
+            edges = pairs[frozenset((near, far))]
+            if (len(edges) != 1 or near in stops
+                    or _has_symbol_branch(ink, boxes[near], ports.get(near, ()), shaft, vertical, slack)):
                 break
             edge = edges[0]
-            if (edge["kind"] not in {"pipe", "direct_undirected"}
+            if (edge["kind"] not in PROCESS_LINE_KINDS
                     or any(abs(p[axis] - shaft) > slack + 2 for p in edge["path"])):
                 break
+            source = far if toward_upstream else near
             direction = "source_to_target" if edge["source"] == source else "target_to_source"
             inferred[edge["id"]][route["arrow_id"]] = direction
-            if source in stops:
-                break
     for edge in connections:
         observed = direct[edge["id"]]
-        votes = {**inferred[edge["id"]], **observed}
+        carried = inferred[edge["id"]]
+        arrow_ids = list(dict.fromkeys([*observed, *carried]))
+        votes = set(observed.values()) | set(carried.values())
         edge["direction"] = "unknown"
+        edge.pop("direction_evidence", None)
         if not votes:
+            if ambiguous[edge["id"]]:
+                edge["direction_evidence"] = {"basis": "ambiguous", "arrow_ids": sorted(ambiguous[edge["id"]])}
             continue
-        if len(set(votes.values())) > 1:
+        if len(votes) > 1:
             basis = "conflict"
         else:
             basis = "on_edge" if observed else "run"
-            edge["direction"] = next(iter(votes.values()))
-        edge["direction_evidence"] = {"basis": basis, "arrow_ids": list(votes)}
+            edge["direction"] = next(iter(votes))
+        edge["direction_evidence"] = {"basis": basis, "arrow_ids": arrow_ids}

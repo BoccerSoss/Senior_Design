@@ -10,9 +10,11 @@
 
 In **V2**, **Read with symbol reference** uses checked symbol types and locations on matching PNGs and reads the printed names from the image. The saved result appears under **V2 · Reference-assisted**. The **V3** option displays the saved trace’s provider, such as **V3 · Local model** or **V3 · ChatGPT subscription**. The comparison benchmark uses image-only runs.
 
-Select a detected component to see the orange dashed box around the printed name used by OCR when that location is available. In **Connections**, select a pair to see whether the arrowhead was found on the segment or elsewhere on its uninterrupted run. The highlighted tip marks the observed position. A branch, a break in the line, or conflicting tips can leave the direction unknown. Unnamed junctions can still bound a run.
+In **Drawing → V3**, click a symbol or a row under **Components** to see its equipment tag, type, and AI evidence. The orange dashed box marks the text region when OCR returned one. Edit the tag or type and select **Save correction**. Select **Mark reviewed** to acknowledge the item after checking it. The original AI prediction stays available in the evidence panel. The matrix and grid use the saved corrections.
 
-**View saved trace** reopens a previous result immediately. Repeating a local trace reuses the result when the PNG, model and workbench version match. Select **Recompute the local trace from the image** for a fresh timing. Hosted tracing sends one new request each time you choose **Trace drawing**. The demo runs at `http://127.0.0.1:8766` and stores your workspace in `runs/v3`.
+Open **Review** on the right to see flagged observations such as unread names, unknown types, and ambiguous or unsupported arrow claims. Select a flagged row to inspect and correct it directly. In **Connections**, select a line to see whether the arrowhead was on the segment or elsewhere on its uninterrupted run. One terminal arrow in `A—B—C→` establishes both `A→B` and `B→C`. You can correct the direction and connection type from that view. The direction remains unknown when V3 cannot link a usable arrow to the run.
+
+**View saved trace** reopens a previous result immediately. Repeating a local trace reuses the result when the PNG, model and workbench version match. Select **Recompute the local trace from the image** for a fresh timing. To replace a trace with saved reviews, select the confirmation in the trace dialog. A successful replacement archives the reviewed result in the workspace database. Hosted tracing sends a new request when you choose **Trace drawing**. The demo runs at `http://127.0.0.1:8766` and stores your workspace in `runs/v3`.
 
 ## Find equipment on the grid
 

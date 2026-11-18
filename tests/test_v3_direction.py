@@ -1,14 +1,16 @@
 """Direction evidence must stop at the next equipment pair, crossing or contradiction."""
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 import unittest
 
 from PIL import Image, ImageDraw
 
-from aip.v3.vision import _check_vision_routes, extract_local_connections
+from aip.v3.vision import _check_vision_routes, extract_local_connections, refresh_trace_directions
 
 
-def drawing(*, reverse=False, vertical=False, branch=None, gap=False, opposing=False, on_edge=False):
+def drawing(*, reverse=False, vertical=False, branch=None, gap=False, opposing=False,
+            on_edge=False, tip_at=None, extra_port=None):
     image = Image.new("L", (260, 100), "white")
     draw = ImageDraw.Draw(image)
     components = [{"id": str(i), "type": "valve", "bbox": [x, 32, x + 20, 52]}
@@ -17,7 +19,7 @@ def drawing(*, reverse=False, vertical=False, branch=None, gap=False, opposing=F
         l, t, r, b = node["bbox"]
         draw.rectangle((l, t, r - 1, b - 1), outline="black")
     draw.line((10, 42, 218, 42), fill="black")
-    heads = [(125 if on_edge else 218, 1)]
+    heads = [(tip_at if tip_at is not None else 125 if on_edge else 218, 1)]
     if opposing:
         heads.append((10, -1))
     for tip, sign in heads:
@@ -27,6 +29,11 @@ def drawing(*, reverse=False, vertical=False, branch=None, gap=False, opposing=F
         draw.line((183, 42, 190, 42), fill="white")
     if branch is not None:
         draw.line((branch, 42, branch, 63), fill="black")
+    if extra_port == "detached":
+        draw.line((96, 51, 104, 51), fill="white")
+        draw.line((100, 52, 100, 72), fill="black")
+    elif extra_port == "connected":
+        draw.line((100, 42, 100, 72), fill="black")
     if reverse:
         image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         for node in components:
@@ -73,6 +80,14 @@ class DirectionTests(unittest.TestCase):
         result = trace(branch=70)
         self.assertEqual([e["direction"] for e in result["connections"]], ["unknown", "source_to_target"])
 
+    def test_run_ignores_detached_ink_but_stops_at_connected_symbol_port(self):
+        detached = trace(extra_port="detached")
+        self.assertEqual([e["direction"] for e in detached["connections"]],
+                         ["source_to_target", "source_to_target"])
+        connected = trace(extra_port="connected")
+        self.assertEqual([e["direction"] for e in connected["connections"]],
+                         ["unknown", "source_to_target"])
+
     def test_conflicting_terminal_arrows_are_retained_without_claiming_flow(self):
         result = trace(opposing=True)
         self.assertEqual(len(result["arrows"]), 2)
@@ -89,6 +104,37 @@ class DirectionTests(unittest.TestCase):
         for vertical in (False, True):
             result = trace(on_edge=True, branch=138, vertical=vertical)
             self.assertEqual(result["connections"][1]["direction"], "unknown")
+
+    def test_arrow_orients_the_continuous_downstream_run(self):
+        for reverse, vertical in ((False, False), (True, True)):
+            with self.subTest(reverse=reverse, vertical=vertical):
+                result = trace(tip_at=72, reverse=reverse, vertical=vertical)
+                self.assertEqual([edge["direction"] for edge in result["connections"]],
+                                 ["source_to_target", "source_to_target"])
+                self.assertEqual([edge["direction_evidence"]["basis"] for edge in result["connections"]],
+                                 ["on_edge", "run"])
+        result = trace(tip_at=72, branch=126)
+        self.assertEqual([edge["direction"] for edge in result["connections"]], ["source_to_target", "unknown"])
+
+    def test_saved_direction_recheck_uses_original_pixels_without_changing_trace(self):
+        image, components = drawing(tip_at=72)
+        with TemporaryDirectory() as scratch:
+            path = Path(scratch) / "test.png"
+            image.save(path)
+            saved = extract_local_connections(path, components)
+            saved.update(created_at="saved")
+            saved["connections"][1].update(direction="unknown")
+            saved["connections"][1].pop("direction_evidence")
+            with patch("aip.v3.vision.extract_provider") as provider:
+                checked = refresh_trace_directions(saved, path.read_bytes())
+                provider.assert_not_called()
+            with self.assertRaisesRegex(ValueError, "different drawing"):
+                refresh_trace_directions(saved, b"mismatched PNG")
+        self.assertEqual(checked["created_at"], "saved")
+        self.assertEqual(checked["components"], saved["components"])
+        self.assertEqual([e["id"] for e in checked["connections"]], [e["id"] for e in saved["connections"]])
+        self.assertEqual(checked["connections"][1]["direction"], "source_to_target")
+        self.assertEqual(saved["connections"][1]["direction"], "unknown")
 
     def test_hosted_terminal_observation_uses_only_verified_adjacent_edges(self):
         image, components = drawing()

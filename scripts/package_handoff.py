@@ -29,7 +29,7 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 files = sorted(set(files))
-manifest = {"version": "3.3.0", "scope": "Public prototype source, benchmark summaries and demo assets",
+manifest = {"version": "3.4.0", "scope": "Public prototype source, benchmark summaries and demo assets",
             "files": [{"path": p.relative_to(root).as_posix(), "sha256": sha(p), "bytes": p.stat().st_size} for p in files]}
 manifest_path = dist / "handoff_manifest.json"
 manifest_path.write_text(json.dumps(manifest,indent=2)+"\n",encoding="utf-8")

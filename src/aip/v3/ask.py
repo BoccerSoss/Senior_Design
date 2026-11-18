@@ -22,11 +22,13 @@ def _sheet_facts(sheet, matrix, grid_layout):
 
     title = sheet.get("drawing_number") or sheet.get("title") or sheet_id
     stats = matrix["stats"]
+    review_summary = (f"{stats['review_items']} observations are flagged in the Review tab."
+                      if "review_items" in stats else
+                      f"{stats['unreviewed_connections']} included connection observations await review.")
     add("sheet", sheet_id, title,
         f"{title} has {stats['components']} recorded equipment items and "
         f"{stats['direct_connections']} direct equipment connections in its matrix. "
-        f"{stats['unread_labels']} equipment names are unread. "
-        f"{stats['unreviewed_connections']} included connection observations await review.")
+        f"{stats['unread_labels']} equipment names are unread. " + review_summary)
 
     grids = {item["component_id"]: item["coordinate"] for item in equipment_positions(sheet, grid_layout)["coordinates"]}
     labels = {}

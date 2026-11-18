@@ -1,6 +1,7 @@
 """Image-only prediction of direct equipment connections for the workbench and benchmark."""
 from __future__ import annotations
 
+from copy import deepcopy
 from hashlib import sha256
 from io import BytesIO
 from itertools import combinations, groupby, product
@@ -12,7 +13,7 @@ from PIL import Image, ImageChops
 
 from ..classical import extract_image
 from ..v2.providers import MAX_IMAGE_BYTES, ProviderError, extract_provider
-from .direction import arrow_direction, assign_directions, raster_arrows
+from .direction import PROCESS_LINE_KINDS, arrow_direction, assign_directions, raster_arrows
 from .line_model import CLASSES, CONTINUOUS, EXAMPLES_PER_CLASS, MODEL_ID, TRAINING_SEED, classify_stroke
 
 
@@ -157,7 +158,7 @@ def extract_local_connections(image_path, classical_components=None, classical_a
                 "target": target_id, "kind": "direct_undirected", "direction": "unknown",
                 "path": [list(point) for point in path], "review_status": "unreviewed",
                 "evidence": f"Stroke model accepted each leg between visible symbol contacts ({coverage:.0%} sampled ink).",
-                "uncertainty": "Process-line type and any observed flow direction require drawing review."})
+                "uncertainty": "The stroke model identifies continuity. Line service is unspecified."})
     arrows = raster_arrows(ink, components, connections, ports, classical_arrows or [])
     slack = max(2, min(8, round(min(ink.size) * 0.002)))
     assign_directions(ink, components, connections, arrows, ports, slack)
@@ -253,25 +254,68 @@ def _check_vision_routes(result, ink):
             result["uncertainties"].append(f"{edge['id']}: {reason}")
         else:
             accepted.append(edge)
-    by_edge = {edge["id"]: edge for edge in accepted}
-    for arrow in result["arrows"]:
-        edge_id = arrow.get("connection_id")
-        arrow["verified"] = (all(_near_box(p, arrow["bbox"], slack) for p in (arrow["tail"], arrow["tip"]))
-                             and _has_arrow_wings(arrow, ink))
-        if edge_id is not None:
-            if (edge_id not in by_edge or not arrow["verified"] or
-                    not arrow_direction(arrow, by_edge[edge_id]["path"], slack)):
+    result.update(connections=accepted, excluded_connections=excluded)
+    claims = {e["id"]: e["direction"] for e in accepted if e["direction"] != "unknown"}
+    _resolve_trace_directions(result, ink, claims, fresh_provider=True)
+    return result
+
+
+_LEGACY_ARROW_WARNING = ": The proposed direction lacked matching arrow evidence."
+
+
+def _resolve_trace_directions(result, ink, claims, *, fresh_provider=False):
+    """Resolve supported process-line directions from the retained paths and raster."""
+    components, connections = result["components"], result["connections"]
+    slack = max(2, min(8, round(min(ink.size) * 0.002)))
+    ports = {c["id"]: _ports(c["bbox"], ink) for c in components}
+    by_edge = {edge["id"]: edge for edge in connections if edge["kind"] in PROCESS_LINE_KINDS}
+    arrows = result.get("arrows", [])
+    if fresh_provider:
+        for arrow in arrows:
+            edge_id = arrow.get("connection_id")
+            arrow["verified"] = (all(_near_box(p, arrow["bbox"], slack) for p in (arrow["tail"], arrow["tip"]))
+                                 and _has_arrow_wings(arrow, ink))
+            if edge_id is not None and (edge_id not in by_edge or not arrow["verified"]
+                                        or not arrow_direction(arrow, by_edge[edge_id]["path"], slack)):
                 arrow["proposed_connection_id"] = arrow.pop("connection_id")
                 arrow["verified"] = False
                 result["uncertainties"].append(f"{arrow['id']}: Arrow could not be aligned with its proposed line.")
-    ports = {c["id"]: _ports(c["bbox"], ink) for c in result["components"]} if any(
-        a["verified"] for a in result["arrows"]) else {}
-    claimed = {edge["id"]: edge["direction"] for edge in accepted}
-    assign_directions(ink, result["components"], accepted, result["arrows"], ports, slack)
-    for edge in accepted:
-        if claimed[edge["id"]] != "unknown" and claimed[edge["id"]] != edge["direction"]:
-            result["uncertainties"].append(f"{edge['id']}: The proposed direction lacked matching arrow evidence.")
-    result.update(connections=accepted, excluded_connections=excluded)
+    arrows = raster_arrows(ink, components, connections, ports, (), arrows)
+    assign_directions(ink, components, connections, arrows, ports, slack)
+    result["arrows"] = arrows
+    for edge in by_edge.values():
+        if edge["id"] not in claims:
+            continue
+        proposed = claims[edge["id"]]
+        if proposed is not None and proposed == edge["direction"]:
+            continue
+        if edge["direction"] == "unknown":
+            evidence = edge.setdefault("direction_evidence", {"basis": "unsupported", "arrow_ids": []})
+            if proposed is not None:
+                evidence["proposed_direction"] = proposed
+        if fresh_provider:
+            result["uncertainties"].append(edge["id"] + _LEGACY_ARROW_WARNING)
+
+
+def refresh_trace_directions(trace, image_bytes):
+    """Recheck the saved trace's arrow evidence on its original PNG without invoking a model."""
+    image_info = trace.get("image", {})
+    expected_hash = image_info.get("sha256")
+    if expected_hash and sha256(image_bytes).hexdigest() != expected_hash:
+        raise ValueError("The saved trace belongs to a different drawing image.")
+    with Image.open(BytesIO(image_bytes)) as image:
+        size = image_info.get("width"), image_info.get("height")
+        if image.format != "PNG" or (None not in size and image.size != size):
+            raise ValueError("The saved trace requires its original PNG dimensions.")
+        ink = image.convert("L").point(lambda value: 255 if value < 160 else 0)
+    result = deepcopy(trace)
+    claims = {warning[:-len(_LEGACY_ARROW_WARNING)]: None for warning in trace.get("uncertainties", [])
+              if warning.endswith(_LEGACY_ARROW_WARNING)}
+    for edge in trace["connections"]:
+        proposed = edge.get("direction_evidence", {}).get("proposed_direction")
+        if proposed is not None:
+            claims[edge["id"]] = proposed
+    _resolve_trace_directions(result, ink, claims)
     return result
 
 

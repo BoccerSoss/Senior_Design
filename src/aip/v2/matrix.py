@@ -37,7 +37,7 @@ def _ref(node):
     return {"sheet_id": node["sheet_id"], "component_id": node["component_id"]}
 
 
-def build_matrix(state, facility_id, sheet_id=None):
+def build_matrix(state, facility_id, sheet_id=None, *, include_unreviewed_warnings=True):
     """Return labeled binary direct adjacency and explicit excluded observations.
 
     Pass the selected ``sheet_id`` for the normal drawing workflow. Explicitly
@@ -229,9 +229,9 @@ def build_matrix(state, facility_id, sheet_id=None):
         values[first][second] = values[second][first] = 1
     stats.update(components=len(nodes), direct_connections=len(pairs))
     warnings = [item["message"] for item in diagnostics if item["severity"] != "info"]
-    if stats["unreviewed_components"]:
+    if include_unreviewed_warnings and stats["unreviewed_components"]:
         warnings.append(f"{stats['unreviewed_components']} equipment observations still require review.")
-    if stats["unreviewed_connections"]:
+    if include_unreviewed_warnings and stats["unreviewed_connections"]:
         warnings.append(f"{stats['unreviewed_connections']} included connection observations still require review.")
     return {"scope": {"kind": "sheet" if sheet_id is not None else "facility", "facility_id": facility_id,
                       "sheet_id": sheet_id, "sheet_ids": [sheet["id"] for sheet in sheets], "cross_sheet": False},

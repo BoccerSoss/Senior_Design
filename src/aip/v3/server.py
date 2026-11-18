@@ -20,7 +20,13 @@ from . import VERSION
 from .ask import ask_drawing
 from .beginner import preload_beginner
 from .plan import PlanClient
-from .vision import MODEL_ID, extract_connections
+from .review import review_queue
+from .vision import MODEL_ID, extract_connections, refresh_trace_directions
+
+REVIEW_FIELDS = {"component": ("tag", "type"), "connection": ("direction", "kind")}
+DIRECTIONS = {"source_to_target", "target_to_source", "bidirectional", "unknown"}
+LINE_KINDS = {"pipe", "direct_undirected", "signal", "unknown"}
+DIRECTION_REVISION = 2
 
 
 @lru_cache(maxsize=512)
@@ -81,6 +87,9 @@ class Application(BaseApplication):
         with self.store.db:
             self.store.db.execute("CREATE TABLE IF NOT EXISTS v3_traces "
                                   "(sheet_id TEXT PRIMARY KEY, result TEXT NOT NULL)")
+            self.store.db.execute("CREATE TABLE IF NOT EXISTS v3_reviewed_traces "
+                                  "(sheet_id TEXT NOT NULL, trace_id TEXT NOT NULL, result TEXT NOT NULL, "
+                                  "PRIMARY KEY (sheet_id, trace_id))")
         self.beginner_collection = preload_beginner(self.store)
 
     def action(self, body):
@@ -164,20 +173,93 @@ class Application(BaseApplication):
 
     def latest(self, sheet_id):
         self.store.sheet(sheet_id)
-        return self._stored_trace(sheet_id)
+        return self.trace_result(self._stored_trace(sheet_id))
+
+    @staticmethod
+    def trace_result(trace):
+        if trace is None:
+            return None
+        return {**trace, "review_revision": trace.get("review_revision", 0), "review": review_queue(trace)}
 
     def _stored_trace(self, sheet_id):
         with self.store.lock:
             row = self.store.db.execute("SELECT result FROM v3_traces WHERE sheet_id=?", (sheet_id,)).fetchone()
-        return json.loads(row[0]) if row else None
+            if not row:
+                return None
+            trace = json.loads(row[0])
+            if trace.get("direction_revision") == DIRECTION_REVISION or trace.get("review_revision"):
+                return trace
+            try:
+                image = (self.store.directory / "images" / f"{sheet_id}.png").read_bytes()
+                refreshed = refresh_trace_directions(trace, image)
+            except (OSError, ValueError):
+                return trace
+            refreshed["direction_revision"] = DIRECTION_REVISION
+            signature = refreshed.get("local_input")
+            if signature and signature.get("version") == "3.3.0" and signature.get("sha256") == sha256(image).hexdigest():
+                signature["version"] = VERSION
+            with self.store.db:
+                self.store.db.execute("UPDATE v3_traces SET result=? WHERE sheet_id=?",
+                                      (json.dumps(refreshed, allow_nan=False), sheet_id))
+            return refreshed
+
+    def review_trace(self, body):
+        sheet_id = self.store.sheet(body.get("sheet_id"))["id"]
+        kind = body.get("kind")
+        fields = REVIEW_FIELDS.get(kind) if isinstance(kind, str) else None
+        changes = body.get("changes")
+        if not fields or not isinstance(changes, dict) or set(changes) - set(fields):
+            raise ValueError("Choose an equipment or connection field to review.")
+        revision = body.get("revision")
+        if type(revision) is not int or revision < 0:
+            raise ValueError("Send the revision of the displayed V3 trace.")
+        status = body.get("status")
+        if status not in ("confirmed", "unreviewed"):
+            raise ValueError("Choose a valid review status.")
+        normalized = {}
+        for name, value in changes.items():
+            if not isinstance(value, str) or len(value) > 250 or (value and not value.isprintable()):
+                raise ValueError("Enter short, printable text for the correction.")
+            normalized[name] = value.strip()
+        if "type" in normalized and not normalized["type"]:
+            normalized["type"] = "unknown"
+        if "direction" in normalized and normalized["direction"] not in DIRECTIONS:
+            raise ValueError("Choose a valid observed direction.")
+        if "kind" in normalized and normalized["kind"] not in LINE_KINDS:
+            raise ValueError("Choose a supported line type.")
+
+        with self._lock, self.store.lock, self.store.db:
+            if sheet_id in self._in_flight:
+                raise Conflict("Wait for the new trace to finish before reviewing this drawing.")
+            trace = self._stored_trace(sheet_id)
+            if (not trace or trace.get("created_at") != body.get("trace_id")
+                    or trace.get("review_revision", 0) != revision):
+                raise Conflict("The displayed V3 trace changed. Refresh it before saving.")
+            collection = "components" if kind == "component" else "connections"
+            item = next((item for item in trace[collection] if item["id"] == body.get("id")), None)
+            if item is None:
+                raise ValueError("The item was not found in the displayed trace.")
+            changed = any(item.get(key) != value for key, value in normalized.items())
+            if not changed and item.get("review_status", "unreviewed") == status:
+                return self.trace_result(trace)
+            evidence_fields = (*fields, "review_status", "direction_evidence")
+            item.setdefault("ai_observation", {key: item[key] for key in evidence_fields if key in item})
+            if "direction" in normalized and normalized["direction"] != item.get("direction", "unknown"):
+                item["direction_evidence"] = {"basis": "reviewed", "arrow_ids": []}
+            item.update(normalized, review_status=status)
+            trace["review_revision"] = revision + 1
+            self.store.db.execute("UPDATE v3_traces SET result=? WHERE sheet_id=?",
+                                  (json.dumps(trace, allow_nan=False), sheet_id))
+        return self.trace_result(trace)
 
     def trace(self, body):
         sheet = self.store.sheet(body.get("sheet_id"))
         sheet_id = sheet["id"]
         settings = self.require_profile(body.get("provider"), "trace", body.get("model"))
         refresh = body.get("refresh", False)
-        if not isinstance(refresh, bool):
-            raise ValueError("The refresh flag must be true or false.")
+        replace_reviewed = body.get("replace_reviewed", False)
+        if not isinstance(refresh, bool) or not isinstance(replace_reviewed, bool):
+            raise ValueError("The refresh and replace-reviewed flags must be true or false.")
         with self._lock:
             if sheet_id in self._in_flight:
                 raise Conflict("A connection trace is already running for this drawing.")
@@ -185,21 +267,27 @@ class Application(BaseApplication):
         try:
             image = (self.store.directory / "images" / f"{sheet_id}.png").read_bytes()
             local = settings["provider"] == "local-ml"
+            previous = self._stored_trace(sheet_id)
             if local:
                 signature = {"sha256": sha256(image).hexdigest(), "model": settings["model"], "version": VERSION}
-                if not refresh:
-                    previous = self._stored_trace(sheet_id)
-                    if previous and previous.get("local_input") == signature:
-                        return {**previous, "reused": True}
+                if not refresh and previous and previous.get("local_input") == signature:
+                    return {**self.trace_result(previous), "reused": True}
+            has_reviews = previous and previous.get("review_revision", 0)
+            if has_reviews and not replace_reviewed:
+                raise Conflict("This trace has saved reviews. Confirm that you want to replace it before tracing again.")
             start = perf_counter()
             trace = extract_connections(settings, image, "image/png", sheet["width"], sheet["height"])
-            trace.update(sheet_id=sheet_id, created_at=now(), duration_seconds=round(perf_counter() - start, 3))
+            trace.update(sheet_id=sheet_id, created_at=now(), duration_seconds=round(perf_counter() - start, 3),
+                         direction_revision=DIRECTION_REVISION)
             if local:
                 trace["local_input"] = signature
             encoded = json.dumps(trace, allow_nan=False)
             with self.store.lock, self.store.db:
+                if has_reviews:
+                    self.store.db.execute("INSERT INTO v3_reviewed_traces VALUES (?,?,?)",
+                                          (sheet_id, previous["created_at"], json.dumps(previous, allow_nan=False)))
                 self.store.db.execute("INSERT OR REPLACE INTO v3_traces VALUES (?,?)", (sheet_id, encoded))
-            return trace
+            return self.trace_result(trace)
         finally:
             with self._lock:
                 self._in_flight.remove(sheet_id)
@@ -217,9 +305,11 @@ class Application(BaseApplication):
             raise ValueError("Trace this drawing with V3 first.")
         sheet.update(components=trace["components"], connections=trace["connections"])
         state = {"facilities": [{"id": sheet["facility_id"]}], "sheets": [sheet]}
-        matrix = build_matrix(state, sheet["facility_id"], sheet_id)
+        matrix = build_matrix(state, sheet["facility_id"], sheet_id, include_unreviewed_warnings=False)
         matrix["scope"].update(method="v3", model=trace["model"], provider=trace["provider"])
         matrix["arrows"] = trace.get("arrows", [])
+        matrix["review"] = trace["review"]
+        matrix["stats"]["review_items"] = len(trace["review"])
         return sheet, matrix
 
     def matrix_query(self, query):
@@ -294,6 +384,8 @@ class Handler(BaseHandler):
             self.send(self.app.connect_profile(body))
         elif path == "/api/v3/trace":
             self.send({"trace": self.app.trace(body)})
+        elif path == "/api/v3/review":
+            self.send({"trace": self.app.review_trace(body)})
         elif path == "/api/v3/ask":
             self.send(self.app.ask_selected(body))
         else:

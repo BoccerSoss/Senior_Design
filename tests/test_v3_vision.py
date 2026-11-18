@@ -115,6 +115,16 @@ class VisionRouteTests(unittest.TestCase):
         result = self.run_model(arrow={"id": "ar", "bbox": [55, 15, 75, 25], "tail": [55, 19],
                                       "tip": [65, 19], "connection_id": "e"})
         self.assertEqual(result["connections"][0]["direction"], "unknown")
+        self.assertEqual(result["connections"][0]["direction_evidence"], {
+            "basis": "unsupported", "arrow_ids": [], "proposed_direction": "source_to_target"})
+
+    def test_visible_raster_arrow_can_supply_missing_provider_landmark(self):
+        result = self.run_model(draw_arrow=True)
+        self.assertEqual(result["connections"][0]["direction"], "source_to_target")
+        self.assertEqual(result["connections"][0]["direction_evidence"]["basis"], "on_edge")
+        arrow = result["arrows"][0]
+        self.assertEqual(arrow["origin"], "raster")
+        self.assertEqual(arrow["connection_id"], result["connections"][0]["id"])
 
     def test_shortcut_and_missing_line_remain_outside_graph(self):
         for result in (self.run_model(add_gap=True), self.run_model(include_middle=True)):
