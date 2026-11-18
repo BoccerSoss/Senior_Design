@@ -15,6 +15,17 @@ REFERENCE_DIR = ROOT / "data" / "drawing_references"
 REFERENCE_METHOD = "drawing-reference"
 
 
+def reference_image_keys(library=REFERENCE_DIR):
+    """Index the original and prepared PNG identities for the workbench chooser."""
+    keys = set()
+    for path in library.glob("*.json"):
+        image = load_json(path)["image"]
+        for key in ("sha256", "source_sha256"):
+            if image.get(key):
+                keys.add((image[key], image["width"], image["height"]))
+    return keys
+
+
 def matching_reference(drawing, library=REFERENCE_DIR):
     if not library.is_dir():
         return None

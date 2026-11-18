@@ -11,10 +11,25 @@ from unittest.mock import patch
 
 from PIL import Image, ImageDraw, ImageFont
 
-from aip.windows_ocr import OCRUnavailable, _original_box, recognize_image, recognize_label_boxes, recognize_tag_crops
+from aip.windows_ocr import OCRUnavailable, _check_suffix_votes, _original_box, recognize_image, recognize_label_boxes, recognize_tag_crops
 
 
 class WindowsOCRAvailabilityTests(unittest.TestCase):
+    def test_similar_prefix_ink_cannot_shorten_an_already_observed_id(self):
+        # OCR can repeatedly merge two neighboring digits. A matching prefix on
+        # another label is not sufficient evidence to shorten the numeric ID.
+        reference = [{"component_id":str(i), "observed_tag":f"ZX-{i}80"} for i in range(3)]
+        for previous, expected in (("ZX-1501B", "ZX-1501B"), ("W-77Y/B", "ZX-501B")):
+            record = {"component_id":"target", "observed_tag":previous,
+                      "glyph_alternatives":[{"text":previous, "mismatch":0.28}],
+                      "crop_passes":[{"text":"3-501B"} for _ in range(4)]}
+            image = Image.new("L", (14, 8), 255)
+            with self.subTest(previous=previous), tempfile.TemporaryDirectory() as temp, \
+                    patch("aip.windows_ocr._prefix_signature", return_value=(2.0, bytes(16))), \
+                    patch("aip.windows_ocr.batch_read_label_rows"):
+                _check_suffix_votes([*reference, record], [image]*4, Path(temp), timeout=2)
+                self.assertEqual(record["observed_tag"], expected)
+
     def test_documented_clockwise_box_rotation(self):
         box, polygon = _original_box([70,40,90,60],90,100,100)
         self.assertEqual(box,[40,70,60,90])

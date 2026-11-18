@@ -6,10 +6,45 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from aip.baseline import extract_image
+from aip.baseline import _candidate_boxes, _ink_components, extract_image
 
 
 class BaselineControls(unittest.TestCase):
+    def test_same_columns_on_separate_rows_yield_individual_symbol_boxes(self):
+        image = Image.new("L", (720, 490))
+        draw = ImageDraw.Draw(image)
+        for y in (110, 295):
+            draw.line((80, y, 597, y), fill=1, width=3)
+            for x in (216, 418):
+                draw.polygon([(x-24, y-16), (x+24, y+16), (x+24, y-16), (x-24, y+16)],
+                             outline=1, width=3)
+        draw.line((80, 110, 80, 295), fill=1, width=3)
+        network, = _ink_components(image.tobytes(), *image.size)
+        boxes = _candidate_boxes(network[0], image.width)
+        self.assertEqual(len(boxes), 4)
+        for x in (216, 418):
+            for y in (110, 295):
+                expected = (x-24, y-16, x+25, y+17)
+                self.assertTrue(any(max(abs(a-b) for a, b in zip(box, expected)) <= 2 for box in boxes))
+
+    def test_large_standalone_rectangle_survives_pipe_stroke_removal(self):
+        image = Image.new("L", (700, 450))
+        ImageDraw.Draw(image).rectangle((50, 80, 340, 200), outline=1, width=3)
+        network, = _ink_components(image.tobytes(), *image.size)
+        self.assertEqual([[50, 80, 341, 201]], _candidate_boxes(network[0], image.width))
+
+    def test_connected_ink_spans_follow_diagonals_and_stop_at_row_boundaries(self):
+        image = Image.new("L", (120, 120))
+        draw = ImageDraw.Draw(image)
+        draw.line((20, 10, 59, 49), fill=255)
+        draw.line((100, 70, 119, 70), fill=255)
+        draw.line((0, 71, 0, 110), fill=255)
+        groups = list(_ink_components(image.tobytes(), *image.size))
+        self.assertEqual(len(groups), 1)
+        points, box = groups[0]
+        self.assertEqual(box, (20, 10, 60, 50))
+        self.assertEqual(set(points), {(20 + i, 10 + i) for i in range(40)})
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)

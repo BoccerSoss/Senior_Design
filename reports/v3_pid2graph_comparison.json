@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-11-17T21:10:31.010657+00:00",
+  "cohort": "PID2Graph OPEN100 whole-sheet pilot",
+  "source_url": "https://zenodo.org/records/14803338",
+  "review_status": "Independent published GraphML; derived undirected solid-line equipment pairs. Degree-two line marks are transparent. Branches and sheet boundaries stop a trace. The source has no tag truth or process/signal semantics for solid lines.",
+  "manifest_sha256": "64d8a86bd34a6f64fa90f72ee2e42cd432ad8a8e0124dae1482caa5014c70600",
+  "ai_method": "local-ml",
+  "model": "synthetic-stroke-centroids-v1",
+  "baseline_method": "V2 Windows OCR and geometry with source-specific lookup disabled",
+  "target_f1": 0.9,
+  "drawing_count": 3,
+  "completed_pairs": 3,
+  "metric": "Micro-F1 for direct undirected equipment edges. Both endpoints must match symbol boxes at IoU >= 0.50 and their normalized printed tags for named_edges.",
+  "iou_threshold": 0.5,
+  "methods": {
+    "baseline": {
+      "named_edges": null,
+      "localized_edges": {
+        "tp": 0,
+        "fp": 35,
+        "fn": 125,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "gap_to_target": 0.9
+      },
+      "localized_nodes": {
+        "tp": 6,
+        "fp": 59,
+        "fn": 213,
+        "precision": 0.09230769230769231,
+        "recall": 0.0273972602739726,
+        "f1": 0.04225352112676056,
+        "gap_to_target": 0.8577464788732394
+      },
+      "endpoint_coverage": {
+        "reference_pairs": 125,
+        "both_endpoints_located": 0,
+        "both_endpoints_located_and_named": null
+      }
+    },
+    "ai": {
+      "named_edges": null,
+      "localized_edges": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 125,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "gap_to_target": 0.9
+      },
+      "localized_nodes": {
+        "tp": 6,
+        "fp": 59,
+        "fn": 213,
+        "precision": 0.09230769230769231,
+        "recall": 0.0273972602739726,
+        "f1": 0.04225352112676056,
+        "gap_to_target": 0.8577464788732394
+      },
+      "endpoint_coverage": {
+        "reference_pairs": 125,
+        "both_endpoints_located": 0,
+        "both_endpoints_located_and_named": null
+      }
+    }
+  },
+  "delta_f1": null,
+  "sheets": [
+    {
+      "id": "open100-0",
+      "image_sha256": "2451fbe9b8d0494a822901493cfbf1d2656f0bd7678f0f25bb2266b5e78a7dc9",
+      "inference_sha256": "95bf15d93bbe96a0f1926429ba78a503a1f5a2e72e0c508277161dfbf89efdac",
+      "methods": {
+        "baseline": {
+          "named_edges": null,
+          "localized_edges": {
+            "tp": 0,
+            "fp": 12,
+            "fn": 50,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "gap_to_target": 0.9
+          },
+          "endpoint_coverage": {
+            "reference_pairs": 50,
+            "both_endpoints_located": 0,
+            "both_endpoints_located_and_named": null
+          },
+          "localized_nodes": {
+            "tp": 2,
+            "fp": 12,
+            "fn": 91,
+            "precision": 0.14285714285714285,
+            "recall": 0.021505376344086023,
+            "f1": 0.037383177570093455,
+            "gap_to_target": 0.8626168224299066
+          }
+        },
+        "ai": {
+          "named_edges": null,
+          "localized_edges": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 50,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0,
+            "gap_to_target": 0.9
+          },
+          "endpoint_coverage": {
+            "reference_pairs": 50,
+            "both_endpoints_located": 0,
+            "both_endpoints_located_and_named": null
+          },
+          "localized_nodes": {
+            "tp": 2,
+            "fp": 12,
+            "fn": 91,
+            "precision": 0.14285714285714285,
+            "recall": 0.021505376344086023,
+            "f1": 0.037383177570093455,
+            "gap_to_target": 0.8626168224299066
+          }
+        }
+      },
+      "failures": {},
+      "graphml_sha256": "e76bf9c6ddda990f114cf685924ce8482177723585410e8a338052c31373e6ed",
+      "annotation_sha256": "133364517a0ce9ed2b501c2196a7babe806e788eabc19351bc1a55b59ef131bb"
+    },
+    {
+      "id": "open100-1",
+      "image_sha256": "c8c696042bf7a16eb30e492a312af274c312a2049a7eb765ca82f84d3770eba8",
+      "inference_sha256": "3a5bb99cf4c65948f7f029c841c499e0c36f4286472060115c17bb0ac3c006e3",
+      "methods": {
+        "baseline": {
+          "named_edges": null,
+          "localized_edges": {
+            "tp": 0,
+            "fp": 17,
+            "fn": 14,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "gap_to_target": 0.9
+          },
+          "endpoint_coverage": {
+            "reference_pairs": 14,
+            "both_endpoints_located": 0,
+            "both_endpoints_located_and_named": null
+          },
+          "localized_nodes": {
+            "tp": 0,
+            "fp": 23,
+            "fn": 35,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "gap_to_target": 0.9
+          }
+        },
+        "ai": {
+          "named_edges": null,
+          "localized_edges": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 14,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0,
+            "gap_to_target": 0.9
+          },
+          "endpoint_coverage": {
+            "reference_pairs": 14,
+            "both_endpoints_located": 0,
+            "both_endpoints_located_and_named": null
+          },
+          "localized_nodes": {
+            "tp": 0,
+            "fp": 23,
+            "fn": 35,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "gap_to_target": 0.9
+          }
+        }
+      },
+      "failures": {},
+      "graphml_sha256": "00d8be4b21a1bed6ad2ced86504d945995d942c35dc356986e904d42c535933e",
+      "annotation_sha256": "bfb50d47e2a896ea518e99e6c00117594f1486cd246e6f8ac82ac2192866ab72"
+    },
+    {
+      "id": "open100-2",
+      "image_sha256": "8a36e9ae5064283ced701e17fab3a6ae74caee2ac07b8135cf65a8415077a46e",
+      "inference_sha256": "9484850bd911298322fd495ec2e4f22bd0ce19b63dfdcc25d6ce2e2b0e63a1e3",
+      "methods": {
+        "baseline": {
+          "named_edges": null,
+          "localized_edges": {
+            "tp": 0,
+            "fp": 6,
+            "fn": 61,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "gap_to_target": 0.9
+          },
+          "endpoint_coverage": {
+            "reference_pairs": 61,
+            "both_endpoints_located": 0,
+            "both_endpoints_located_and_named": null
+          },
+          "localized_nodes": {
+            "tp": 4,
+            "fp": 24,
+            "fn": 87,
+            "precision": 0.14285714285714285,
+            "recall": 0.04395604395604396,
+            "f1": 0.06722689075630252,
+            "gap_to_target": 0.8327731092436975
+          }
+        },
+        "ai": {
+          "named_edges": null,
+          "localized_edges": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 61,
+            "precision": null,
+            "recall": 0.0,
+            "f1": 0.0,
+            "gap_to_target": 0.9
+          },
+          "endpoint_coverage": {
+            "reference_pairs": 61,
+            "both_endpoints_located": 0,
+            "both_endpoints_located_and_named": null
+          },
+          "localized_nodes": {
+            "tp": 4,
+            "fp": 24,
+            "fn": 87,
+            "precision": 0.14285714285714285,
+            "recall": 0.04395604395604396,
+            "f1": 0.06722689075630252,
+            "gap_to_target": 0.8327731092436975
+          }
+        }
+      },
+      "failures": {},
+      "graphml_sha256": "5bbf6495acabfb8331e95c91a8b1f8b04aa3d7ed8b9b667bda7db32625736cca",
+      "annotation_sha256": "33641bc3f7f92ba5286eee0cb42fead046ce283e30833e6463f032ba04b96401"
+    }
+  ],
+  "warnings": [
+    "Equipment-name scoring requires complete reference transcriptions and a completed inference run."
+  ]
+}

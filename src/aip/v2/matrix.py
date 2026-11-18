@@ -37,7 +37,7 @@ def _ref(node):
     return {"sheet_id": node["sheet_id"], "component_id": node["component_id"]}
 
 
-def build_matrix(state, facility_id, sheet_id=None):
+def build_matrix(state, facility_id, sheet_id=None, *, include_unreviewed_warnings=True):
     """Return labeled binary direct adjacency and explicit excluded observations.
 
     Pass the selected ``sheet_id`` for the normal drawing workflow. Explicitly
@@ -187,13 +187,20 @@ def build_matrix(state, facility_id, sheet_id=None):
                 diagnose(code, reason, severity=severity, sheet=sheet, source=source, target=target, **metadata)
                 continue
             first, second = by_ref[(sheet["id"], source)], by_ref[(sheet["id"], target)]
+            if (connection.get("require_identified_endpoints") and connection.get("review_status") != "confirmed"
+                    and any(node["type"] == "unknown" and node["normalized_tag"] is None for node in (first, second))):
+                stats["excluded_connections"] += 1
+                diagnose("unidentified_equipment", "A traced line is held for review until both ends are identified as equipment.",
+                         sheet=sheet, source=source, target=target, **metadata)
+                continue
             if first["index"] > second["index"]:
                 first, second = second, first
             pair = first["index"], second["index"]
             review = connection.get("review_status", "unreviewed")
             observation = {"sheet_id": sheet["id"], "connection_id": str(connection_id),
+                           "source_component_id": source, "target_component_id": target,
                            "review_status": review, "kind": connection["kind"]}
-            for field in ("path", "direction", "evidence", "uncertainty"):
+            for field in ("path", "direction", "direction_evidence", "evidence", "uncertainty"):
                 if field in connection:
                     observation[field] = deepcopy(connection[field])
             if pair in pairs:
@@ -228,9 +235,9 @@ def build_matrix(state, facility_id, sheet_id=None):
         values[first][second] = values[second][first] = 1
     stats.update(components=len(nodes), direct_connections=len(pairs))
     warnings = [item["message"] for item in diagnostics if item["severity"] != "info"]
-    if stats["unreviewed_components"]:
+    if include_unreviewed_warnings and stats["unreviewed_components"]:
         warnings.append(f"{stats['unreviewed_components']} equipment observations still require review.")
-    if stats["unreviewed_connections"]:
+    if include_unreviewed_warnings and stats["unreviewed_connections"]:
         warnings.append(f"{stats['unreviewed_connections']} included connection observations still require review.")
     return {"scope": {"kind": "sheet" if sheet_id is not None else "facility", "facility_id": facility_id,
                       "sheet_id": sheet_id, "sheet_ids": [sheet["id"] for sheet in sheets], "cross_sheet": False},

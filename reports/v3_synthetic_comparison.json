@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-11-18T16:31:41.194497+00:00",
+  "cohort": "Four-component synthetic development drawing",
+  "source_url": null,
+  "review_status": "Computer-generated development example. This was used to design the V2 method and is outside the real-drawing comparison.",
+  "workbench_version": "3.6.0",
+  "manifest_sha256": "6c9e57a00aa407ccc8620d935ccdfad7cacd25a67917830a58c848e08d57f1ee",
+  "ai_method": "local-ml",
+  "model": "synthetic-stroke-centroids-v1",
+  "baseline_method": "V2 Windows OCR and geometry with source-specific lookup disabled",
+  "target_f1": 0.9,
+  "drawing_count": 1,
+  "completed_pairs": 1,
+  "metric": "Micro-F1 for direct undirected equipment edges. Both endpoints must match symbol boxes at IoU >= 0.50 and their normalized printed tags for named_edges.",
+  "iou_threshold": 0.5,
+  "methods": {
+    "baseline": {
+      "named_edges": {
+        "tp": 3,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "gap_to_target": -0.09999999999999998
+      },
+      "localized_edges": {
+        "tp": 3,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "gap_to_target": -0.09999999999999998
+      },
+      "localized_nodes": {
+        "tp": 4,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "gap_to_target": -0.09999999999999998
+      },
+      "endpoint_coverage": {
+        "reference_pairs": 3,
+        "both_endpoints_located": 3,
+        "both_endpoints_located_and_named": 3
+      },
+      "equipment_types": {
+        "predicted": 4,
+        "unknown": 0,
+        "expected_with_type": 4,
+        "located_with_type": 4,
+        "correct_family": 4
+      },
+      "printed_names": {
+        "expected": 4,
+        "located": 4,
+        "correct": 4
+      }
+    },
+    "ai": {
+      "named_edges": {
+        "tp": 3,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "gap_to_target": -0.09999999999999998
+      },
+      "localized_edges": {
+        "tp": 3,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "gap_to_target": -0.09999999999999998
+      },
+      "localized_nodes": {
+        "tp": 4,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "gap_to_target": -0.09999999999999998
+      },
+      "endpoint_coverage": {
+        "reference_pairs": 3,
+        "both_endpoints_located": 3,
+        "both_endpoints_located_and_named": 3
+      },
+      "equipment_types": {
+        "predicted": 4,
+        "unknown": 0,
+        "expected_with_type": 4,
+        "located_with_type": 4,
+        "correct_family": 4
+      },
+      "printed_names": {
+        "expected": 4,
+        "located": 4,
+        "correct": 4
+      }
+    }
+  },
+  "delta_f1": 0.0,
+  "sheets": [
+    {
+      "id": "synthetic-four-component",
+      "image_sha256": "373ecdf79dd7211e9b615b84f8e459f353543a57b5aaf201605be0a388fea74a",
+      "inference_sha256": "373ecdf79dd7211e9b615b84f8e459f353543a57b5aaf201605be0a388fea74a",
+      "methods": {
+        "baseline": {
+          "named_edges": {
+            "tp": 3,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "gap_to_target": -0.09999999999999998
+          },
+          "localized_edges": {
+            "tp": 3,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "gap_to_target": -0.09999999999999998
+          },
+          "endpoint_coverage": {
+            "reference_pairs": 3,
+            "both_endpoints_located": 3,
+            "both_endpoints_located_and_named": 3
+          },
+          "printed_names": {
+            "expected": 4,
+            "located": 4,
+            "correct": 4
+          },
+          "equipment_types": {
+            "predicted": 4,
+            "unknown": 0,
+            "expected_with_type": 4,
+            "located_with_type": 4,
+            "correct_family": 4
+          },
+          "localized_nodes": {
+            "tp": 4,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "gap_to_target": -0.09999999999999998
+          }
+        },
+        "ai": {
+          "named_edges": {
+            "tp": 3,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "gap_to_target": -0.09999999999999998
+          },
+          "localized_edges": {
+            "tp": 3,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "gap_to_target": -0.09999999999999998
+          },
+          "endpoint_coverage": {
+            "reference_pairs": 3,
+            "both_endpoints_located": 3,
+            "both_endpoints_located_and_named": 3
+          },
+          "printed_names": {
+            "expected": 4,
+            "located": 4,
+            "correct": 4
+          },
+          "equipment_types": {
+            "predicted": 4,
+            "unknown": 0,
+            "expected_with_type": 4,
+            "located_with_type": 4,
+            "correct_family": 4
+          },
+          "localized_nodes": {
+            "tp": 4,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "gap_to_target": -0.09999999999999998
+          }
+        }
+      },
+      "failures": {},
+      "annotation_sha256": "dfa4e2ae7496d06d82440aa16433c49386cec54adbeb99a7ed10423bcba4d669"
+    }
+  ],
+  "warnings": []
+}

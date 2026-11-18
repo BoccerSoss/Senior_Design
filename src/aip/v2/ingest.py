@@ -16,6 +16,7 @@ from PIL import Image, ImageOps
 
 from ..desktop_analysis import analyze_drawing
 from ..io import load_json
+from .direction import DIRECTION_REVISION, check_directions
 from .store import ident
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp"}
@@ -227,12 +228,18 @@ class Imports:
         except (ValueError, OSError, zipfile.BadZipFile, RuntimeError) as exc:
             self.store.update_job(job_id, status="failed", messages=messages, error=str(exc), sheet_ids=ids)
 
-    def analyze(self, sheet_id):
+    def analyze(self, sheet_id, *, require_reference=False):
         image = self.store.directory / "images" / f"{sheet_id}.png"
         settings = self.store.snapshot()["settings"]
         result = analyze_drawing(image, self.store.directory / "analysis",
-                                 use_reference=settings.get("use_geometry_reference", True))
+                                 use_reference=require_reference or settings.get("use_geometry_reference", True),
+                                 require_reference=require_reference)
         components, connections, provenance = analysis_objects(result)
+        connections, provenance["arrows"] = check_directions(
+            image, components, connections, provenance["arrows"],
+            reference_routes=provenance["method"] == "drawing-reference",
+        )
+        provenance["direction_revision"] = DIRECTION_REVISION
         outcome = self.store.replace_analysis(sheet_id, components, connections, provenance)
         sheet = outcome["sheet"]
         if "analysis_error" in sheet["source_metadata"]:
@@ -241,13 +248,13 @@ class Imports:
             self.store.update_sheet(sheet_id, {"source_metadata": metadata})
         return outcome
 
-    def reanalyze(self, sheet_id):
+    def reanalyze(self, sheet_id, *, require_reference=False):
         sheet = self.store.sheet(sheet_id)
         job = self.store.job(f"Read {sheet['title']}", sheet["facility_id"])
         def work():
             self.store.update_job(job["id"], status="running")
             try:
-                result = self.analyze(sheet_id)
+                result = self.analyze(sheet_id, require_reference=require_reference)
                 self.store.update_job(job["id"], status="completed", progress=100,
                                       messages=[f"Kept {result['corrections_retained']} corrections."], sheet_ids=[sheet_id])
             except (ValueError, OSError, RuntimeError) as exc:

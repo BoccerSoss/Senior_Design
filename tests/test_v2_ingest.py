@@ -10,6 +10,8 @@ import zipfile
 
 from PIL import Image
 
+from aip.io import ROOT, load_json
+from aip.v2.direction import DIRECTION_REVISION, refresh_drawing_directions
 from aip.v2.ingest import Imports, _image_frames, unpack, analysis_objects
 from aip.v2.store import Store
 
@@ -21,6 +23,30 @@ def png():
 
 
 class ImportTests(unittest.TestCase):
+    def test_reference_directions_follow_the_shared_shaft_and_preserve_manual_edits(self):
+        reference = load_json(ROOT / "data/drawing_references/nureg-cr5745-a1.json")["observations"]
+        components = reference["components"]
+        edges = []
+        for index, item in enumerate(reference["connections"]):
+            observed_arrow = item.get("direction") or {}
+            edges.append({**item, "id": f"edge-{index}", "kind": "pipe", "observed_arrow": observed_arrow,
+                          "direction": observed_arrow.get("status", "unknown"), "review_status": "unreviewed"})
+        edges[0]["direction"] = "target_to_source"
+        edges[0]["direction_evidence"] = {"basis": "reviewed", "arrow_ids": []}
+        sheet = {"components": components, "connections": edges, "corrections": [
+            {"collection": "connections", "id": edges[0]["id"]}], "source_metadata": {
+            "analysis": {"method": "drawing-reference", "arrows": reference["arrows"]}}}
+        image = ROOT / "data/input/beginner/ISLOCA_NUREG_CR5745_p0065.png"
+        result = refresh_drawing_directions(sheet, image)
+        after = result["connections"]
+        self.assertEqual(DIRECTION_REVISION, result["source_metadata"]["analysis"]["direction_revision"])
+        self.assertEqual(edges[0], after[0])
+        self.assertEqual("unknown", edges[1]["direction"])
+        self.assertEqual("source_to_target", after[1]["direction"])
+        self.assertEqual("run", after[1]["direction_evidence"]["basis"])
+        self.assertEqual("unknown", after[6]["direction"])
+        self.assertEqual([edge["id"] for edge in edges], [edge["id"] for edge in after])
+
     def test_legacy_equipment_adjacency_and_observed_arrow_are_preserved(self):
         with tempfile.TemporaryDirectory() as folder:
             document = {"components": [], "run": {"method": "test", "run_id": "r"},

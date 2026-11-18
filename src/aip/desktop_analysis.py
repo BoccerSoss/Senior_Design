@@ -41,6 +41,11 @@ class AnalysisError(RuntimeError):
         super().__init__(message)
 
 
+def image_label_records(result):
+    evidence = result.directory / "ocr_evidence.json"
+    return load_json(evidence).get("ocr", {}).get("ink_label_readings", []) if evidence.is_file() else []
+
+
 def _csv_records(path: Path, required_columns: set[str]) -> list[dict[str, str]]:
     with path.open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)
@@ -120,7 +125,8 @@ def _failure_diagnostic(directory: Path, exit_code: int) -> str:
 
 
 def analyze_drawing(image_path: Path, output_root: Path = ROOT / "runs" / "desktop",
-                    *, use_reference: bool = True, label_response: Path | None = None) -> DesktopResult:
+                    *, use_reference: bool = True, label_response: Path | None = None,
+                    require_reference: bool = False) -> DesktopResult:
     """Prepare, extract and read one drawing in a new preserved session directory."""
     directory = None
     try:
@@ -136,6 +142,8 @@ def analyze_drawing(image_path: Path, output_root: Path = ROOT / "runs" / "deskt
             directory = export_reference(packet, session / "runs", match, label_response)
             citation, url = match[1]["citation"], match[1]["source_url"]
         else:
+            if require_reference:
+                raise ValueError("The saved drawing image does not match a source-checked symbol reference.")
             if label_response is not None:
                 raise ValueError("A matching source geometry file is required to import label crops.")
             directory, exit_code = process_run(packet, session / "runs", method="classical")

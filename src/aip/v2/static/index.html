@@ -18,7 +18,6 @@
     <button class="setup-button" data-action="setup">Setup</button>
   </header>
   <div class="workspace-bar">
-    <div class="facility-control"><label for="facility">Drawing set</label><select id="facility" aria-label="Drawing set"></select><button class="icon-button" data-action="new-facility" title="New drawing set" aria-label="New drawing set">+</button></div>
     <div id="workspace-description" class="workspace-description">Connecting to the local workspace…</div>
     <button class="button" data-action="show-demo">Open example</button>
     <button class="button primary" data-action="import">Import drawings</button>
@@ -31,14 +30,15 @@
       <p>Each PDF page or image becomes a drawing sheet. Add an index CSV with file, page, drawing, sheet, revision and title fields when available.</p>
       <label class="dropzone" for="import-files"><strong>Choose files</strong><span>PDF, PNG, JPEG, TIFF, WebP, ZIP or index CSV</span><input id="import-files" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.zip,.csv,.dgn" required></label>
       <p id="import-file-summary" class="muted"></p>
-      <label class="field">Drawing set<select id="import-facility"></select></label>
+      <label class="field" for="import-facility">Destination drawing set</label>
+      <div class="import-destination"><select id="import-facility" required></select><button class="button small" type="button" data-action="new-facility">New drawing set</button></div>
       <div class="dialog-actions"><button type="button" class="button" data-action="close-dialog">Cancel</button><button class="button primary" type="submit">Start import</button></div>
     </form>
   </dialog>
   <dialog id="demo-dialog">
     <div class="dialog-heading"><h2>Open an example</h2><button class="icon-button" data-action="close-dialog" aria-label="Close">×</button></div>
     <button class="demo-choice" data-action="load-demo" data-kind="four-component"><strong>Four-component example</strong><span>Analyze the original simple synthetic drawing, inspect components and connections, then view its connectivity matrix.</span></button>
-    <button class="demo-choice" data-action="load-demo" data-kind="beginner"><strong>Beginner ISLOCA drawings</strong><span>Use locally available beginner PNGs and source geometry. Printed names are read from the images.</span></button>
+    <button class="demo-choice" data-action="load-demo" data-kind="beginner"><strong>Beginner ISLOCA drawings</strong><span>Open all six source drawings from NUREG/CR-5745, Figures A.1–A.6.</span></button>
     <button class="demo-choice" data-action="load-demo" data-kind="two-sheet"><strong>Linked drawing example</strong><span>Explore two connected synthetic drawings and review the off-page connector pair.</span></button>
   </dialog>
   <dialog id="setup-dialog">

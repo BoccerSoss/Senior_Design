@@ -231,6 +231,42 @@ class TransportTests(unittest.TestCase):
                 self.assertNotIn("secret-key", str(caught.exception))
                 self.assertNotIn("private drawing", str(caught.exception))
 
+    def test_429_distinguishes_account_limits_throttling_and_unknown_replies(self):
+        cases = [
+            ({"code": "project_spend_limit_exceeded", "type": "insufficient_quota"}, "project reached its spending limit", False),
+            ({"code": "organization_spend_limit_exceeded"}, "organization reached its spending limit", False),
+            ({"code": "organization_usage_limit_exceeded"}, "approved usage limit", False),
+            ({"code": "credit_balance_exhausted"}, "credit balance", False),
+            ({"type": "insufficient_quota"}, "insufficient quota", False),
+            ({"code": "slow_down", "type": "rate_limit_error"}, "temporary rate limit", True),
+            ({"code": "rate_limit_exceeded", "type": "tokens"}, "rate_limit_exceeded", True),
+            ({"type": "rate_limit_error"}, "temporary rate limit", True),
+            ({"code": ["secret-key"], "type": "private drawing"}, "did not identify", False),
+        ]
+        for details, expected, timed in cases:
+            with self.subTest(details=details):
+                body = response({"error": {**details, "message": "secret-key private drawing"}})
+                exc = HTTPError("https://example.com", 429, "sensitive-header", {"Retry-After": "17"}, body)
+                with patch.object(providers, "_open_request", side_effect=exc) as opened, self.assertRaises(ProviderError) as caught:
+                    ask_provider({"provider": "openai", "model": "chosen", "_session_key": "fake"}, "Question", {})
+                message = str(caught.exception)
+                self.assertIn(expected, message)
+                self.assertEqual(timed, "17 seconds" in message)
+                self.assertNotIn("secret-key", message)
+                self.assertNotIn("private drawing", message)
+                self.assertTrue(body.closed)
+                opened.assert_called_once()
+
+    def test_429_handles_bounded_malformed_bodies_and_retry_headers(self):
+        for data in (b"private drawing", b"[]", b"x" * 9000, b'{"error":"private drawing"}'):
+            exc = HTTPError("https://example.com", 429, "", {}, io.BytesIO(data))
+            with exc:
+                self.assertIn("did not identify", providers._limit_detail(exc))
+        for invalid in (None, "-6", "private drawing", "x" * 100, "1\nsecret"):
+            self.assertIsNone(providers._retry_seconds(invalid))
+        with patch.object(providers, "time", return_value=0):
+            self.assertEqual(10, providers._retry_seconds("Thu, 01 Jan 1970 00:00:10 GMT"))
+
     def test_invalid_and_incomplete_responses_fail_cleanly(self):
         responses = [b"not-json-secret", json.dumps({"error": {"message": "secret"}}).encode(),
                      json.dumps({"status": "incomplete"}).encode(),

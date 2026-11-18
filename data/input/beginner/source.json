@@ -1,0 +1,71 @@
+{
+  "report": "NUREG/CR-5745, EGG-2650",
+  "title": "Assessment of ISLOCA Risk—Methodology and Application to a Combustion Engineering Plant",
+  "authors": [
+    "D. L. Kelly",
+    "J. L. Auflick",
+    "L. N. Haney"
+  ],
+  "publication": "April 1992",
+  "publisher": "Prepared by EG&G Idaho, Inc., Idaho National Engineering Laboratory, for the U.S. Nuclear Regulatory Commission",
+  "source_url": "https://www.osti.gov/servlets/purl/10145659",
+  "report_sha256": "899b599eb190a65321d9942c1c22ab36a480d6e96fa80a303ef2dd882502267a",
+  "reproduction": "The source report cover is marked for unlimited distribution. Each PNG reproduces one complete page, including its figure caption and printed page number.",
+  "render": "Full source page, pdftoppm 26.07.0, 3600-pixel long side. Page numbers count from the PDF cover as page 1.",
+  "pages": [
+    {
+      "figure": "Figure A.1",
+      "page": 65,
+      "filename": "ISLOCA_NUREG_CR5745_p0065.png",
+      "width": 2791,
+      "height": 3600,
+      "png_sha256": "b58dc3fcbf8acfb06bc63b6c2b23d3c3f6b193a733898fa2691ca815026e0f90",
+      "single_page_pdf_sha256": "14b326ce0664e9b8d5895906096fccec71f44e91ad6c16d2b29bdac839522011"
+    },
+    {
+      "figure": "Figure A.2",
+      "page": 66,
+      "filename": "ISLOCA_NUREG_CR5745_p0066.png",
+      "width": 2792,
+      "height": 3600,
+      "png_sha256": "fee061190bece508c8b1c1d9562fc29dba7ab6466a96683953ccc6dcd10019c2",
+      "single_page_pdf_sha256": "a8d6b2cd238267868f4ee201190ef44e2d9fe0d61bca40dcc5b0e0a9f3c0ec2f"
+    },
+    {
+      "figure": "Figure A.3",
+      "page": 67,
+      "filename": "ISLOCA_NUREG_CR5745_p0067.png",
+      "width": 2783,
+      "height": 3600,
+      "png_sha256": "6216716d4023ea80508dc91d3f3280f94feecac7bc93e51091cbf7eee8306231",
+      "single_page_pdf_sha256": "253a27e256055aadc6f458208b0220625e6c4dd6949544c06e047b1d6b0bcc14"
+    },
+    {
+      "figure": "Figure A.4",
+      "page": 68,
+      "filename": "ISLOCA_NUREG_CR5745_p0068.png",
+      "width": 2786,
+      "height": 3600,
+      "png_sha256": "da59a0cba507c7260a788374ccc6e8603c41e72136b0366f875d8ec7431e5ebe",
+      "single_page_pdf_sha256": "cb304b77b97e12a7cb8b1e08c751e7e27151acccedfb27faecc4918b9c36935c"
+    },
+    {
+      "figure": "Figure A.5",
+      "page": 69,
+      "filename": "ISLOCA_NUREG_CR5745_p0069.png",
+      "width": 2786,
+      "height": 3600,
+      "png_sha256": "84a597a64d36fa32ed2a063c0098189b81fd8220c1acdd7846e47c8d0c7474da",
+      "single_page_pdf_sha256": "35da70a98be0164cdb1bc115dc941c2d0650ee43e24f0209dde9629195fd98f3"
+    },
+    {
+      "figure": "Figure A.6",
+      "page": 70,
+      "filename": "ISLOCA_NUREG_CR5745_p0070.png",
+      "width": 2788,
+      "height": 3600,
+      "png_sha256": "0d343edf063f379469b546cd89aeef6dbd55000473450fa7ff4cd1cab0326e61",
+      "single_page_pdf_sha256": "d9ed5fc15ebcceeefa9eadcfbbf8ecc1c6e5b277f9e92ed36a7d4e7667aa2d53"
+    }
+  ]
+}
