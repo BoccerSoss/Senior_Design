@@ -9,14 +9,17 @@ window.aipV3 = (() => {
   const post = (url, body) => api(url, {
     method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
   });
-  const isCandidate = () => sources.get(app.sheetId) === "v3" && traces.has(app.sheetId);
+  const isV3View = () => sources.get(app.sheetId) === "v3";
+  const isCandidate = () => isV3View() && Boolean(traces.get(app.sheetId));
+  const needsTrace = () => isV3View() && !isCandidate();
   const method = () => isCandidate() ? "v3" : "v2";
   const baselineLabel = () => sourceSheet()?.source_metadata?.analysis?.method === "drawing-reference"
     ? "V2 · Reference-assisted" : "Current method (V2)";
 
   function displaySheet(sheet) {
-    if (!sheet || !isCandidate()) return sheet;
+    if (!sheet || !isV3View()) return sheet;
     const trace = traces.get(sheet.id);
+    if (!trace) return {...sheet, version:`v3/${sheet.version}/pending`, components:[], connections:[], arrows:[]};
     return {...sheet, version:`v3/${sheet.version}/${trace.created_at || ""}`, components: trace.components, connections: trace.connections,
       arrows:(trace.arrows || []).filter(arrow => arrow.verified ?? (trace.provider === "local-ml" || !!arrow.connection_id))};
   }
@@ -39,20 +42,28 @@ window.aipV3 = (() => {
       const sheet = app.data.sheets.find(item => item.id === id);
       if (trace && !sources.has(id) && sheet && !sheet.source_metadata?.analysis &&
           !sheet.components?.length && !sheet.connections?.length) sources.set(id, "v3");
-      if (trace && app.sheetId === id) render();
+      if (app.sheetId === id && (trace || isV3View())) render();
     }).catch(error => {
       if (app.sheetId === id) toast(error.message, true);
     }).finally(() => pending.delete(id));
   }
 
+  function candidateLabel() {
+    const provider = traces.get(app.sheetId)?.provider;
+    return ({
+      "chatgpt-plan": "V3 · ChatGPT subscription",
+      "local-ml": "V3 · Local model",
+      openai: "V3 · OpenAI API",
+      anthropic: "V3 · Anthropic API",
+      compatible: "V3 · Compatible API"
+    })[provider] || "V3 · AI extraction";
+  }
+
   function sourceSwitch() {
-    if (!traces.get(app.sheetId)) {
-      return sourceSheet()?.source_metadata?.analysis?.method === "drawing-reference"
-        ? '<span class="section-note">Source-checked symbols · Image-read names</span>' : "";
-    }
+    if (!sourceSheet()) return "";
     return `<label class="v3-source">Method <select data-v3-source aria-label="Displayed extraction method">
-      <option value="v2"${!isCandidate() ? " selected" : ""}>${esc(baselineLabel())}</option>
-      <option value="v3"${isCandidate() ? " selected" : ""}>AI connections (V3)</option>
+      <option value="v2"${!isV3View() ? " selected" : ""}>${esc(baselineLabel())}</option>
+      <option value="v3"${isV3View() ? " selected" : ""}>${esc(candidateLabel())}</option>
     </select></label>`;
   }
 
@@ -79,14 +90,18 @@ window.aipV3 = (() => {
     drawCanvas();
   }
 
+  function traceButton() {
+    return isV3View() ? '<button type="button" class="button" data-v3="trace">Find connections with AI</button>' : "";
+  }
+
   function controls() {
     const sheet = sourceSheet();
     const analysis = sheet?.source_metadata?.analysis;
-    const reference = sheet?.has_symbol_reference && analysis?.method !== "drawing-reference" &&
-      (isCandidate() || app.view === "matrix" || analysis)
+    const reference = !isV3View() && sheet?.has_symbol_reference && analysis?.method !== "drawing-reference" &&
+      (app.view === "matrix" || analysis)
       ? '<button type="button" class="button" data-v3="read-symbols">Read with symbol reference</button>' : "";
-    return `${sourceSwitch()}${reference}<button type="button" class="button" data-v3="trace">Find connections with AI</button>
-      <button type="button" class="button" data-v3="ask">Ask about drawing</button>`;
+    const ask = needsTrace() ? "" : '<button type="button" class="button" data-v3="ask">Ask about drawing</button>';
+    return sourceSwitch() + reference + traceButton() + ask;
   }
 
   function matrixControls() {
@@ -100,6 +115,7 @@ window.aipV3 = (() => {
 
   function inspector(sheet) {
     const trace = traces.get(sheet.id);
+    if (!trace) return '<h2>AI extraction</h2><p class="empty-selection">Choose Find connections with AI to trace this drawing.</p>';
     const edge = sheet.connections.find(item => item.id === app.connectionId);
     const component = sheet.components.find(item => item.id === app.componentId);
     const priorLocal = trace.provider === "local-ml" && trace.local_input?.version !== app.data.capabilities.local_trace_version;
@@ -242,7 +258,7 @@ window.aipV3 = (() => {
       const tagged = selectedComponent()?.tag || graph?.components.find(item => item.tag && String(item.type).includes("pump"))?.tag
         || graph?.components.find(item => item.tag)?.tag;
       const example = tagged ? `What connects directly to ${tagged}?` : "How many direct equipment connections are recorded?";
-      body.innerHTML = `<p class="section-note">${esc(sheetName(sheet))}${asking ? ` · ${selectedMethod === "v3" ? "AI connections (V3)" : esc(baselineLabel())}` : ""}</p>
+      body.innerHTML = `<p class="section-note">${esc(sheetName(sheet))}${asking ? ` · ${esc(selectedMethod === "v3" ? candidateLabel() : baselineLabel())}` : ""}</p>
         <form class="v3-form"><label class="field">Model connection<select name="provider">${choices.map(item =>
           `<option value="${dataValue(item.id)}"${item.id === choice.id ? " selected" : ""}>${esc(choiceLabel(item))}</option>`).join("")}</select></label>
         <p class="v3-profile section-note"></p>
@@ -564,5 +580,5 @@ window.aipV3 = (() => {
     connector.open = false;
     connectSetup($("div", connector));
   });
-  return {isCandidate, displaySheet, drawingControls: controls, matrixControls, syncDrawing, inspector, sourceSwitch, focusSelection};
+  return {isCandidate, isV3View, needsTrace, displaySheet, drawingControls: controls, matrixControls, syncDrawing, inspector, sourceSwitch, traceButton, focusSelection};
 })();

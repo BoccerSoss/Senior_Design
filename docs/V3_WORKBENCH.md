@@ -4,11 +4,11 @@
 
 1. On GitHub, select the `codex/aip-v3` branch and choose **Code → Download ZIP**. Extract the ZIP and double-click **Open AIP V3.cmd** inside the project folder. The first launch installs the pinned dependencies for Windows x64 and Python 3.12. Keep the launcher open while using the demo.
 2. Choose **Open example → Beginner ISLOCA drawings** to see all six full-page PNGs (pages 65–70) in the drawing library. The left-hand **Drawing library** shows every saved collection together. Click a drawing under another collection to switch without leaving the current tab. The sheets are bundled with the demo. A fresh workspace opens on this collection. **Four-component example** opens the synthetic control, and **Import drawings** accepts additional files. Imported PDFs are rendered to PNG first.
-3. Choose **Find connections with AI**, select **Local connection model**, and click **Trace drawing**. Click a traced line to inspect its endpoints, evidence and recorded direction. The model uses image-derived equipment boxes, OCR and a learned classifier for pipe strokes. It checks straight runs and single elbows. Equipment missed by the detector can break a valid connection or allow a false shortcut.
+3. Select **V3** in **Method**, choose **Find connections with AI**, select **Local connection model**, and click **Trace drawing**. Click a traced line to inspect its endpoints, evidence and recorded direction. The model uses image-derived equipment boxes, OCR and a learned classifier for pipe strokes. It checks straight runs and single elbows. Equipment missed by the detector can break a valid connection or allow a false shortcut.
 4. Under **Connectivity matrix**, use the method selector to compare the direct equipment pairs. The latest successful V3 trace for each sheet persists separately from V2 and its edits. Choose **Benchmark results** to inspect the scored comparisons.
 5. Choose **Ask about drawing → Local graph lookup** and enter **What connects to V-101?** on the four-component example. Click the cited connection to see the evidence on the drawing. Answers describe the selected extraction and its review status.
 
-On matching PNGs, **Read with symbol reference** uses checked symbol types and locations from the figure and reads the printed names from the image. The saved result is labeled **V2 · Reference-assisted**. **AI connections (V3)** shows the separate image-only trace. Only the image-only methods enter the comparison benchmark.
+In **V2**, **Read with symbol reference** uses checked symbol types and locations on matching PNGs and reads the printed names from the image. The saved result appears under **V2 · Reference-assisted**. The **V3** option displays the saved trace’s provider, such as **V3 · Local model** or **V3 · ChatGPT subscription**. The comparison benchmark uses image-only runs.
 
 Select a detected component to see the orange dashed box around the printed name used by OCR when that location is available. In **Connections**, select a pair to see whether the arrowhead was found on the segment or elsewhere on its uninterrupted run. The highlighted tip marks the observed position. A branch, a break in the line, or conflicting tips can leave the direction unknown. Unnamed junctions can still bound a run.
 
@@ -28,11 +28,11 @@ Choose **Equipment centers** to place lines through the exact centers of the det
 
 ## Use your ChatGPT subscription
 
-Open the four-component example and choose **Ask about drawing → ChatGPT subscription → Continue with ChatGPT**. Click **Open OpenAI sign-in**, finish sign-in and consent, then return to AIP. Choose an available **Plan model**, enter **What connects to V-101?**, and click **Ask model**. Click a cited connection to inspect its source. For image analysis, choose **Find connections with AI → ChatGPT subscription → Trace drawing**, then open **View matrix**.
+Open the four-component example and choose **Ask about drawing → ChatGPT subscription → Continue with ChatGPT**. Click **Open OpenAI sign-in**, finish sign-in and consent, then return to AIP. Choose an available **Plan model**, enter **What connects to V-101?**, and click **Ask model**. Click a cited connection to inspect its source. For image analysis, select **V3** in **Method**, choose **Find connections with AI → ChatGPT subscription → Trace drawing**, then open **View matrix**.
 
 Plan sharing depends on the account and workspace. OpenAI lists eligible Plus and Pro accounts. Review the allowance or credits you authorize in ChatGPT's usage settings. AIP relies on the model list returned for that account. Windows protects the saved connection for the current user under `%LOCALAPPDATA%\AIP\ChatGPT`. [OpenAI plan sign-in](https://developers.openai.com/siwc/quickstart) · [Manage plan usage](https://chatgpt.com/settings/usage)
 
-**If your workspace cannot connect**, choose **ChatGPT in your browser** in the model list. For questions, click **Copy question and matrix**, then **Open ChatGPT**, select the intended workspace, and paste. For a visual check, use **Download drawing PNG** and attach it to your chat. A response in that chat stays there. To create a matrix inside the workbench without API credentials, choose **Find connections with AI → Local connection model → Trace drawing**.
+**If your workspace cannot connect**, choose **ChatGPT in your browser** in the model list. For questions, click **Copy question and matrix**, then **Open ChatGPT**, select the intended workspace, and paste. For a visual check, use **Download drawing PNG** and attach it to your chat. A response in that chat stays there. To trace locally, select **V3** in **Method** and choose **Find connections with AI → Local connection model → Trace drawing**.
 
 ## Use a provider API key
 
@@ -54,7 +54,7 @@ The gateway must support OpenAI-compatible chat completions. The local tracing m
 
 V3 displays the provider's recognized error code. For a temporary rate limit, wait for the displayed interval before trying again. For insufficient quota, an exhausted credit balance, or an enforced spending or usage limit, ask the administrator of the API project attached to the key to check the specified limit. For ORNL work, confirm the key belongs to the intended lab project. An unspecified 429 leaves the cause undetermined. [OpenAI's 429 troubleshooting guide](https://help.openai.com/en/articles/5955604-troubleshooting-api-rate-limits-and-429-errors)
 
-The local demo remains available under **Ask about drawing → Local graph lookup** or **Find connections with AI → Local connection model**.
+For local questions, choose **Ask about drawing → Local graph lookup**. For local tracing, select **V3** in **Method**, then choose **Find connections with AI → Local connection model**.
 
 ## Ask from an external client
 

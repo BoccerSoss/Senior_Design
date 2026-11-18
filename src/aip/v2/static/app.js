@@ -172,17 +172,18 @@ function replaceWorkspace(markup) {
 
 function renderDrawings() {
   const sheet = selectedSheet(), gridMode = app.view === "grid";
-  const aiView = window.aipV3?.isCandidate() && !gridMode;
+  const aiView = window.aipV3?.isV3View() && !gridMode;
   const analysis = sheet?.source_metadata?.analysis;
   const referenceRead = window.aipV3 && sheet?.has_symbol_reference && (!analysis || analysis.method === "drawing-reference");
   const readButton = referenceRead
     ? `<button class="button primary" data-v3="read-symbols">${analysis ? "Reread" : "Read"} with symbol reference</button>`
     : '<button class="button primary" data-action="reanalyze">Analyze drawing</button>';
+  const named = sheet?.components?.filter(component => component.tag).length || 0;
   const previousInspector = $(".inspector[data-grid-sheet]");
   const previousScroll = gridMode && sheet?.id === previousInspector?.dataset.gridSheet ? previousInspector?.scrollTop || 0 : 0;
   replaceWorkspace(`<div class="drawing-layout">${libraryMarkup()}<section class="viewer">
     ${sheet ? `<div class="viewer-heading"><div><h2>${esc(sheetName(sheet))}</h2><div class="muted">${esc(sheet.title || sheet.filename || "")} ${sheet.revision ? `· Revision ${esc(sheet.revision)}` : ""}</div></div><button class="button small sheet-menu" data-action="sheet-settings">Drawing details</button></div>
-    ${!gridMode ? `<div class="drawing-actions">${aiView ? "" : readButton}${window.aipV3?.drawingControls() || ""}<button class="button" data-action="matrix-view">View matrix</button><span>${sheet.components?.length||0} components · ${sheet.connections?.length||0} recorded connections</span></div>` : ""}
+    ${!gridMode ? `<div class="drawing-actions">${aiView ? "" : readButton}${window.aipV3?.drawingControls() || ""}<button class="button" data-action="matrix-view">View matrix</button><span>${named} of ${sheet.components?.length || 0} components named · ${sheet.connections?.length || 0} recorded connections</span></div>` : ""}
     <div class="viewer-toolbar">
       ${gridMode ? `<select class="grid-layout-select" id="grid-layout" aria-label="Grid layout"><option value="regular"${app.gridLayout === "regular" ? " selected" : ""}>Regular grid</option><option value="source"${app.gridLayout === "source" ? " selected" : ""}>Equipment centers</option></select>` : aiView ? '<span class="section-note">AI observations · Select to inspect</span>' : `<button class="tool-button${app.tool === "select" ? " active" : ""}" data-tool="select" title="Select equipment or pan">Select</button><button class="tool-button${app.tool === "component" ? " active" : ""}" data-tool="component" title="Drag a box around missing equipment">+ Component</button><button class="tool-button${app.tool === "pipe" ? " active" : ""}" data-tool="pipe" title="Connect immediate equipment endpoints">+ Connection</button><button class="tool-button${app.tool === "signal" ? " active" : ""}" data-tool="signal">+ Signal</button><button class="tool-button${app.tool === "move" ? " active" : ""}" data-tool="move">Move</button>`}
       <span class="toolbar-divider"></span><button class="tool-button" data-action="zoom-out" title="Zoom out">−</button><span class="zoom-label" id="zoom-label"></span><button class="tool-button" data-action="zoom-in" title="Zoom in">+</button><button class="tool-button" data-action="fit">Fit</button>
@@ -194,7 +195,7 @@ function renderDrawings() {
   if (previousScroll) $(".inspector").scrollTop = previousScroll;
   if (sheet) {
     setupCanvas();
-    if (gridMode || (app.tab === "components" && sheet.components?.length)) loadGrid(sheet);
+    if (!window.aipV3?.needsTrace() && (gridMode || (app.tab === "components" && sheet.components?.length))) loadGrid(sheet);
   }
 }
 
@@ -258,6 +259,10 @@ async function loadGrid(sheet) {
 function gridPanelMarkup() {
   const sheet = selectedSheet();
   if (!sheet) return '<p class="empty-selection">Open a drawing to view equipment locations.</p>';
+  if (window.aipV3?.needsTrace()) {
+    return `<h2>Equipment locations</h2>${window.aipV3.sourceSwitch()}
+      <p class="empty-selection">Trace the drawing to see V3 equipment coordinates.</p>${window.aipV3.traceButton()}`;
+  }
   const map = gridMap(sheet);
   const rows = (sheet.components || []).map(component => {
     const location = coordinateText(component.id, map);
@@ -372,9 +377,22 @@ function renderMatrix() {
   const sheet=selectedSheet(),cached=sheet?app.matrixData[sheet.id]:null;
   const key=sheet?matrixKey(sheet):"";
   const current=cached?.key===key?cached:null;
-  replaceWorkspace(`<div class="matrix-layout">${libraryMarkup()}<section class="matrix-page"><div class="page-heading"><div><div class="eyebrow">3 · Connectivity output</div><h1>Connectivity matrix</h1><p>${sheet?`${esc(sheetName(sheet))} · This drawing only. `:""}Immediate equipment adjacency. <strong>1</strong> means a direct connection is recorded; <strong>0</strong> means none is recorded. The matrix is symmetric with a zero diagonal.</p></div>${sheet?`<div class="toolbar-right"><button class="button" data-action="drawing-view">Back to drawing</button><a class="button primary" href="/api/export?${matrixQuery()}&format=matrix" download>Save matrix CSV</a><a class="button" href="/api/export?${matrixQuery()}&format=matrix-json" download>Save JSON</a></div>`:""}</div>${!sheet?'<div class="card"><p>Open an example or import a drawing to create its connectivity matrix.</p><button class="button primary" data-action="show-demo">Open example</button></div>':current?.error?`<div class="card"><h2>Matrix could not be loaded</h2><p class="inline-error">${esc(current.error)}</p><button class="button" data-action="refresh-matrix">Retry matrix</button></div>`:current?.result?matrixMarkup(current.result):'<div class="card matrix-loading"><div class="spinner"></div><p>Building the matrix from recorded components and connections…</p></div>'}</section></div>`);
+  const needsTrace = window.aipV3?.needsTrace();
+  const exports = sheet && !needsTrace
+    ? `<a class="button primary" href="/api/export?${matrixQuery()}&format=matrix" download>Save matrix CSV</a><a class="button" href="/api/export?${matrixQuery()}&format=matrix-json" download>Save JSON</a>` : "";
+  let content;
+  if (!sheet) content = '<div class="card"><p>Open an example or import a drawing to create its connectivity matrix.</p><button class="button primary" data-action="show-demo">Open example</button></div>';
+  else if (needsTrace) content = '<div class="card"><p>Trace the drawing to see its V3 connectivity matrix.</p></div>';
+  else if (current?.error) content = `<div class="card"><h2>Matrix could not be loaded</h2><p class="inline-error">${esc(current.error)}</p><button class="button" data-action="refresh-matrix">Retry matrix</button></div>`;
+  else if (current?.result) content = matrixMarkup(current.result);
+  else content = '<div class="card matrix-loading"><div class="spinner"></div><p>Building the matrix from recorded components and connections…</p></div>';
+  replaceWorkspace(`<div class="matrix-layout">${libraryMarkup()}<section class="matrix-page"><div class="page-heading">
+    <div><div class="eyebrow">3 · Connectivity output</div><h1>Connectivity matrix</h1>
+    <p>${sheet?`${esc(sheetName(sheet))} · This drawing only. `:""}Immediate equipment adjacency. <strong>1</strong> means a direct connection is recorded; <strong>0</strong> means none is recorded. The matrix is symmetric with a zero diagonal.</p></div>
+    ${sheet?`<div class="toolbar-right"><button class="button" data-action="drawing-view">Back to drawing</button>${exports}</div>`:""}</div>
+    ${content}</section></div>`);
   if(sheet&&window.aipV3)window.aipV3.matrixControls();
-  if(sheet&&!current)loadMatrix(sheet);
+  if(sheet&&!needsTrace&&!current)loadMatrix(sheet);
 }
 
 function matrixMarkup(result) {
