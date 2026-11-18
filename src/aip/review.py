@@ -42,6 +42,8 @@ def review_queue(trace):
             reasons.append("Equipment name unread")
         elif tags[tag] > 1:
             reasons.append("Equipment name is repeated on this drawing")
+        elif component.get("label_source") == "chatgpt_crop":
+            reasons.append("Check name transcribed from a drawing crop")
         if (component.get("type") or "").strip().lower() in ("", "unknown"):
             reasons.append("Equipment type unknown")
         if _low_model_confidence(component):

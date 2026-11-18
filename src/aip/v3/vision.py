@@ -12,8 +12,10 @@ from tempfile import TemporaryDirectory
 from PIL import Image, ImageChops
 
 from ..classical import extract_image
+from ..ctc_ocr import supplement_blank_tags
 from ..v2.providers import MAX_IMAGE_BYTES, ProviderError, extract_provider
 from .direction import PROCESS_LINE_KINDS, arrow_direction, assign_directions, raster_arrows
+from .label_crops import read_crop_tags
 from .line_model import CLASSES, CONTINUOUS, EXAMPLES_PER_CLASS, MODEL_ID, TRAINING_SEED, classify_stroke
 from .raster_network import trace_raster_connections
 
@@ -116,7 +118,7 @@ def _stroke_fit(path, ink):
     return total_distance, total_coverage / count
 
 
-def extract_local_connections(image_path, classical_components=None, classical_arrows=None):
+def extract_local_connections(image_path, classical_components=None, classical_arrows=None, *, label_records=()):
     """Run Windows OCR/geometry followed by a separate, learned route classifier.
 
     For paired experiments, callers may pass the image-only baseline's component
@@ -131,12 +133,17 @@ def extract_local_connections(image_path, classical_components=None, classical_a
             observed = extract_image(source, Path(scratch))
             classical_components = observed["components"]
             classical_arrows = observed.get("arrows", [])
+            label_records = observed.get("method_evidence", {}).get("ocr", {}).get("ink_label_readings", ())
     components = []
     for item in classical_components:
         component = {key: item[key] for key in ("id", "bbox", "type", "tag_bbox", "evidence", "uncertainty")
                      if key in item}
         component.update(tag=item.get("tag", item.get("observed_tag")) or "", review_status="unreviewed")
         components.append(component)
+    label_count = 0
+    if label_records:
+        with Image.open(source) as image:
+            label_count = supplement_blank_tags(image, components, label_records)
     ports = {item["id"]: _ports(item["bbox"], ink) for item in components}
     connections = []
     for left, right in combinations(components, 2):
@@ -173,6 +180,7 @@ def extract_local_connections(image_path, classical_components=None, classical_a
             "excluded_connections": [], "review_required": True, "provider": "local-ml", "model": MODEL_ID,
             "image": {"width": ink.width, "height": ink.height, "sha256": sha256(source.read_bytes()).hexdigest()},
             "routing_method": "raster-centerline" if raster_connections else "stroke-model",
+            "supplemental_labels": label_count,
             "training": {"generator_seed": TRAINING_SEED, "examples": EXAMPLES_PER_CLASS * len(CLASSES),
                          "classes": list(CLASSES), "source": "procedural stroke profiles"},
             "uncertainties": ["Traces connected pipe centerlines; turns at ambiguous crossings are withheld. "
@@ -338,7 +346,8 @@ def extract_connections(settings, image_bytes, mime, width, height):
             raise ProviderError("The drawing dimensions disagree with the image or exceed 30 million pixels.")
         if Image.MIME.get(image.format) != mime:
             raise ProviderError("The drawing image format disagrees with its reported media type.")
-        if settings.get("provider") == "local-ml":
+        focused = settings.get("provider") == "chatgpt-plan" and settings.get("focus_labels") is True
+        if settings.get("provider") == "local-ml" or focused:
             with TemporaryDirectory(prefix="aip-v3-image-") as scratch:
                 path = Path(scratch) / "drawing.png"
                 if mime == "image/png":
@@ -347,6 +356,10 @@ def extract_connections(settings, image_bytes, mime, width, height):
                     image.convert("RGB").save(path)
                 result = extract_local_connections(path)
                 result["image"]["sha256"] = sha256(image_bytes).hexdigest()
+                if focused:
+                    added = read_crop_tags(image, result["components"], settings["_plan_generate"])
+                    result.update(provider="chatgpt-plan", model=settings["model"], hosted_labels=added,
+                                  hosted_method="focused_label_crops")
                 return result
         ink = image.convert("L").point(lambda value: 255 if value < 160 else 0)
     candidate = extract_provider(settings, image_bytes, mime, width, height)

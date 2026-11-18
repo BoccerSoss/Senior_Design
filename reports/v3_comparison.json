@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "created_utc": "2026-11-18T16:19:42.971452+00:00",
-  "cohort": "NUREG/CR-5745 Figures A.1–A.6, six complete beginner drawings",
+  "created_utc": "2026-11-18T16:34:32.892368+00:00",
+  "cohort": "NUREG/CR-5745 Figures A.1\u2013A.6, six complete beginner drawings",
   "source_url": "https://www.osti.gov/servlets/purl/10145659",
   "review_status": "Provisional development annotations from the same report and drawing set used during V2 development. Independent human verification is pending.",
-  "workbench_version": "3.5.0",
+  "workbench_version": "3.6.0",
   "manifest_sha256": "056eb83ee542445e7bc9e26b2927e5514fb5e481ea1c379d39ddba0d4913a1e4",
   "ai_method": "local-ml",
   "model": "synthetic-stroke-centroids-v1",
@@ -63,13 +63,13 @@
     },
     "ai": {
       "named_edges": {
-        "tp": 59,
-        "fp": 44,
-        "fn": 74,
-        "precision": 0.5728155339805825,
-        "recall": 0.44360902255639095,
-        "f1": 0.5,
-        "gap_to_target": 0.4
+        "tp": 62,
+        "fp": 41,
+        "fn": 71,
+        "precision": 0.6019417475728155,
+        "recall": 0.46616541353383456,
+        "f1": 0.5254237288135594,
+        "gap_to_target": 0.37457627118644066
       },
       "localized_edges": {
         "tp": 86,
@@ -92,7 +92,7 @@
       "endpoint_coverage": {
         "reference_pairs": 133,
         "both_endpoints_located": 128,
-        "both_endpoints_located_and_named": 88
+        "both_endpoints_located_and_named": 96
       },
       "equipment_types": {
         "predicted": 148,
@@ -104,11 +104,11 @@
       "printed_names": {
         "expected": 123,
         "located": 119,
-        "correct": 95
+        "correct": 99
       }
     }
   },
-  "delta_f1": 0.2540106951871658,
+  "delta_f1": 0.27943442400072516,
   "sheets": [
     {
       "id": "NUREG/CR-5745 Fig. A.1",
@@ -365,13 +365,13 @@
         },
         "ai": {
           "named_edges": {
-            "tp": 13,
-            "fp": 25,
-            "fn": 31,
-            "precision": 0.34210526315789475,
-            "recall": 0.29545454545454547,
-            "f1": 0.3170731707317073,
-            "gap_to_target": 0.5829268292682928
+            "tp": 14,
+            "fp": 24,
+            "fn": 30,
+            "precision": 0.3684210526315789,
+            "recall": 0.3181818181818182,
+            "f1": 0.34146341463414637,
+            "gap_to_target": 0.5585365853658537
           },
           "localized_edges": {
             "tp": 31,
@@ -385,12 +385,12 @@
           "endpoint_coverage": {
             "reference_pairs": 44,
             "both_endpoints_located": 43,
-            "both_endpoints_located_and_named": 18
+            "both_endpoints_located_and_named": 21
           },
           "printed_names": {
             "expected": 39,
             "located": 38,
-            "correct": 22
+            "correct": 24
           },
           "equipment_types": {
             "predicted": 42,
@@ -466,13 +466,13 @@
         },
         "ai": {
           "named_edges": {
-            "tp": 2,
-            "fp": 2,
-            "fn": 5,
-            "precision": 0.5,
-            "recall": 0.2857142857142857,
-            "f1": 0.36363636363636365,
-            "gap_to_target": 0.5363636363636364
+            "tp": 3,
+            "fp": 1,
+            "fn": 4,
+            "precision": 0.75,
+            "recall": 0.42857142857142855,
+            "f1": 0.5454545454545454,
+            "gap_to_target": 0.3545454545454546
           },
           "localized_edges": {
             "tp": 3,
@@ -486,12 +486,12 @@
           "endpoint_coverage": {
             "reference_pairs": 7,
             "both_endpoints_located": 7,
-            "both_endpoints_located_and_named": 4
+            "both_endpoints_located_and_named": 7
           },
           "printed_names": {
             "expected": 8,
             "located": 8,
-            "correct": 7
+            "correct": 8
           },
           "equipment_types": {
             "predicted": 13,
@@ -668,13 +668,13 @@
         },
         "ai": {
           "named_edges": {
-            "tp": 11,
-            "fp": 5,
-            "fn": 11,
-            "precision": 0.6875,
-            "recall": 0.5,
-            "f1": 0.5789473684210527,
-            "gap_to_target": 0.32105263157894737
+            "tp": 12,
+            "fp": 4,
+            "fn": 10,
+            "precision": 0.75,
+            "recall": 0.5454545454545454,
+            "f1": 0.631578947368421,
+            "gap_to_target": 0.268421052631579
           },
           "localized_edges": {
             "tp": 14,
@@ -688,12 +688,12 @@
           "endpoint_coverage": {
             "reference_pairs": 22,
             "both_endpoints_located": 20,
-            "both_endpoints_located_and_named": 14
+            "both_endpoints_located_and_named": 16
           },
           "printed_names": {
             "expected": 18,
             "located": 17,
-            "correct": 14
+            "correct": 15
           },
           "equipment_types": {
             "predicted": 27,
@@ -717,8 +717,5 @@
       "annotation_sha256": "3f7e0f1ddc8da840898beee2dc8575cfe0a9b31a31b2984a2c7c1d033bc6606e"
     }
   ],
-  "warnings": [],
-  "retried_drawings": [
-    "NUREG/CR-5745 Fig. A.2"
-  ]
+  "warnings": []
 }

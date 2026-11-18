@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+from functools import partial
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -66,18 +67,29 @@ def read_truth(entry, directory, size):
     return graph, annotation_hash
 
 
-def _baseline(image, output):
+def _baseline(image, output, *, label_records=None):
     result = analyze_drawing(image, output, use_reference=False)
     components, edges, provenance = analysis_objects(result)
     if provenance["method"] != "classical" or result.reference_citation:
         raise ValueError("Source-assisted extraction cannot be used for this comparison.")
+    if label_records is not None:
+        evidence = result.directory / "ocr_evidence.json"
+        if evidence.is_file():
+            label_records.extend(load_json(evidence).get("ocr", {}).get("ink_label_readings", ()))
     return {"components": components, "connections": edges, "arrows": provenance.get("arrows", []), "model": "V2 classical OCR and geometry"}
 
 
-def _ai(image, baseline, settings, mode, size):
-    if mode == "local-ml":
+def _ai(image, baseline, settings, mode, size, label_records):
+    if mode in ("local-ml", "subscription-crops"):
         from aip.v3.vision import extract_local_connections
-        return extract_local_connections(image, baseline.get("components"), baseline.get("arrows"))
+        graph = extract_local_connections(image, baseline.get("components"), baseline.get("arrows"), label_records=label_records)
+        if mode == "subscription-crops":
+            from aip.v3.label_crops import read_crop_tags
+            with image_info(image) as pixels:
+                added = read_crop_tags(pixels, graph["components"], settings["_plan_generate"])
+            graph.update(provider="chatgpt-plan", model=settings["model"], hosted_labels=added,
+                         hosted_method="focused_label_crops")
+        return graph
     from aip.v3.vision import extract_connections
     return extract_connections(settings, image.read_bytes(), "image/png", *size)
 
@@ -89,7 +101,17 @@ def run(args):
     work = Path(mkdtemp(prefix="comparison-", dir=args.evidence))
     sheets, models = [], set()
     settings = {}
-    if args.method == "vision-api":
+    if args.method == "subscription-crops":
+        from aip.v3.plan import PlanClient
+        client = PlanClient()
+        status = client.status()
+        model = args.model or status["model"]
+        if not status["ready"]:
+            raise ValueError(status["error"] or "Sign in from the workbench to use the connected ChatGPT subscription.")
+        if model not in {item["slug"] for item in status["models"]}:
+            raise ValueError("Select a model available to the connected ChatGPT subscription.")
+        settings = {"model": model, "_plan_generate": partial(client.generate, model=model)}
+    elif args.method == "vision-api":
         from aip.v3.server import profile
         settings = profile(args.provider) if args.provider != "local" else {"provider": "local"}
         if args.base_url and args.provider not in ("local", "compatible"):
@@ -113,13 +135,14 @@ def run(args):
         if "graphml_sha256" in case:
             row["graphml_sha256"] = case["graphml_sha256"]
         graphs = {}
+        label_records = []
         try:
-            graphs["baseline"] = _baseline(image, folder / "v2")
+            graphs["baseline"] = _baseline(image, folder / "v2", label_records=label_records)
         except (ValueError, OSError, RuntimeError) as exc:
             row["failures"]["baseline"] = type(exc).__name__
             (folder / "baseline_error.txt").write_text(str(exc), encoding="utf-8")
         try:
-            graphs["ai"] = _ai(image, graphs.get("baseline", {}), settings, args.method, size)
+            graphs["ai"] = _ai(image, graphs.get("baseline", {}), settings, args.method, size, label_records)
             if graphs["ai"].get("model"):
                 models.add(graphs["ai"]["model"])
         except (ValueError, OSError, RuntimeError) as exc:
@@ -166,7 +189,7 @@ def main():
     parser.add_argument("--manifest", type=Path, default=ROOT / "data/evaluation/nureg-cr5745-beginner.json")
     parser.add_argument("--evidence", type=Path, default=ROOT / "runs/v3-benchmark")
     parser.add_argument("--report", type=Path, help="Also write the comparison to this path")
-    parser.add_argument("--method", choices=("local-ml", "vision-api"), default="local-ml")
+    parser.add_argument("--method", choices=("local-ml", "vision-api", "subscription-crops"), default="local-ml")
     parser.add_argument("--provider", choices=("openai", "anthropic", "compatible", "local"), default="local")
     parser.add_argument("--model", default="")
     parser.add_argument("--base-url", default="")

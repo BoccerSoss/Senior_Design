@@ -263,8 +263,13 @@ class Application(BaseApplication):
         settings = self.require_profile(body.get("provider"), "trace", body.get("model"))
         refresh = body.get("refresh", False)
         replace_reviewed = body.get("replace_reviewed", False)
+        focus_labels = body.get("focus_labels", False)
         if not isinstance(refresh, bool) or not isinstance(replace_reviewed, bool):
             raise ValueError("The refresh and replace-reviewed flags must be true or false.")
+        if not isinstance(focus_labels, bool) or (focus_labels and settings["provider"] != "chatgpt-plan"):
+            raise ValueError("Focused label reading is available with a signed-in ChatGPT plan.")
+        if focus_labels:
+            settings["focus_labels"] = True
         with self._lock:
             if sheet_id in self._in_flight:
                 raise Conflict("A connection trace is already running for this drawing.")
@@ -374,7 +379,8 @@ class Handler(BaseHandler):
         elif path == "/api/v3/trace":
             self.send({"trace": self.app.latest(query.get("sheet_id", [None])[0])})
         elif path == "/api/v3/report":
-            names = ("v3_pid2graph_comparison.json", "v3_comparison.json", "v3_synthetic_comparison.json")
+            names = ("v3_comparison.json", "v3_subscription_crop_comparison.json", "v3_synthetic_comparison.json",
+                     "v3_pid2graph_comparison.json")
             reports = [json.loads((ROOT / "reports" / name).read_text(encoding="utf-8")) for name in names]
             self.send({"reports": reports})
         else:

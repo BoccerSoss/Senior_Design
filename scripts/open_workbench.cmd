@@ -36,11 +36,17 @@ exit /b %aip_exit_code%
 exit /b %errorlevel%
 
 :setup_v3
-".venv\Scripts\python.exe" -c "import jwt, cryptography, win32crypt, numpy; from importlib.metadata import version; assert all(version(k)==v for k,v in [('PyJWT','2.15.1'),('cryptography','50.0.2'),('pywin32','312'),('numpy','2.5.5')])" >nul 2>&1
-if not errorlevel 1 exit /b 0
-echo Setting up V3 raster routing and ChatGPT subscription sign-in...
+".venv\Scripts\python.exe" -c "import jwt, cryptography, win32crypt, numpy, onnxruntime; from importlib.metadata import version; assert all(version(k)==v for k,v in [('PyJWT','2.15.1'),('cryptography','50.0.2'),('pywin32','312'),('numpy','2.5.5'),('onnxruntime','1.32.0')])" >nul 2>&1
+if not errorlevel 1 goto setup_ocr
+echo Setting up V3 raster routing, local OCR and ChatGPT subscription sign-in...
 ".venv\Scripts\python.exe" -m pip --disable-pip-version-check install --require-hashes --only-binary=:all: -r requirements-v3.lock
-if errorlevel 1 echo V3 dependency setup failed. The basic local tracer is still available.
+if errorlevel 1 (
+    echo V3 dependency setup failed. The basic local tracer is still available.
+    exit /b 0
+)
+:setup_ocr
+".venv\Scripts\python.exe" scripts\setup_local_ocr.py
+if errorlevel 1 echo The local OCR model is unavailable. Drawing analysis can still use Windows OCR.
 exit /b 0
 
 :setup_failed

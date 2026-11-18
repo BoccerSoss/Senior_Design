@@ -361,6 +361,7 @@ window.aipV3 = (() => {
             <button type="button" class="button small" data-plan-web>Use ChatGPT in your browser</button>
           </div>
           <label class="field" data-plan-model hidden>Plan model<select name="plan_model"></select></label>
+          ${asking ? "" : '<label data-plan-crops hidden><input type="checkbox" name="focus_labels"> Trace lines locally and send unread label crops to ChatGPT</label>'}
           <p class="section-note" data-usage hidden>This request uses your ChatGPT plan allowance or available credits. <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">View plan usage ↗</a></p>
         </section>
         <div class="v3-web" hidden>
@@ -402,7 +403,8 @@ window.aipV3 = (() => {
         clearTimeout(pollTimer);
         const profile = choices.find(item => item.id === form.elements.provider.value);
         preferences[task] = profile.id;
-        const data = asking ? "the question and this sheet’s recorded observations" : "the selected sheet image";
+        const data = asking ? "the question and this sheet’s recorded observations"
+          : form.elements.focus_labels?.checked ? "image crops around equipment with unread labels" : "the selected sheet image";
         const destination = profile.external === false || ["local-ml","local-graph"].includes(profile.id) ? "locally" : "at the configured endpoint";
         const note = $(".v3-profile", form), isPlan = profile.id === "chatgpt-plan", isWeb = profile.id === chatgptWeb.id;
         const refreshOption = $("[data-refresh-trace]", form);
@@ -442,6 +444,8 @@ window.aipV3 = (() => {
           if (models.some(item => item.slug === selected)) modelSelect.value = selected;
           else if (models.some(item => item.slug === profile.model)) modelSelect.value = profile.model;
           $("[data-plan-model]", form).hidden = !profile.ready || !models.length;
+          const crops = $("[data-plan-crops]", form);
+          if (crops) crops.hidden = !profile.ready;
           $("[data-usage]", form).hidden = !profile.ready;
           if (profile.pending && modal.open && !busy) pollTimer = setTimeout(pollSignIn, 1800);
         } else note.textContent = profile.ready
@@ -496,6 +500,7 @@ window.aipV3 = (() => {
       login.onclick = () => changePlanSession(true);
       logout.onclick = () => changePlanSession(false);
       form.elements.plan_account.onchange = updateProfile;
+      if (form.elements.focus_labels) form.elements.focus_labels.onchange = updateProfile;
       $("[data-plan-web]", form).onclick = () => {
         form.elements.provider.value = chatgptWeb.id;
         form.elements.provider.dispatchEvent(new Event("change"));
@@ -536,6 +541,7 @@ window.aipV3 = (() => {
         submit.disabled = true;
         $("[data-plan-web]", form).disabled = true;
         form.elements.plan_account.disabled = form.elements.plan_model.disabled = true;
+        if (form.elements.focus_labels) form.elements.focus_labels.disabled = true;
         status.textContent = provider === chatgptWeb.id ? "Preparing text to copy…"
           : asking ? "Finding supporting observations…" : "Tracing equipment connections…";
         const started = performance.now();
@@ -559,7 +565,8 @@ window.aipV3 = (() => {
           } else {
             const refresh = provider === "local-ml" && !!form.elements.refresh_trace?.checked;
             const replace_reviewed = !!form.elements.replace_reviewed?.checked;
-            const {trace} = await post("/api/v3/trace", {sheet_id:sheet.id, provider, refresh, replace_reviewed, ...selectedModel});
+            const focus_labels = provider === "chatgpt-plan" && !!form.elements.focus_labels?.checked;
+            const {trace} = await post("/api/v3/trace", {sheet_id:sheet.id, provider, refresh, replace_reviewed, focus_labels, ...selectedModel});
             cacheTrace(sheet.id, trace);
             if (app.sheetId === sheet.id && modal.open) {
               changeSource("v3");
@@ -575,6 +582,7 @@ window.aipV3 = (() => {
           clearInterval(elapsedTimer);
           busy = false;
           form.elements.provider.disabled = form.elements.plan_model.disabled = $("[data-plan-web]", form).disabled = false;
+          if (form.elements.focus_labels) form.elements.focus_labels.disabled = false;
           updateProfile();
         }
       });

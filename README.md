@@ -12,7 +12,7 @@ On matching beginner PNGs, **Read with symbol reference** uses source-checked sy
 
 Open **Grid** for a square grid over the original drawing. Coordinates display automatically there and in the Drawing tab’s component list. An equipment coordinate such as **(3, 2)** identifies the nearest intersection in column 3, row 2, counting from the upper left. Select the equipment to inspect its position. Choose **Equipment centers** to draw lines through every marked center. **Export JSON** and drawing questions use the selected layout.
 
-**Connectivity matrix → Benchmark results** shows V3.5 image-only scores of **0.729 F1 for localized direct connections** and **0.500 F1 for correctly named direct connections** across the six provisional beginner sheets. The four-component synthetic control scored **1.000** on both measures. The project target is **0.90**. The panel also retains the earlier independent OPEN100 benchmark.
+**Connectivity matrix → Benchmark results** shows V3.6 scores across six provisional beginner PNGs. The local workflow reached **0.525 F1 for correctly named direct connections**, and the optional ChatGPT label-crop workflow reached **0.619**. Both scored **0.729 F1** for connections matched by drawing location. The four-component synthetic control scored **1.000**. The project target is **0.90**. The panel also retains the earlier independent OPEN100 benchmark.
 
 [V3 demo and model setup](docs/V3_WORKBENCH.md) · [Evaluation results and reproduction](docs/V3_EVALUATION.md) · [Independent annotation source](https://zenodo.org/records/14803338)
 
@@ -30,7 +30,7 @@ The earlier source-aligned grid revision passed **180 local tests**. All 125 mar
 
 The earlier matrix-focused revision passed **166 local tests**. The four-component example ran through the actual image extractor and produced **4 equipment records, 3 direct connections and the labeled 4×4 matrix**, with its raw prediction preserved. This is a known development example, not a blind accuracy test. The [verification record](docs/V2_VERIFICATION.md) separates that result from the newer source-aligned grid revision.
 
-The earlier six-beginner-PNG import check produced coordinates for all 125 equipment observations and 104 nonempty OCR names; 21 names remained unread. These are completeness counts, not independently scored accuracy. Optional external AI remains separately configured and untested with live requests.
+The earlier reference-assisted import produced coordinates for 125 equipment observations and 104 nonempty OCR names. Live subscription tests on the public beginner PNGs are reported separately from the local benchmark.
 
 ## Original desktop prototype (V1)
 
