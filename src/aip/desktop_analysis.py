@@ -41,6 +41,11 @@ class AnalysisError(RuntimeError):
         super().__init__(message)
 
 
+def image_label_records(result):
+    evidence = result.directory / "ocr_evidence.json"
+    return load_json(evidence).get("ocr", {}).get("ink_label_readings", []) if evidence.is_file() else []
+
+
 def _csv_records(path: Path, required_columns: set[str]) -> list[dict[str, str]]:
     with path.open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)

@@ -13,7 +13,7 @@ from tempfile import mkdtemp
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from aip.desktop_analysis import analyze_drawing
+from aip.desktop_analysis import analyze_drawing, image_label_records
 from aip.io import digest, image_info, load_json, write_json
 from aip.v2.ingest import analysis_objects
 from aip.v3 import VERSION
@@ -73,9 +73,7 @@ def _baseline(image, output, *, label_records=None):
     if provenance["method"] != "classical" or result.reference_citation:
         raise ValueError("Source-assisted extraction cannot be used for this comparison.")
     if label_records is not None:
-        evidence = result.directory / "ocr_evidence.json"
-        if evidence.is_file():
-            label_records.extend(load_json(evidence).get("ocr", {}).get("ink_label_readings", ()))
+        label_records.extend(image_label_records(result))
     return {"components": components, "connections": edges, "arrows": provenance.get("arrows", []), "model": "V2 classical OCR and geometry"}
 
 

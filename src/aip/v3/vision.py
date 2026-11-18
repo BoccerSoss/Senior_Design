@@ -11,8 +11,8 @@ from tempfile import TemporaryDirectory
 
 from PIL import Image, ImageChops
 
-from ..classical import extract_image
 from ..ctc_ocr import supplement_blank_tags
+from ..desktop_analysis import AnalysisError, analyze_drawing, image_label_records
 from ..v2.providers import MAX_IMAGE_BYTES, ProviderError, extract_provider
 from .direction import PROCESS_LINE_KINDS, arrow_direction, assign_directions, raster_arrows
 from .label_crops import read_crop_tags
@@ -129,11 +129,18 @@ def extract_local_connections(image_path, classical_components=None, classical_a
     with Image.open(source) as image:
         ink = image.convert("L").point(lambda value: 255 if value < 160 else 0)
     if classical_components is None:
+        from ..v2.ingest import analysis_objects
+
         with TemporaryDirectory(prefix="aip-v3-ocr-") as scratch:
-            observed = extract_image(source, Path(scratch))
-            classical_components = observed["components"]
-            classical_arrows = observed.get("arrows", [])
-            label_records = observed.get("method_evidence", {}).get("ocr", {}).get("ink_label_readings", ())
+            # Keep the Windows OCR runtime in its existing worker. Mixing its
+            # native C++ runtime with ONNX Runtime can terminate the server.
+            try:
+                read = analyze_drawing(source, Path(scratch), use_reference=False)
+            except AnalysisError as error:
+                raise ProviderError(error.diagnostic) from error
+            classical_components, _, provenance = analysis_objects(read)
+            classical_arrows = provenance["arrows"]
+            label_records = image_label_records(read)
     components = []
     for item in classical_components:
         component = {key: item[key] for key in ("id", "bbox", "type", "tag_bbox", "evidence", "uncertainty")
