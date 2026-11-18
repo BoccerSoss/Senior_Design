@@ -263,7 +263,7 @@ def _check_vision_routes(result, ink):
 _LEGACY_ARROW_WARNING = ": The proposed direction lacked matching arrow evidence."
 
 
-def _resolve_trace_directions(result, ink, claims, *, fresh_provider=False):
+def _resolve_trace_directions(result, ink, claims, *, fresh_provider=False, reference_routes=False):
     """Resolve supported process-line directions from the retained paths and raster."""
     components, connections = result["components"], result["connections"]
     slack = max(2, min(8, round(min(ink.size) * 0.002)))
@@ -281,7 +281,7 @@ def _resolve_trace_directions(result, ink, claims, *, fresh_provider=False):
                 arrow["verified"] = False
                 result["uncertainties"].append(f"{arrow['id']}: Arrow could not be aligned with its proposed line.")
     arrows = raster_arrows(ink, components, connections, ports, (), arrows)
-    assign_directions(ink, components, connections, arrows, ports, slack)
+    assign_directions(ink, components, connections, arrows, ports, slack, reference_routes=reference_routes)
     result["arrows"] = arrows
     for edge in by_edge.values():
         if edge["id"] not in claims:
@@ -297,7 +297,7 @@ def _resolve_trace_directions(result, ink, claims, *, fresh_provider=False):
             result["uncertainties"].append(edge["id"] + _LEGACY_ARROW_WARNING)
 
 
-def refresh_trace_directions(trace, image_bytes):
+def refresh_trace_directions(trace, image_bytes, *, reference_routes=False):
     """Recheck the saved trace's arrow evidence on its original PNG without invoking a model."""
     image_info = trace.get("image", {})
     expected_hash = image_info.get("sha256")
@@ -315,7 +315,7 @@ def refresh_trace_directions(trace, image_bytes):
         proposed = edge.get("direction_evidence", {}).get("proposed_direction")
         if proposed is not None:
             claims[edge["id"]] = proposed
-    _resolve_trace_directions(result, ink, claims)
+    _resolve_trace_directions(result, ink, claims, reference_routes=reference_routes)
     return result
 
 

@@ -56,6 +56,46 @@ def trace(**kwargs):
 
 
 class DirectionTests(unittest.TestCase):
+    def test_offset_inline_ports_carry_arrow_evidence_through_only_visible_ink(self):
+        for interrupted in (False, True):
+            with self.subTest(interrupted=interrupted), TemporaryDirectory() as scratch:
+                image = Image.new("L", (340, 140), "white")
+                draw = ImageDraw.Draw(image)
+                boxes = [[22, 43, 50, 73], [110, 42, 141, 87], [231, 58, 261, 86]]
+                draw.rectangle((22, 43, 49, 72), outline="black")
+                draw.rectangle((231, 58, 260, 85), outline="black")
+                draw.line((40, 55, 120, 55), fill="black", width=2)
+                draw.line((129, 70, 296, 70), fill="black", width=2)
+                if not interrupted:
+                    draw.line((120, 55, 129, 70), fill="black", width=2)
+                draw.line(((284, 62), (296, 70), (284, 78)), fill="black")
+                path = Path(scratch) / "drawing.png"
+                image.save(path)
+                nodes = [{"id": str(i), "type": "valve", "bbox": box} for i, box in enumerate(boxes)]
+                result = extract_local_connections(path, nodes)
+                self.assertEqual([("0", "1"), ("1", "2")],
+                                 [(edge["source"], edge["target"]) for edge in result["connections"]])
+                self.assertEqual([("unknown" if interrupted else "source_to_target"), "source_to_target"],
+                                 [edge["direction"] for edge in result["connections"]])
+
+    def test_hosted_direction_finds_a_printed_arrow_along_shallow_diagonal_coordinates(self):
+        image = Image.new("L", (340, 210))
+        draw = ImageDraw.Draw(image)
+        draw.line((30, 66, 300, 156), fill=255, width=4)
+        draw.polygon(((174, 107), (214, 127), (170, 126)), fill=255)
+        trace = {"components": [
+                    {"id": "left", "bbox": [20, 55, 37, 83], "type": "valve"},
+                    {"id": "right", "bbox": [291, 145, 312, 168], "type": "valve"},
+                 ],
+                 "connections": [{"id": "only", "source": "left", "target": "right",
+                                  "kind": "pipe", "path": [[36, 68], [292, 153]],
+                                  "evidence": "Continuous stroke.", "direction": "unknown"}],
+                 "arrows": [], "uncertainties": []}
+        result = _check_vision_routes(trace, image)
+        self.assertEqual("source_to_target", result["connections"][0]["direction"])
+        self.assertEqual("on_edge", result["connections"][0]["direction_evidence"]["basis"])
+        self.assertEqual("only", result["arrows"][0]["connection_id"])
+
     def test_terminal_tip_orients_only_immediate_pairs_in_all_four_headings(self):
         for reverse in (False, True):
             for vertical in (False, True):

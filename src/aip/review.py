@@ -1,8 +1,8 @@
-"""Build a queue from actionable observations in a saved V3 trace."""
+"""Build a review queue from actionable drawing observations."""
 from collections import Counter
 
-from ..core import normalize_tag
-from ..v2.matrix import TOPOLOGY_TYPES
+from .core import normalize_tag
+from .v2.matrix import TOPOLOGY_TYPES
 
 
 _DIRECTION_ISSUES = {

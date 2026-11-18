@@ -16,6 +16,7 @@ from PIL import Image, ImageOps
 
 from ..desktop_analysis import analyze_drawing
 from ..io import load_json
+from .direction import DIRECTION_REVISION, check_directions
 from .store import ident
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp"}
@@ -234,6 +235,11 @@ class Imports:
                                  use_reference=require_reference or settings.get("use_geometry_reference", True),
                                  require_reference=require_reference)
         components, connections, provenance = analysis_objects(result)
+        connections, provenance["arrows"] = check_directions(
+            image, components, connections, provenance["arrows"],
+            reference_routes=provenance["method"] == "drawing-reference",
+        )
+        provenance["direction_revision"] = DIRECTION_REVISION
         outcome = self.store.replace_analysis(sheet_id, components, connections, provenance)
         sheet = outcome["sheet"]
         if "analysis_error" in sheet["source_metadata"]:

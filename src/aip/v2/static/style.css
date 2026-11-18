@@ -89,3 +89,10 @@
 .grid-notes { margin-top: 12px; color: #52645d; font-size: 12px; }
 .grid-notes summary { cursor: pointer; }
 .grid-notes ul { padding-left: 18px; line-height: 1.5; }
+.jobs .job-row { padding: 0; }
+.job-title, .job-status {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

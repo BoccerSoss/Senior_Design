@@ -11,6 +11,7 @@ from time import perf_counter
 
 from ..drawing_reference import reference_image_keys
 from ..io import ROOT, digest
+from ..review import review_queue
 from ..v2.grid import equipment_positions
 from ..v2.matrix import build_matrix
 from ..v2.providers import provider_status
@@ -20,13 +21,12 @@ from . import VERSION
 from .ask import ask_drawing
 from .beginner import preload_beginner
 from .plan import PlanClient
-from .review import review_queue
 from .vision import MODEL_ID, extract_connections, refresh_trace_directions
 
 REVIEW_FIELDS = {"component": ("tag", "type"), "connection": ("direction", "kind")}
 DIRECTIONS = {"source_to_target", "target_to_source", "bidirectional", "unknown"}
 LINE_KINDS = {"pipe", "direct_undirected", "signal", "unknown"}
-DIRECTION_REVISION = 2
+DIRECTION_REVISION = 3
 
 
 @lru_cache(maxsize=512)
@@ -187,16 +187,21 @@ class Application(BaseApplication):
             if not row:
                 return None
             trace = json.loads(row[0])
-            if trace.get("direction_revision") == DIRECTION_REVISION or trace.get("review_revision"):
+            if trace.get("direction_revision", 0) >= DIRECTION_REVISION:
                 return trace
             try:
                 image = (self.store.directory / "images" / f"{sheet_id}.png").read_bytes()
                 refreshed = refresh_trace_directions(trace, image)
             except (OSError, ValueError):
                 return trace
+            reviewed = {edge["id"]: edge for edge in trace["connections"]
+                        if edge.get("review_status") in ("confirmed", "rejected")
+                        or edge.get("ai_observation") or (edge.get("direction_evidence") or {}).get("basis") == "reviewed"}
+            refreshed["connections"] = [reviewed.get(edge["id"], edge) for edge in refreshed["connections"]]
             refreshed["direction_revision"] = DIRECTION_REVISION
             signature = refreshed.get("local_input")
-            if signature and signature.get("version") == "3.3.0" and signature.get("sha256") == sha256(image).hexdigest():
+            if (signature and signature.get("version") in {"3.3.0", "3.4.0"}
+                    and signature.get("sha256") == sha256(image).hexdigest()):
                 signature["version"] = VERSION
             with self.store.db:
                 self.store.db.execute("UPDATE v3_traces SET result=? WHERE sheet_id=?",
@@ -297,6 +302,7 @@ class Application(BaseApplication):
         if facility_id is not None and facility_id != sheet["facility_id"]:
             raise ValueError("Drawing is outside the selected collection.")
         if method == "v2":
+            sheet = self.checked_drawing(sheet)
             return sheet, self.matrix(sheet["facility_id"], sheet_id)
         if method != "v3":
             raise ValueError("Select the V2 or V3 extraction.")

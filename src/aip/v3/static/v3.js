@@ -19,8 +19,8 @@ window.aipV3 = (() => {
   function displaySheet(sheet) {
     if (!sheet || !isV3View()) return sheet;
     const trace = traces.get(sheet.id);
-    if (!trace) return {...sheet, version:`v3/${sheet.version}/pending`, components:[], connections:[], arrows:[]};
-    return {...sheet, version:`v3/${sheet.version}/${trace.created_at || ""}/${trace.review_revision ?? 0}`, components: trace.components, connections: trace.connections,
+    if (!trace) return {...sheet, version:`v3/${sheet.version}/pending`, components:[], connections:[], arrows:[], review:[]};
+    return {...sheet, version:`v3/${sheet.version}/${trace.created_at || ""}/${trace.review_revision ?? 0}`, components: trace.components, connections: trace.connections, review:trace.review || [],
       arrows:(trace.arrows || []).filter(arrow => arrow.verified ?? (trace.provider === "local-ml" || !!arrow.connection_id))};
   }
 
@@ -75,7 +75,11 @@ window.aipV3 = (() => {
       ? item.id === edge.source || item.id === edge.target : item.id === app.componentId)
       .flatMap(item => [item.bbox, ...(!edge ? [item.tag_bbox] : [])]).filter(box => Array.isArray(box));
     const arrowIds = edge?.direction_evidence?.arrow_ids || [];
-    const tips = (sheet.arrows || []).filter(arrow => arrowIds.includes(arrow.id)).map(arrow => arrow.tip);
+    const arrows = sheet.arrows ?? sheet.source_metadata?.analysis?.arrows ?? [];
+    const tips = arrows.filter(arrow => arrowIds.includes(arrow.id)).map(arrow => arrow.tip || arrow.arrow_tip).filter(Array.isArray);
+    if (!tips.length && edge?.direction_evidence?.basis !== "reviewed" && Array.isArray(edge?.observed_arrow?.arrow_tip)) {
+      tips.push(edge.observed_arrow.arrow_tip);
+    }
     const points = [...(edge?.path || []), ...tips, ...boxes.flatMap(([left,top,right,bottom]) => [[left,top],[right,bottom]])];
     if (!points.length) return;
     let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
@@ -130,45 +134,12 @@ window.aipV3 = (() => {
     delete app.gridData[sheetId];
   }
 
-  function reviewTabLabel() {
-    const count = reviewItems().length;
-    return count ? `Review (${count})` : "Review";
-  }
-
   function connectionLabels(edge, sheet) {
     const label = id => {
       const component = sheet.components.find(item => item.id === id);
       return component ? componentName(component) : id;
     };
     return [label(edge.source), label(edge.target)];
-  }
-
-  function directionStatus(edge) {
-    const basis = edge.direction_evidence?.basis;
-    if (basis === "reviewed") return "Direction corrected";
-    if (["on_edge", "run"].includes(basis)) return "Arrow observed";
-    return edge.direction === "bidirectional" ? "Bidirectional" : "Direction undetermined";
-  }
-
-  function describeConnection(edge, from, to) {
-    const label = ({
-      source_to_target:`${from} → ${to}`, target_to_source:`${to} → ${from}`, bidirectional:`${from} ↔ ${to}`
-    })[edge.direction] || `${from} · ${to}`;
-    const flagged = reviewItems().some(row => row.kind === "connection" && row.id === edge.id);
-    const status = edge.review_status === "confirmed" ? "Reviewed" : flagged ? "Needs review" : directionStatus(edge);
-    return {label, detail:`${lineKind(edge.kind)} · ${status}`};
-  }
-
-  function reviewQueue(sheet) {
-    const items = reviewItems();
-    if (!items.length) return '<h2>Review</h2><p class="empty-selection">No issues flagged in this trace.</p>';
-    return `<h2>Review</h2><div class="result-list">${items.map(({kind, id, reason}) => {
-      const component = kind === "component" && sheet.components.find(item => item.id === id);
-      const edge = kind === "connection" && sheet.connections.find(item => item.id === id);
-      const label = component ? componentName(component) : edge ? describeConnection(edge, ...connectionLabels(edge, sheet)).label : id;
-      return `<div class="result-item"><div><button type="button" class="result-title" data-v3="open-review" data-kind="${dataValue(kind)}" data-id="${dataValue(id)}">${esc(label)}</button>
-        <div class="result-detail">${esc(reason)}</div></div></div>`;
-    }).join("")}</div>`;
   }
 
   function evidenceMarkup(item, extra = "") {
@@ -205,7 +176,7 @@ window.aipV3 = (() => {
   }
 
   function reviewComponent(item, sheet, trace, heading) {
-    const back = app.tab === "review" ? 'data-v3="back-review">← Review' : 'data-action="all-components">← All components';
+    const back = app.tab === "review" ? 'data-action="review-view">← Review' : 'data-action="all-components">← All components';
     const fields = `<label class="field">Equipment tag or printed name<input name="tag" value="${dataValue(item.tag || "")}" placeholder="Unread label"></label>
       <label class="field">Type<input name="type" list="v3-component-types" value="${dataValue(item.type || "unknown")}" required></label>
       <datalist id="v3-component-types">${["pump", "valve", "tank", "vessel", "instrument", "junction", "connector", "unknown"].map(type =>
@@ -217,24 +188,22 @@ window.aipV3 = (() => {
       ${reviewEditor(item, trace, fields, "component")}
       ${evidenceMarkup(item, original)}
       ${item.tag_bbox ? '<p class="section-note">The dashed orange box marks the label region on the drawing.</p>' : ""}
-      <h3>Connections</h3><div class="result-list">${connectionRows(sheet, item.id, describeConnection)}</div>`;
+      <h3>Connections</h3><div class="result-list">${connectionRows(sheet, item.id)}</div>`;
   }
 
   function reviewConnection(edge, sheet, trace, heading) {
-    const back = app.tab === "review" ? 'data-v3="back-review">← Review' : 'data-action="all-connections">← All AI connections';
+    const back = app.tab === "review" ? 'data-action="review-view">← Review' : 'data-action="all-connections">← All AI connections';
     const [from, to] = connectionLabels(edge, sheet);
     const directions = {unknown:"Undetermined", source_to_target:`${from} → ${to}`, target_to_source:`${to} → ${from}`, bidirectional:"Bidirectional"};
-    const evidenceLabels = {run:"Arrowhead on the same uninterrupted run", on_edge:"Arrowhead on this segment",
-      conflict:"Conflicting arrow observations", reviewed:"Direction set by reviewer"};
-    const currentEvidence = evidenceLabels[edge.direction_evidence?.basis];
+    const currentEvidence = directionEvidenceLabel(edge);
     const original = edge.ai_observation;
     const originalDirection = original ? directions[original.direction] || directions.unknown : null;
-    const originalEvidence = original ? evidenceLabels[original.direction_evidence?.basis] : null;
+    const originalEvidence = original ? directionEvidenceLabel(original) : null;
     const fields = `<label class="field">Connection type<select name="kind">${["direct_undirected", "pipe", "signal", "unknown"].map(value =>
       `<option value="${value}"${value === (edge.kind || "unknown") ? " selected" : ""}>${esc(lineKind(value))}</option>`).join("")}</select></label>
       <label class="field">Observed direction<select name="direction">${Object.entries(directions).map(([value, label]) =>
       `<option value="${value}"${value === (edge.direction || "unknown") ? " selected" : ""}>${esc(label)}</option>`).join("")}</select></label>`;
-    return `<button type="button" class="result-title back-link" ${back}</button><h2>${esc(describeConnection(edge, from, to).label)}</h2>${heading}
+    return `<button type="button" class="result-title back-link" ${back}</button><h2>${esc(directedLabel(edge.direction, from, to))}</h2>${heading}
       ${currentEvidence ? `<dl class="fact-list"><dt>Direction evidence</dt><dd>${esc(currentEvidence)}</dd></dl>` : ""}
       ${reviewEditor(edge, trace, fields, "connection")}
       ${evidenceMarkup(edge, original ? `<p class="section-note"><strong>Original prediction</strong><br>${esc(lineKind(original.kind))} · ${esc(originalDirection)}${originalEvidence ? ` · ${esc(originalEvidence)}` : ""}</p>` : "")}`;
@@ -251,12 +220,12 @@ window.aipV3 = (() => {
     if (app.tab === "review") {
       if (component) return reviewComponent(component, sheet, trace, heading);
       if (edge) return reviewConnection(edge, sheet, trace, heading);
-      return reviewQueue(sheet);
+      return reviewQueueMarkup(sheet, sheet.review, "No issues flagged in this trace.");
     }
     if (app.tab === "connections") {
       if (edge) return reviewConnection(edge, sheet, trace, heading);
       const excluded = trace.excluded_connections || [];
-      return `<h2>AI connections</h2>${heading}<div class="result-list">${connectionRows(sheet, null, describeConnection)}</div>
+      return `<h2>AI connections</h2>${heading}<div class="result-list">${connectionRows(sheet)}</div>
         ${excluded.length ? `<details class="matrix-order"><summary>${excluded.length} excluded proposals</summary><ul>${excluded.map(item =>
           `<li>${esc(item.exclusion_reason || item.uncertainty || "Insufficient evidence")}</li>`).join("")}</ul></details>` : ""}`;
     }
@@ -697,12 +666,6 @@ window.aipV3 = (() => {
     if (!button) return;
     const operation = button.dataset.v3;
     if (operation === "trace" || operation === "ask") await showModelDialog(operation);
-    if (operation === "open-review" || operation === "back-review") {
-      app.componentId = button.dataset.kind === "component" ? button.dataset.id : "";
-      app.connectionId = button.dataset.kind === "connection" ? button.dataset.id : "";
-      render();
-      focusSelection();
-    }
     if (operation === "read-symbols") {
       const id = app.sheetId;
       button.disabled = true;
@@ -744,5 +707,5 @@ window.aipV3 = (() => {
     connector.open = false;
     connectSetup($("div", connector));
   });
-  return {isCandidate, isV3View, needsTrace, displaySheet, drawingControls: controls, matrixControls, syncDrawing, inspector, sourceSwitch, traceButton, focusSelection, reviewTabLabel, directionStatus};
+  return {isCandidate, isV3View, needsTrace, displaySheet, drawingControls: controls, matrixControls, syncDrawing, inspector, sourceSwitch, traceButton, focusSelection};
 })();

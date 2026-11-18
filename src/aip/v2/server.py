@@ -23,7 +23,9 @@ import zipfile
 from PIL import Image
 
 from ..io import ROOT
+from ..review import review_queue
 from . import VERSION
+from .direction import DIRECTION_REVISION, refresh_drawing_directions
 from .grid import equipment_positions
 from .matrix import build_matrix, matrix_csv
 from .ingest import Imports, MAX_UPLOAD
@@ -58,12 +60,30 @@ class Application:
     def close(self):
         self.imports.executor.shutdown(wait=False, cancel_futures=True)
 
+    def checked_drawing(self, sheet):
+        """Refresh older raster evidence once and then present editable issues."""
+        analysis = sheet["source_metadata"].get("analysis") or {}
+        if analysis and sheet["connections"] and analysis.get("direction_revision", 0) < DIRECTION_REVISION:
+            image = self.store.directory / "images" / f"{sheet['id']}.png"
+            try:
+                refreshed = refresh_drawing_directions(sheet, image)
+                if refreshed["source_metadata"]["analysis"].get("direction_revision") == DIRECTION_REVISION:
+                    sheet = self.store.save_direction_check(refreshed)
+            except Conflict:
+                sheet = self.store.sheet(sheet["id"])
+            except (OSError, ValueError):
+                pass
+        analysis = sheet["source_metadata"].get("analysis") or {}
+        return {**sheet, "review": review_queue({**sheet, "arrows": analysis.get("arrows", ()),
+                                               "uncertainties": analysis.get("uncertainties", ())})}
+
     def state(self, facility_id=None):
         state = self.store.snapshot()
         if facility_id:
             state["sheets"] = [s for s in state["sheets"] if s["facility_id"] == facility_id]
             state["links"] = [link for link in state["links"] if link["facility_id"] == facility_id]
             state["jobs"] = [job for job in state["jobs"] if job["facility_id"] == facility_id]
+        state["sheets"] = [self.checked_drawing(sheet) for sheet in state["sheets"]]
         for sheet in state["sheets"]:
             sheet.pop("analysis", None)
             sheet.pop("corrections", None)
@@ -399,7 +419,14 @@ class Application:
             facility_id = self.store.sheet(sheet_id)["facility_id"]
         if not facility_id:
             raise ValueError("Choose a drawing or facility for the connectivity matrix.")
-        return build_matrix(self.store.snapshot(), facility_id, sheet_id)
+        state = self.store.snapshot()
+        state["sheets"] = [self.checked_drawing(sheet) for sheet in state["sheets"]
+                           if sheet["facility_id"] == facility_id and (sheet_id is None or sheet["id"] == sheet_id)]
+        matrix = build_matrix(state, facility_id, sheet_id, include_unreviewed_warnings=False)
+        matrix["review"] = [({**item, "sheet_id": sheet["id"]} if sheet_id is None else item)
+                            for sheet in state["sheets"] for item in sheet["review"]]
+        matrix["stats"]["review_items"] = len(matrix["review"])
+        return matrix
 
     def matrix_query(self, query):
         if query.get("method", ["v2"])[0] != "v2":

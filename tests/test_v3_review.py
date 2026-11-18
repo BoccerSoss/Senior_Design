@@ -1,6 +1,6 @@
 import unittest
 
-from aip.v3.review import review_queue
+from aip.review import review_queue
 
 
 class ReviewQueueTests(unittest.TestCase):

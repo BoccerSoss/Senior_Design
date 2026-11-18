@@ -4,7 +4,7 @@ from math import ceil, floor, hypot
 
 from PIL import Image
 
-from ..connection_geometry import HorizontalStroke, arrowheads_on_stroke
+from ..connection_geometry import HorizontalStroke, arrowheads_on_stroke, observe_flow_arrows
 from ..flow_routes import trace_arrow_routes
 
 
@@ -82,16 +82,31 @@ def raster_arrows(ink, components, connections, ports, classical_arrows, existin
             add(tip, wings)
 
     used_ports = set()
+    oblique_edges = []
     for edge in connections:
         if edge["kind"] not in PROCESS_LINE_KINDS:
             continue
         path = edge["path"]
+        if any(abs(a[0] - b[0]) > 2 and abs(a[1] - b[1]) > 2 for a, b in zip(path, path[1:])):
+            oblique_edges.append(path)
         used_ports.update(((edge["source"], tuple(path[0])), (edge["target"], tuple(path[-1]))))
         for a, b in zip(path, path[1:]):
             vertical = abs(a[0] - b[0]) < abs(a[1] - b[1])
             first, last = (a[::-1], b[::-1]) if vertical else (a, b)
             if abs(first[1] - last[1]) <= 2:
                 scan(vertical, min(first[0], last[0]), max(first[0], last[0]), (first[1] + last[1]) / 2)
+
+    # Kept routes from hosted traces can follow shallow diagonal shafts that
+    # never pass through the horizontal or vertical leg scans.
+    if oblique_edges:
+        slack = max(2, min(8, round(min(ink.size) * 0.002)))
+        for mark in observe_flow_arrows(ink.point(lambda value: int(bool(value))).tobytes(), ink.width):
+            if "-" not in mark["direction"]:
+                continue
+            tip, wings = mark["arrow_tip"], mark["arrow_wings"]
+            landmark = {"tip": tip, "tail": [(a + b) / 2 for a, b in zip(*wings)]}
+            if any(arrow_direction(landmark, path, slack) for path in oblique_edges):
+                add(tip, wings)
 
     # A terminal arrow need not fall between two pieces of equipment. Search a
     # connected outgoing stem up to the next symbol or first break in the ink.
@@ -204,6 +219,25 @@ def _has_branch(path, arrow, ink, slack):
     return False
 
 
+def _reachable_ports(pixels, box, starts, targets):
+    """Find candidate port coordinates actually connected inside one symbol."""
+    left, top, right, bottom = (floor(box[0]), floor(box[1]), ceil(box[2]), ceil(box[3]))
+    pending = [point for point in starts if pixels[point]]
+    seen = set(pending)
+    reached = set()
+    for x, y in pending:
+        if (x, y) in targets:
+            reached.add((x, y))
+            if reached == targets:
+                break
+        for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)):
+            nx, ny = point = x + dx, y + dy
+            if left <= nx < right and top <= ny < bottom and point not in seen and pixels[point]:
+                seen.add(point)
+                pending.append(point)
+    return reached
+
+
 def _has_symbol_branch(ink, box, ports, shaft, vertical, slack):
     """Match extra ports to connected ink inside an inline symbol's box."""
     if len(ports) <= 2:
@@ -216,20 +250,86 @@ def _has_symbol_branch(ink, box, ports, shaft, vertical, slack):
         return False
     left, top, right, bottom = (floor(box[0]), floor(box[1]), ceil(box[2]), ceil(box[3]))
     ends = [(shaft, top), (shaft, bottom - 1)] if vertical else [(left, shaft), (right - 1, shaft)]
-    pending = [point for point in ends if pixels[point]]
-    seen = set(pending)
-    for x, y in pending:
-        if (x, y) in extra:
-            return True
-        for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)):
-            nx, ny = point = x + dx, y + dy
-            if left <= nx < right and top <= ny < bottom and point not in seen and pixels[point]:
-                seen.add(point)
-                pending.append(point)
-    return False
+    return bool(_reachable_ports(pixels, box, ends, extra))
 
 
-def assign_directions(ink, components, connections, arrows, ports, slack):
+def _endpoint(edge, node):
+    return tuple(edge["path"][0] if edge["source"] == node else edge["path"][-1])
+
+
+def _path_port(edge, node, ports, slack):
+    path = edge["path"] if edge["source"] == node else list(reversed(edge["path"]))
+    x, y = path[0]
+    a, b = next((p for p in path[1:] if p != path[0]), path[0])
+    dx, dy = a - x, b - y
+    candidates = [(point, heading) for point, heading in ports
+                  if hypot(x - point[0], y - point[1]) <= slack + 4
+                  and dx * heading[0] + dy * heading[1] >= 0.8 * hypot(dx, dy)]
+    return candidates[0] if len(candidates) == 1 and (dx or dy) else None
+
+
+def _follows_pipe(edge, pixels):
+    """Require continuous centerline ink for every leg of a run extension."""
+    for a, b in zip(edge["path"], edge["path"][1:]):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        if min(abs(dx), abs(dy)) > 2:
+            return False
+        steps = max(1, ceil(max(abs(dx), abs(dy))))
+        if not all(pixels[round(a[0] + dx * n / steps), round(a[1] + dy * n / steps)]
+                   for n in range(steps + 1)):
+            return False
+    return True
+
+
+def _extend_across_ports(ink, arrows, connections, incident, boxes, stops, ports, direct, inferred, ambiguous, slack):
+    """Carry a vote through opposing connected ports across offset pipe legs."""
+    pixels = ink.load()
+    paired_ports = {}
+    pipe_support = {}
+    for arrow in arrows:
+        arrow_id = arrow["id"]
+        pending = []
+        for edge in connections:
+            ident = edge["id"]
+            directions = {direct[ident].get(arrow_id), inferred[ident].get(arrow_id)} - {None}
+            if len(directions) == 1 and not ambiguous[ident]:
+                pending.append((edge, directions.pop()))
+        seen = {edge["id"] for edge, _ in pending}
+        for edge, direction in pending:
+            if edge["id"] not in pipe_support:
+                pipe_support[edge["id"]] = _follows_pipe(edge, pixels)
+            if not pipe_support[edge["id"]]:
+                continue
+            for node in (edge["source"], edge["target"]):
+                if node in stops or len(incident[node]) != 2:
+                    continue
+                other, = (other for other in incident[node] if other["id"] != edge["id"])
+                ident = other["id"]
+                if ident in seen or ambiguous[ident] or other["kind"] not in PROCESS_LINE_KINDS:
+                    continue
+                if ident not in pipe_support:
+                    pipe_support[ident] = _follows_pipe(other, pixels)
+                if not pipe_support[ident] or _has_branch(other["path"], arrow, ink, slack):
+                    continue
+                key = node, frozenset((edge["id"], ident))
+                if key not in paired_ports:
+                    source = _path_port(edge, node, ports[node], slack)
+                    target = _path_port(other, node, ports[node], slack)
+                    through = False
+                    if source and target and source[1] == (-target[1][0], -target[1][1]):
+                        possible = {point for point, _ in ports[node] if point != source[0]}
+                        through = _reachable_ports(pixels, boxes[node], [source[0]], possible) == {target[0]}
+                    paired_ports[key] = through
+                if not paired_ports[key]:
+                    continue
+                reaches_node = (edge["target"] == node) == (direction == "source_to_target")
+                next_direction = "source_to_target" if (other["source"] == node) == reaches_node else "target_to_source"
+                inferred[ident][arrow_id] = next_direction
+                seen.add(ident)
+                pending.append((other, next_direction))
+
+
+def assign_directions(ink, components, connections, arrows, ports, slack, *, reference_routes=False):
     """Attach a head once, and carry its direction only along evidenced neighboring pairs."""
     incident = defaultdict(list)
     pairs = defaultdict(list)
@@ -260,6 +360,9 @@ def assign_directions(ink, components, connections, arrows, ports, slack):
                 arrow.setdefault("proposed_connection_id", previous)
             for edge, _ in matches:
                 ambiguous[edge["id"]].add(arrow["id"])
+            # A shared shaft can still establish other pairs reached by the
+            # verified axial ink walk before the routes diverge.
+            verified.append(arrow)
             continue
         if matches:
             edge, direction = matches[0]
@@ -269,8 +372,13 @@ def assign_directions(ink, components, connections, arrows, ports, slack):
             else:
                 ambiguous[edge["id"]].add(arrow["id"])
         verified.append(arrow)
-    stops = {node["id"] for node in components
-             if node.get("type") == "junction" or len(incident[node["id"]]) > 2}
+    stops = set()
+    for node in components:
+        ident = node["id"]
+        neighbors = incident[ident]
+        degree = len({_endpoint(edge, ident) for edge in neighbors}) if reference_routes else len(neighbors)
+        if node.get("type") == "junction" or degree > 2:
+            stops.add(ident)
     boxes = {node["id"]: node["bbox"] for node in components}
     for route, vertical, toward_upstream in _axial_routes(ink, verified, components):
         nodes_from_tip = list(reversed(route["component_ids"]))
@@ -288,6 +396,7 @@ def assign_directions(ink, components, connections, arrows, ports, slack):
             source = far if toward_upstream else near
             direction = "source_to_target" if edge["source"] == source else "target_to_source"
             inferred[edge["id"]][route["arrow_id"]] = direction
+    _extend_across_ports(ink, verified, connections, incident, boxes, stops, ports, direct, inferred, ambiguous, slack)
     for edge in connections:
         observed = direct[edge["id"]]
         carried = inferred[edge["id"]]

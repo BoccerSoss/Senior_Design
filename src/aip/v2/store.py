@@ -188,6 +188,8 @@ class Store:
             else:
                 record = {**(existing or {}), **deepcopy(item), "id": object_id}
                 self._validate_item(record, sheet, collection)
+                if collection == "connections" and record["direction"] != (existing or {}).get("direction", "unknown"):
+                    record["direction_evidence"] = {"basis": "reviewed", "arrow_ids": []}
                 if existing:
                     sheet[collection][sheet[collection].index(existing)] = record
                 else:
@@ -372,6 +374,16 @@ class Store:
             self._touch(sheet)
             return {"sheet": sheet, "corrections_retained": len(applied), "pending": pending}
         return self.mutate(replace, "sheet.reanalyzed", details={"sheet_id": sheet_id})
+
+    def save_direction_check(self, refreshed):
+        """Apply a raster check only to the exact drawing version it used."""
+        def apply(state):
+            sheet = self._sheet_for_edit(state, refreshed["id"], refreshed["version"])
+            sheet["connections"] = deepcopy(refreshed["connections"])
+            sheet["source_metadata"]["analysis"] = deepcopy(refreshed["source_metadata"]["analysis"])
+            self._touch(sheet)
+            return sheet
+        return self.mutate(apply)
 
     def save_link(self, link):
         def save(state):

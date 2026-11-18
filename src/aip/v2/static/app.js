@@ -114,8 +114,7 @@ function schedulePoll() {
 
 function render() {
   if (!["drawings", "matrix", "grid"].includes(app.view)) app.view = "drawings";
-  if (!["components", "connections"].includes(app.tab) &&
-      (app.tab !== "review" || !window.aipV3?.isV3View())) app.tab = "components";
+  if (!["components", "connections", "review"].includes(app.tab)) app.tab = "components";
   remember("view", app.view);
   document.querySelectorAll("[data-view]").forEach(button => button.classList.toggle("active", button.dataset.view === app.view));
   if (app.view === "matrix") renderMatrix();
@@ -155,12 +154,21 @@ function libraryCount(sheet) {
 }
 
 function libraryMarkup() {
-  const jobs = app.data.jobs.slice(-4);
+  const pending = pendingJobs();
+  const running = pending.filter(job => !["queued", "pending"].includes(job.status));
+  const candidates = running.length ? running : pending.length ? pending : app.data.jobs;
+  const timestamp = job => Date.parse(job.updated_at || job.created_at) || 0;
+  const job = candidates.reduce((latest, current) => !latest || timestamp(current) >= timestamp(latest) ? current : latest, null);
+  const title = job?.title || job?.name || job?.type || "Import";
+  const progress = job && (job.error || job.message || job.status?.replaceAll("_", " "));
+  const details = job?.messages?.at(-1) || progress;
   return `<aside class="library">
     <div class="library-heading"><h2>Drawing library</h2><span class="muted tiny">${app.data.sheets.length}</span></div>
     <input class="search-input" id="sheet-search" type="search" value="${dataValue(app.search)}" placeholder="Find a drawing or equipment tag" aria-label="Find a drawing or equipment tag">
     <div class="sheet-list">${groupedLibraryMarkup()}</div>
-    ${jobs.length ? `<div class="jobs">${jobs.map(job => `<div class="job-row${["failed", "error"].includes(job.status) ? " error" : ""}"><strong>${esc(job.title || job.name || job.type || "Import")}</strong><br>${esc(job.error || job.message || job.status)}${typeof job.progress === "number" ? ` · ${Math.round(job.progress)}%` : ""}${job.messages?.length?`<div class="tiny">${job.messages.map(esc).join("<br>")}</div>`:""}</div>`).join("")}${pendingJobs().length ? '<div class="busy-progress"></div>' : ""}</div>` : ""}
+    ${job ? `<div class="jobs"><div class="job-row${["failed", "error"].includes(job.status) ? " error" : ""}"><strong class="job-title" title="${dataValue(title)}">${esc(title)}</strong>
+      <div class="job-status" title="${dataValue(details)}">${esc(progress)}${pending.length && Number.isFinite(job.progress) ? ` · ${Math.round(job.progress)}%` : ""}</div>
+    </div>${pending.length ? '<div class="busy-progress"></div>' : ""}</div>` : ""}
     <div class="library-footer"><a href="/reference" target="_blank" rel="noopener">Symbol reference library ↗</a></div>
   </aside>`;
 }
@@ -185,8 +193,9 @@ function renderDrawings() {
     : '<button class="button primary" data-action="reanalyze">Analyze drawing</button>';
   const named = sheet?.components?.filter(component => component.tag).length || 0;
   const tabs = {components:"Components", connections:"Connections"};
-  if (aiView) tabs.review = window.aipV3.reviewTabLabel();
+  if (sheet) tabs.review = reviewLabel(sheet.review);
   const inspector = gridMode ? gridPanelMarkup() : aiView ? window.aipV3.inspector(sheet)
+    : app.tab === "review" && sheet ? baselineReviewMarkup(sheet)
     : app.tab === "connections" ? connectionsMarkup() : selectionMarkup();
   const inspectorTabs = Object.entries(tabs).map(([tab, label]) =>
     `<button type="button" data-tab="${tab}" class="${app.tab === tab ? "active" : ""}" aria-pressed="${app.tab === tab}">${esc(label)}</button>`).join("");
@@ -273,6 +282,7 @@ function gridPanelMarkup() {
   if (!sheet) return '<p class="empty-selection">Open a drawing to view equipment locations.</p>';
   if (window.aipV3?.needsTrace()) {
     return `<h2>Equipment locations</h2>${window.aipV3.sourceSwitch()}
+      <button class="button small" data-action="review-view">Review</button>
       <p class="empty-selection">Trace the drawing to see V3 equipment coordinates.</p>${window.aipV3.traceButton()}`;
   }
   const map = gridMap(sheet);
@@ -283,6 +293,7 @@ function gridPanelMarkup() {
       <span>${esc(componentName(component))}</span><span class="grid-coordinate">${esc(location)}</span></button>`;
   }).join("");
   return `<h2>Equipment locations</h2>${window.aipV3?.sourceSwitch() || ""}
+    <button class="button small" data-action="review-view">Review</button>
     <p class="section-note">${app.gridLayout === "regular" ? "Each symbol uses the nearest numbered intersection. Select an item to see its position on the drawing." : "Grid lines pass through the center of every marked symbol."}</p>
     ${map?.grid ? `<div class="grid-summary"><span>${Number(map.grid.columns)} columns × ${Number(map.grid.rows)} rows</span><a href="/api/export?${gridQuery()}&format=grid" download>Export JSON</a></div>` : ""}
     ${map?.shared_cells ? '<p class="section-note">Some items share an intersection. Select a name to locate its symbol.</p>' : ""}
@@ -299,12 +310,76 @@ function extractionNotes(sheet) {
   return `${sheet.source_metadata?.analysis_error ? `<div class="report-note error-note">Extraction could not finish: ${esc(sheet.source_metadata.analysis_error)}</div>` : ""}${sheet.pending_corrections?.length ? `<div class="report-note">${sheet.pending_corrections.length} corrections need reattachment after reanalysis: ${sheet.pending_corrections.map(esc).join(", ")}</div>` : ""}`;
 }
 
+function reviewLabel(items) {
+  return items?.length ? `Review (${items.length})` : "Review";
+}
+
+function reviewQueueMarkup(sheet, items, emptyText) {
+  if (!items.length) return `<h2>Review</h2><p class="empty-selection">${esc(emptyText)}</p>`;
+  const labels = new Map(sheet.components.map(component => [component.id, componentName(component)]));
+  const edges = new Map(sheet.connections.map(edge => [edge.id, edge]));
+  return `<h2>Review</h2><div class="result-list">${items.map(({kind, id, reason}) => {
+    const edge = kind === "connection" ? edges.get(id) : null;
+    const label = edge ? directedLabel(edge.direction, labels.get(edge.source) || edge.source, labels.get(edge.target) || edge.target) : labels.get(id) || id;
+    return `<div class="result-item"><div><button type="button" class="result-title" data-action="open-review-item" data-kind="${dataValue(kind)}" data-id="${dataValue(id)}">${esc(label)}</button>
+      <div class="result-detail">${esc(reason)}</div></div></div>`;
+  }).join("")}</div>`;
+}
+
+function baselineReviewMarkup(sheet) {
+  if (selectedComponent()) return selectionMarkup();
+  if (sheet.connections.some(edge => edge.id === app.connectionId)) return connectionsMarkup();
+  return reviewQueueMarkup(sheet, sheet.review || [], "No issues flagged in this drawing.");
+}
+
+function reviewStatus(item, issues, kind) {
+  if (item.review_status === "confirmed") return "Reviewed";
+  if (item.review_status === "rejected") return "Rejected";
+  return issues.some(issue => issue.kind === kind && issue.id === item.id) ? "Needs review" : "";
+}
+
+function directedLabel(direction, from, to) {
+  return ({
+    source_to_target:`${from} → ${to}`,
+    target_to_source:`${to} → ${from}`,
+    bidirectional:`${from} ↔ ${to}`
+  })[direction] || `${from} · ${to}`;
+}
+
+function directionEvidenceLabel(edge) {
+  return ({
+    on_edge: "Arrowhead on this segment",
+    run: "Arrowhead on the same connected run",
+    conflict: "Conflicting arrow observations",
+    ambiguous: "Arrow could not be matched to a continuous connection",
+    unsupported: "Proposed direction lacks matching arrow evidence",
+    reviewed: "Direction set by reviewer"
+  })[edge.direction_evidence?.basis] || (edge.observed_arrow?.arrow_tip ? "Arrowhead recorded on the drawing" : "");
+}
+
+function directionStatus(edge) {
+  const basis = edge.direction_evidence?.basis;
+  if (basis === "reviewed") return "Direction corrected";
+  if (edge.direction === "bidirectional") return "Bidirectional";
+  if (edge.direction === "source_to_target" || edge.direction === "target_to_source") {
+    return ["on_edge", "run"].includes(basis) || edge.observed_arrow?.arrow_tip ? "Arrow observed" : "Direction recorded";
+  }
+  return "Direction undetermined";
+}
+
 function selectionMarkup() {
   const sheet = selectedSheet(), component = selectedComponent();
   if (!sheet) return '<h2>Components</h2><p class="empty-selection">Open an example or import a drawing to begin.</p>';
-  if (!component) return `<div class="eyebrow">1 · Review components</div><h2>Components <span class="muted tiny">${sheet.components.length}</span></h2><p class="section-note">Select a symbol or a name below to review its type and printed label. Unread names remain explicit.</p>${extractionNotes(sheet)}<div class="result-list">${sheet.components.map(item => `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(item.id)}">${esc(componentName(item))}</button> ${drawingCoordinate(item, sheet)}<div class="result-detail">${esc(item.type || "unknown")} · ${!item.tag && !isJunction(item) ? "Name unread" : item.review_status === "confirmed" ? "Reviewed" : "Awaiting review"}</div></div></div>`).join("") || '<p class="empty-selection">No components recorded yet. Choose Analyze drawing, or mark a missed symbol with + Component.</p>'}</div>`;
-  const warning = !component.tag || norm(component.type) === "unknown" || component.review_status !== "confirmed";
-  return `<button class="result-title back-link" data-action="all-components">← All components</button><div class="eyebrow">Selected component</div><div class="selected-tag">${esc(componentName(component))}</div><div class="selection-meta"><span>${esc(component.type || "unknown")}</span><span class="pill${warning ? " warn" : " good"}">${warning ? "Review needed" : "Reviewed"}</span></div>
+  const issues = sheet.review || [];
+  if (!component) return `<h2>Components <span class="muted tiny">${sheet.components.length}</span></h2>${extractionNotes(sheet)}<div class="result-list">${sheet.components.map(item => {
+    const status = reviewStatus(item, issues, "component");
+    return `<div class="result-item"><div><button class="result-title" data-action="select-component" data-id="${dataValue(item.id)}">${esc(componentName(item))}</button> ${drawingCoordinate(item, sheet)}<div class="result-detail">${esc([item.type || "unknown", status].filter(Boolean).join(" · "))}</div></div></div>`;
+  }).join("") || '<p class="empty-selection">No components recorded yet. Choose Analyze drawing, or mark a missed symbol with + Component.</p>'}</div>`;
+  const status = reviewStatus(component, issues, "component");
+  const back = app.tab === "review" ? 'data-action="review-view">← Review' : 'data-action="all-components">← All components';
+  const reason = issues.find(item => item.kind === "component" && item.id === component.id)?.reason;
+  return `<button class="result-title back-link" ${back}</button><div class="eyebrow">Selected component</div><div class="selected-tag">${esc(componentName(component))}</div><div class="selection-meta"><span>${esc(component.type || "unknown")}</span>${status ? `<span class="pill ${status === "Reviewed" ? "good" : "warn"}">${status}</span>` : ""}</div>
+    ${reason ? `<p class="section-note">${esc(reason)}</p>` : ""}
     <form id="component-form"><label class="field">Equipment tag or printed name<input name="tag" value="${dataValue(component.tag || "")}" placeholder="Unread label"></label><label class="field">Type<input name="type" list="component-types" value="${dataValue(component.type || "unknown")}" required></label><datalist id="component-types">${["pump","valve","tank","vessel","instrument","junction","connector","unknown"].map(type => `<option value="${type}">`).join("")}</datalist><label class="field">Review state<select name="review_status">${options(["unreviewed","confirmed"],component.review_status || "unreviewed")}</select></label><div class="form-actions"><button type="submit" class="button primary">Save correction</button><button type="button" class="button danger" data-action="delete-component">Remove</button></div></form>
     <hr class="section-divider"><dl class="fact-list"><dt>Drawing</dt><dd>${esc(sheetName(sheet))}</dd><dt>Grid coordinate</dt><dd>${drawingCoordinate(component, sheet)} <button class="result-title" data-action="grid-view">Open Grid</button></dd><dt>Source</dt><dd>${esc(evidenceText(component.source || component.provenance || sheet.source_metadata?.analysis?.method || "Drawing review"))}</dd></dl>
     ${component.evidence ? `<p class="section-note">${esc(evidenceText(component.evidence))}</p>` : ""}<img class="region-preview" src="/api/region?sheet_id=${encodeURIComponent(sheet.id)}&component_id=${encodeURIComponent(component.id)}" alt="Drawing region around selected component">
@@ -313,14 +388,15 @@ function selectionMarkup() {
 
 function lineKind(kind) { return ({direct_undirected:"Equipment connection",pipe:"Process pipe",signal:"Instrument signal",unknown:"Unclassified line"})[kind] || "Unclassified line"; }
 
-function connectionRows(sheet, componentId = null, describe = null) {
+function connectionRows(sheet, componentId = null) {
   const edges = sheet.connections.filter(edge => !componentId || [edge.source,edge.target].includes(componentId));
   return edges.map(edge => {
     const first = sheet.components.find(item=>item.id===edge.source), second = sheet.components.find(item=>item.id===edge.target);
     const from = first ? componentName(first) : `Missing: ${edge.source}`;
     const to = second ? componentName(second) : `Missing: ${edge.target}`;
-    const status = edge.review_status === "confirmed" ? "Reviewed" : edge.review_status === "rejected" ? "Rejected" : "Awaiting review";
-    const {label, detail} = describe ? describe(edge, from, to) : {label:`${from} ↔ ${to}`, detail:`${lineKind(edge.kind)} · ${status}`};
+    const status = reviewStatus(edge, sheet.review || [], "connection") || directionStatus(edge);
+    const label = directedLabel(edge.direction, from, to);
+    const detail = `${lineKind(edge.kind)} · ${status}`;
     return `<div class="result-item"><div><button class="result-title" data-action="select-connection" data-id="${dataValue(edge.id)}">${esc(label)}</button><div class="result-detail">${esc(detail)}</div></div></div>`;
   }).join("") || '<p class="section-note">No direct connections recorded.</p>';
 }
@@ -330,8 +406,28 @@ function connectionsMarkup() {
   if (!sheet) return '<h2>Connections</h2><p class="empty-selection">Open a drawing to inspect direct connections.</p>';
   const edge = sheet.connections.find(item=>item.id===app.connectionId);
   if (!edge) return `<div class="eyebrow">2 · Review connections</div><h2>Direct connections <span class="muted tiny">${sheet.connections.length}</span></h2><p class="section-note">A connection joins immediate equipment neighbors. A route through another component is not direct. Signals and unclassified lines are excluded from the equipment matrix.</p><div class="connection-buttons"><button class="button small" data-action="matrix-view">View matrix</button><a class="button small" href="/api/export?${matrixQuery()}&format=connections" download>Save connections CSV</a></div><hr class="section-divider"><div class="result-list">${connectionRows(sheet)}</div>${linkedDrawingsButton(sheet)}`;
-  const first=sheet.components.find(item=>item.id===edge.source),second=sheet.components.find(item=>item.id===edge.target);
-  return `<button class="result-title back-link" data-action="all-connections">← All connections</button><div class="eyebrow">Selected connection</div><h2>Review connection</h2><p class="connection-endpoints">${esc(first?componentName(first):edge.source)} ↔ ${esc(second?componentName(second):edge.target)}</p><form id="connection-form"><label class="field">Connection type<select name="kind">${["direct_undirected","pipe","signal","unknown"].map(kind=>`<option value="${kind}"${edge.kind===kind?" selected":""}>${lineKind(kind)}</option>`).join("")}</select></label><label class="field">Observed direction<select name="direction">${[{id:"unknown",label:"Unknown / no visible arrow"},{id:"source_to_target",label:`${first?componentName(first):edge.source} → ${second?componentName(second):edge.target}`},{id:"target_to_source",label:`${second?componentName(second):edge.target} → ${first?componentName(first):edge.source}`},{id:"bidirectional",label:"Bidirectional"}].map(item=>`<option value="${item.id}"${(edge.direction||"unknown")===item.id?" selected":""}>${esc(item.label)}</option>`).join("")}</select></label><label class="field">Review state<select name="review_status">${options(["unreviewed","confirmed","rejected"],edge.review_status || "unreviewed")}</select></label><p class="section-note">The connectivity matrix is undirected. A visible arrow is recorded separately and does not change its symmetric entries.</p><button class="button primary" type="submit">Save connection</button></form>${edge.evidence?`<p class="section-note">${esc(evidenceText(edge.evidence))}</p>`:""}<button class="button danger" data-action="delete-connection">Remove connection</button>${linkedDrawingsButton(sheet)}`;
+  const first = sheet.components.find(item => item.id === edge.source);
+  const second = sheet.components.find(item => item.id === edge.target);
+  const from = first ? componentName(first) : edge.source;
+  const to = second ? componentName(second) : edge.target;
+  const directions = {unknown:"Undetermined", source_to_target:directedLabel("source_to_target", from, to),
+    target_to_source:directedLabel("target_to_source", from, to), bidirectional:"Bidirectional"};
+  const back = app.tab === "review" ? 'data-action="review-view">← Review' : 'data-action="all-connections">← All connections';
+  const evidence = directionEvidenceLabel(edge);
+  const issue = sheet.review?.find(item => item.kind === "connection" && item.id === edge.id);
+  return `<button class="result-title back-link" ${back}</button><div class="eyebrow">Selected connection</div><h2>${esc(directedLabel(edge.direction, from, to))}</h2>
+    ${evidence ? `<dl class="fact-list"><dt>Direction evidence</dt><dd>${esc(evidence)}</dd></dl>` : ""}
+    ${issue ? `<p class="section-note"><strong>Needs review</strong> · ${esc(issue.reason)}</p>` : ""}
+    <form id="connection-form">
+      <label class="field">Connection type<select name="kind">${["direct_undirected","pipe","signal","unknown"].map(kind =>
+        `<option value="${kind}"${edge.kind === kind ? " selected" : ""}>${lineKind(kind)}</option>`).join("")}</select></label>
+      <label class="field">Observed direction<select name="direction">${Object.entries(directions).map(([id, label]) =>
+        `<option value="${id}"${(edge.direction || "unknown") === id ? " selected" : ""}>${esc(label)}</option>`).join("")}</select></label>
+      <label class="field">Review state<select name="review_status">${options(["unreviewed","confirmed","rejected"],edge.review_status || "unreviewed")}</select></label>
+      <p class="section-note">The matrix records direct adjacency. The drawing and connection list show arrow direction.</p>
+      <button class="button primary" type="submit">Save connection</button></form>
+      ${edge.evidence ? `<p class="section-note">${esc(evidenceText(edge.evidence))}</p>` : ""}
+      <button class="button danger" data-action="delete-connection">Remove connection</button>${linkedDrawingsButton(sheet)}`;
 }
 
 function linkedDrawingsButton(sheet) {
@@ -405,7 +501,7 @@ function renderMatrix() {
   replaceWorkspace(`<div class="matrix-layout">${libraryMarkup()}<section class="matrix-page"><div class="page-heading">
     <div><div class="eyebrow">3 · Connectivity output</div><h1>Connectivity matrix</h1>
     <p>${sheet?`${esc(sheetName(sheet))} · This drawing only. `:""}Immediate equipment adjacency. <strong>1</strong> means a direct connection is recorded; <strong>0</strong> means none is recorded. The matrix is symmetric with a zero diagonal.</p></div>
-    ${sheet?`<div class="toolbar-right"><button class="button" data-action="drawing-view">Back to drawing</button>${exports}</div>`:""}</div>
+    ${sheet?`<div class="toolbar-right"><button class="button" data-action="drawing-view">Back to drawing</button><button class="button" data-action="review-view">Review</button>${exports}</div>`:""}</div>
     ${content}</section></div>`);
   if(sheet&&window.aipV3)window.aipV3.matrixControls();
   if(sheet&&!needsTrace&&!current)loadMatrix(sheet);
@@ -422,12 +518,17 @@ function matrixMarkup(result) {
   const directList = edges.length ? `<div class="result-list">${edges.map(edge => {
     const observation = edge.observations?.[0];
     const flagged = edge.observations?.some(item => reviewConnections.has(item.connection_id));
+    const single = edge.observations?.length === 1;
+    const forward = observation?.source_component_id === edge.source.component_id;
+    const from = forward ? edge.source_label : edge.target_label;
+    const to = forward ? edge.target_label : edge.source_label;
+    const label = single ? directedLabel(observation.direction, from, to) : directedLabel("unknown", edge.source_label, edge.target_label);
     let status = edge.review_status === "confirmed" ? "Reviewed" : "Awaiting review";
     if (review && edge.review_status !== "confirmed") {
-      status = flagged ? "Needs review" : edge.observations?.length === 1 ? window.aipV3?.directionStatus(observation) : "";
+      status = flagged ? "Needs review" : single ? directionStatus(observation) : "";
     }
     const detail = [status, edge.observations?.length > 1 ? `${edge.observations.length} observations, counted once` : ""].filter(Boolean).join(" · ");
-    return `<div class="result-item"><div><strong class="direct-edge-label">${esc(edge.source_label)} ↔ ${esc(edge.target_label)}</strong>
+    return `<div class="result-item"><div><strong class="direct-edge-label">${esc(label)}</strong>
       ${detail ? `<div class="result-detail">${esc(detail)}</div>` : ""}</div>
       ${observation ? `<button class="button small" data-action="matrix-connection" data-sheet="${dataValue(observation.sheet_id)}" data-id="${dataValue(observation.connection_id)}">Inspect</button>` : ""}</div>`;
   }).join("")}</div>` : '<p class="section-note">No included direct equipment connections are recorded.</p>';
@@ -762,6 +863,16 @@ document.addEventListener("click",async event=>{
       }
     }
     else if(name==="open-sheet")openSheet(button.dataset.id);
+    else if(name==="review-view"||name==="open-review-item"){
+      app.view = "drawings";
+      app.tab = "review";
+      app.tool = "select";
+      app.draft = app.pointer = null;
+      app.componentId = button.dataset.kind === "component" ? button.dataset.id : "";
+      app.connectionId = button.dataset.kind === "connection" ? button.dataset.id : "";
+      render();
+      if (app.componentId || app.connectionId) window.aipV3?.focusSelection();
+    }
     else if(name==="select-component"){app.componentId=button.dataset.id;app.connectionId="";app.tab="components";render();}
     else if(name==="all-components"){app.componentId="";app.connectionId="";app.tab="components";render();}
     else if(name==="select-connection"){app.connectionId=button.dataset.id;app.componentId="";app.tab="connections";render();}
@@ -799,12 +910,30 @@ document.addEventListener("change",async event=>{
 
 document.addEventListener("input",event=>{if(event.target.id==="sheet-search"){const start=event.target.selectionStart;app.search=event.target.value;render();const input=$("#sheet-search");input.focus();input.setSelectionRange(start,start);}});
 
+function advanceBaselineReview(sheetId, kind, id) {
+  if (app.sheetId !== sheetId || app.tab !== "review" || window.aipV3?.isV3View()) return;
+  if ((kind === "component" ? app.componentId : app.connectionId) !== id) return;
+  if (selectedSheet()?.review?.some(item => item.kind === kind && item.id === id)) return;
+  app.componentId = app.connectionId = "";
+  render();
+}
+
 document.addEventListener("submit",async event=>{
   if(["sheet-form", "v3-review-form"].includes(event.target.id))return;
   event.preventDefault();const form=event.target,data=new FormData(form);const submit=form.querySelector('[type="submit"]');if(submit)submit.disabled=true;
   try {
-    if(form.id==="component-form"){const component={...selectedComponent(),tag:data.get("tag").trim(),type:data.get("type").trim(),review_status:data.get("review_status")};await action("save_component",{sheet_id:app.sheetId,component},{message:"Component correction saved."});}
-    else if(form.id==="connection-form"){const connection={...selectedSheet().connections.find(item=>item.id===app.connectionId),...Object.fromEntries(data.entries())};await action("save_connection",{sheet_id:app.sheetId,connection},{message:"Connection correction saved. The matrix will use this record."});}
+    if(form.id==="component-form"){
+      const sheetId = app.sheetId;
+      const component = {...selectedComponent(),tag:data.get("tag").trim(),type:data.get("type").trim(),review_status:data.get("review_status")};
+      await action("save_component",{sheet_id:sheetId,component},{message:"Component correction saved."});
+      advanceBaselineReview(sheetId, "component", component.id);
+    }
+    else if(form.id==="connection-form"){
+      const sheetId = app.sheetId;
+      const connection = {...selectedSheet().connections.find(item=>item.id===app.connectionId),...Object.fromEntries(data.entries())};
+      await action("save_connection",{sheet_id:sheetId,connection},{message:"Connection correction saved. The matrix will use this record."});
+      advanceBaselineReview(sheetId, "connection", connection.id);
+    }
     else if(form.id==="link-form"){await action("save_link",{link:{from:{sheet_id:app.sheetId,component_id:data.get("from_component")},to:{sheet_id:data.get("to_sheet"),component_id:data.get("to_component")},status:"confirmed"}},{message:"Off-page connector link confirmed."});refreshLinkedDrawings();}
     else if(form.id==="setup-form"){await action("settings",{settings:{actor:data.get("actor").trim(),use_geometry_reference:data.get("use_geometry_reference")==="on"}},{message:"Extraction setup saved."});$("#setup-dialog").close();}
     else if(form.id==="import-form"){const files=$("#import-files").files;if(!files.length)return;const body=new FormData();for(const file of files)body.append("files",file,file.name);const facility=$("#import-facility").value;body.append("facility_id",facility);await api("/api/import",{method:"POST",body});$("#import-dialog").close();form.reset();if(app.facilityId!==facility){app.facilityId=facility;app.sheetId="";app.componentId="";app.connectionId="";}app.view="drawings";await loadState();toast("Import queued. Converted images and analysis progress appear in the drawing list.");}
